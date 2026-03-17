@@ -91,6 +91,7 @@ export default function TabLayout() {
       <Tabs.Screen name="builder/applications" options={{ href: null }} />
       <Tabs.Screen name="builder/edit-profile" options={{ href: null }} />
       <Tabs.Screen name="my-jobs" options={{ href: null }} />
+      <Tabs.Screen name="all-trades" options={{ href: null }} />
     </Tabs>
   );
 }
