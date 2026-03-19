@@ -196,15 +196,15 @@ export default function HomeScreen() {
       setSelectedUrgency('Any');
     });
 
-    router.push({ pathname: '/(tabs)/results', params });
+    router.push({ pathname: '/results', params });
   }
 
   function handlePostJob() {
-    router.push('/(tabs)/post-job');
+    router.push('/post-job');
   }
 
   function handleCategoryPress(trade: string) {
-    router.push({ pathname: '/(tabs)/results', params: { trade_category: trade.toLowerCase() } });
+    router.push({ pathname: '/results', params: { trade_category: trade.toLowerCase() } });
   }
 
   /* ── Trade icon renderer ── */
@@ -319,7 +319,7 @@ export default function HomeScreen() {
             </Pressable>
             <Pressable
               style={({ pressed }) => [styles.actionPill, styles.pillEmergency, pressed && { opacity: 0.7 }]}
-              onPress={() => router.push({ pathname: '/(tabs)/results', params: { urgency: 'asap' } })}
+              onPress={() => router.push({ pathname: '/results', params: { urgency: 'asap' } })}
             >
               <MaterialIcons name="schedule" size={14} color="#059669" />
               <ThemedText style={[styles.pillText, { color: '#059669' }]}>Emergency</ThemedText>
@@ -592,7 +592,7 @@ export default function HomeScreen() {
                         styles.allTradesCard,
                         pressed && { transform: [{ scale: 0.96 }] },
                       ]}
-                      onPress={() => router.push('/(tabs)/all-trades' as any)}
+                      onPress={() => router.push('/all-trades' as any)}
                     >
                       <View style={[styles.overlayTradeIconBox, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
                         <MaterialIcons name="add" size={24} color="#FFFFFF" />

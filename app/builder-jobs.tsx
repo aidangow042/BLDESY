@@ -112,7 +112,7 @@ export default function BuilderJobsFeed() {
             Shadows.sm,
             pressed && { opacity: 0.7 },
           ]}
-          onPress={() => router.push(`/(tabs)/builder/job/${item.id}`)}
+          onPress={() => router.push({ pathname: '/job-detail', params: { id: item.id } })}
         >
           <View style={styles.jobCardHeader}>
             <ThemedText type="defaultSemiBold" style={styles.jobTitle} numberOfLines={1}>

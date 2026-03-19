@@ -301,7 +301,7 @@ export default function MyJobsScreen() {
             You haven't posted any jobs yet.
           </ThemedText>
           <Pressable
-            onPress={() => router.push('/(tabs)/post-job')}
+            onPress={() => router.push('/post-job')}
             style={({ pressed }) => [
               styles.emptyButton,
               { backgroundColor: colors.tint },

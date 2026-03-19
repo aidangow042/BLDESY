@@ -155,7 +155,7 @@ export default function BuilderSignupScreen() {
       return;
     }
 
-    router.replace('/(tabs)/pending-approval');
+    router.replace('/pending-approval');
   }
 
   return (

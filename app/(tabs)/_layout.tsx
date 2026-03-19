@@ -79,19 +79,6 @@ export default function TabLayout() {
 
       {/* Hide Explore if the file still exists */}
       <Tabs.Screen name="explore" options={{ href: null }} />
-
-      {/* Pushed screens — hidden from tab bar */}
-      <Tabs.Screen name="results" options={{ href: null }} />
-      <Tabs.Screen name="post-job" options={{ href: null }} />
-      <Tabs.Screen name="builder/[id]" options={{ href: null }} />
-      <Tabs.Screen name="builder-signup" options={{ href: null }} />
-      <Tabs.Screen name="pending-approval" options={{ href: null }} />
-      <Tabs.Screen name="builder/jobs" options={{ href: null }} />
-      <Tabs.Screen name="builder/job/[id]" options={{ href: null }} />
-      <Tabs.Screen name="builder/applications" options={{ href: null }} />
-      <Tabs.Screen name="builder/edit-profile" options={{ href: null }} />
-      <Tabs.Screen name="my-jobs" options={{ href: null }} />
-      <Tabs.Screen name="all-trades" options={{ href: null }} />
     </Tabs>
   );
 }

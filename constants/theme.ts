@@ -20,6 +20,13 @@ export const Colors = {
     tabIconDefault: '#94a3b8',
     tabIconSelected: '#4f46e5',
 
+    // Brand teal (builder profiles, CTAs)
+    teal: '#0d9488',          // teal-600
+    tealDark: '#0f766e',      // teal-700
+    tealLight: '#ccfbf1',     // teal-100
+    tealBg: '#f0fdfa',        // teal-50
+    tealMuted: '#5eead4',     // teal-300
+
     // Semantic
     success: '#059669',       // emerald-600
     successLight: '#ecfdf5',  // emerald-50
@@ -41,6 +48,13 @@ export const Colors = {
     icon: '#64748b',          // slate-500
     tabIconDefault: '#64748b',
     tabIconSelected: '#818cf8',
+
+    // Brand teal (builder profiles, CTAs)
+    teal: '#2dd4bf',          // teal-400
+    tealDark: '#14b8a6',      // teal-500
+    tealLight: '#042f2e',     // teal-950
+    tealBg: '#0f2a2a',        // custom dark teal bg
+    tealMuted: '#5eead4',     // teal-300
 
     // Semantic
     success: '#34d399',       // emerald-400

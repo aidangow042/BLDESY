@@ -83,7 +83,7 @@ export default function MyApplicationsScreen() {
           Shadows.sm,
           pressed && { opacity: 0.7 },
         ]}
-        onPress={() => router.push(`/(tabs)/builder/job/${item.jobs.id}`)}
+        onPress={() => router.push({ pathname: '/job-detail', params: { id: item.jobs.id } })}
       >
         <View style={styles.cardHeader}>
           <ThemedText type="defaultSemiBold" style={styles.jobTitle} numberOfLines={1}>
@@ -140,7 +140,7 @@ export default function MyApplicationsScreen() {
             You haven't applied to any jobs yet.
           </ThemedText>
           <Pressable
-            onPress={() => router.push('/(tabs)/builder/jobs')}
+            onPress={() => router.push('/builder-jobs')}
             style={({ pressed }) => [pressed && { opacity: 0.7 }]}
           >
             <ThemedText style={[styles.linkText, { color: colors.tint }]}>Browse Jobs</ThemedText>

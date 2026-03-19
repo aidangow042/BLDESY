@@ -51,6 +51,17 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        <Stack.Screen name="results" options={{ headerShown: false }} />
+        <Stack.Screen name="post-job" options={{ headerShown: false }} />
+        <Stack.Screen name="builder-profile" options={{ headerShown: false }} />
+        <Stack.Screen name="builder-signup" options={{ headerShown: false }} />
+        <Stack.Screen name="pending-approval" options={{ headerShown: false }} />
+        <Stack.Screen name="builder-jobs" options={{ headerShown: false }} />
+        <Stack.Screen name="job-detail" options={{ headerShown: false }} />
+        <Stack.Screen name="builder-applications" options={{ headerShown: false }} />
+        <Stack.Screen name="builder-edit-profile" options={{ headerShown: false }} />
+        <Stack.Screen name="my-jobs" options={{ headerShown: false }} />
+        <Stack.Screen name="all-trades" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
       <StatusBar style="light" translucent />

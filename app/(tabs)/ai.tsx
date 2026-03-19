@@ -338,7 +338,7 @@ export default function AIAssistScreen() {
                   },
                   pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] },
                 ]}
-                onPress={() => router.push({ pathname: '/(tabs)/builder/[id]', params: { id: b.id } })}
+                onPress={() => router.push({ pathname: '/builder-profile', params: { id: b.id } })}
               >
                 <View style={[styles.builderCardIcon, { backgroundColor: isDark ? '#134E4A' : BRAND_LIGHT }]}>
                   <MaterialIcons name="person" size={18} color={BRAND} />
@@ -363,7 +363,7 @@ export default function AIAssistScreen() {
                   { backgroundColor: isDark ? '#134E4A' : BRAND_LIGHT },
                   pressed && { opacity: 0.7 },
                 ]}
-                onPress={() => router.push({ pathname: '/(tabs)/results', params: item.searchParams! })}
+                onPress={() => router.push({ pathname: '/results', params: item.searchParams! })}
               >
                 <ThemedText style={[styles.viewAllText, { color: BRAND }]}>
                   View all results
