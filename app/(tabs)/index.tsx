@@ -263,12 +263,18 @@ export default function HomeScreen() {
         )}
       </View>
 
-      {/* ─── Brand text — fixed on hero image, hidden when overlay is open ─── */}
+      {/* ─── Brand text — fixed on hero image, scrolls away with hero ─── */}
       {!overlayVisible && (
-        <View style={styles.heroBrandBlock} pointerEvents="none">
+        <Animated.View
+          style={[
+            styles.heroBrandBlock,
+            { transform: [{ translateY: Animated.multiply(scrollY, -1) }] },
+          ]}
+          pointerEvents="none"
+        >
           <ThemedText style={styles.heroBrandName}>BLDESY!</ThemedText>
           <ThemedText style={styles.heroBrandTagline}>Your local trade connector</ThemedText>
-        </View>
+        </Animated.View>
       )}
 
       <Animated.ScrollView

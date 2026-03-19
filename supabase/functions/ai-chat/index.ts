@@ -1,12 +1,21 @@
 import Anthropic from 'npm:@anthropic-ai/sdk@0.39.0';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+type BuilderRec = {
+  id: string;
+  business_name: string;
+  trade_category: string;
+  suburb: string;
+  postcode: string;
+  bio: string | null;
+};
+
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -23,23 +32,108 @@ Deno.serve(async (req) => {
 
     const client = new Anthropic();
 
+    // Single Claude call: reply + extract search params
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      system: `You are a helpful AI assistant for BLDESY!, an Australian trade connection platform.
-You help customers find the right tradesperson for their job, understand what questions to ask builders,
-estimate typical job costs in Australia, and describe their job clearly.
-Be friendly, practical, and use Australian terminology (tradie, job, quote, etc.).
-Keep responses concise and helpful.`,
+      max_tokens: 512,
+      system: `You are the AI assistant for BLDESY!, an Australian trade connection platform.
+You help customers find the right tradie, understand costs, and describe their job.
+
+RULES:
+- Keep every reply to 2-3 short sentences MAX. Be direct.
+- If listing items, use bullet points (max 4 bullets, one line each).
+- Use Aussie terms: tradie, job, quote, reno, sparky, chippy, etc.
+- Never repeat the user's question back to them.
+- No filler phrases like "Great question!" or "I'd be happy to help!".
+- Give a quick useful answer, then ask ONE follow-up question if needed.
+
+SEARCH EXTRACTION:
+If the user is looking for a tradie or asking for recommendations, add this as the very last line of your response (on its own line, no other text on that line):
+SEARCH:{"trade":"<trade>","location":"<suburb or null>","urgency":"<emergency|soon|planned or null>"}
+- "trade" = the trade/skill (e.g. plumber, electrician, carpenter)
+- "location" = suburb or area if mentioned, otherwise null
+- "urgency" = map timing: "asap"/"urgent"/"today" → "emergency", "this week"/"few days" → "soon", "no rush"/"whenever" → "planned", otherwise null
+- Only add the SEARCH line when the user wants to find a tradie. Do NOT add it for general questions about costs, advice, etc.
+- The SEARCH line will be hidden from the user — it is metadata only.`,
       messages: messages.map((m: { role: string; content: string }) => ({
         role: m.role as 'user' | 'assistant',
         content: m.content,
       })),
     });
 
-    const reply = response.content[0].type === 'text' ? response.content[0].text : '';
+    const rawReply = response.content[0].type === 'text' ? response.content[0].text : '';
 
-    return new Response(JSON.stringify({ reply }), {
+    // Parse out the SEARCH line if present
+    const searchMatch = rawReply.match(/\nSEARCH:(\{.*\})\s*$/);
+    const reply = searchMatch ? rawReply.replace(searchMatch[0], '').trim() : rawReply;
+
+    let builders: BuilderRec[] = [];
+    const searchParams: Record<string, string> = {};
+
+    if (searchMatch) {
+      try {
+        const intent = JSON.parse(searchMatch[1]);
+        const trade = intent.trade;
+        const location = intent.location;
+        const urgency = intent.urgency;
+
+        if (trade) {
+          searchParams.trade_category = trade;
+          if (location && location !== 'null') searchParams.suburb = location;
+          if (urgency && urgency !== 'null') {
+            const urgencyMap: Record<string, string> = { emergency: 'asap', soon: 'this_week', planned: 'flexible' };
+            searchParams.urgency = urgencyMap[urgency] ?? urgency;
+          }
+
+          // Query matching builders
+          const supabase = createClient(
+            Deno.env.get('SUPABASE_URL')!,
+            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+          );
+
+          const { data } = await supabase
+            .from('builder_profiles')
+            .select('id, business_name, trade_category, suburb, postcode, bio, urgency_capacity')
+            .eq('approved', true)
+            .ilike('trade_category', `%${trade}%`)
+            .limit(10);
+
+          if (data && data.length > 0) {
+            let sorted = [...data];
+            if (urgency) {
+              const urgencyOrder: Record<string, string[]> = {
+                emergency: ['emergency', 'soon', 'planned'],
+                soon: ['soon', 'emergency', 'planned'],
+                planned: ['planned', 'soon', 'emergency'],
+              };
+              const order = urgencyOrder[urgency] ?? [];
+              sorted.sort((a, b) => {
+                const scoreA = getUrgencyScore(a.urgency_capacity, order);
+                const scoreB = getUrgencyScore(b.urgency_capacity, order);
+                return scoreA - scoreB;
+              });
+            }
+
+            builders = sorted.slice(0, 3).map((b) => ({
+              id: b.id,
+              business_name: b.business_name,
+              trade_category: b.trade_category,
+              suburb: b.suburb,
+              postcode: b.postcode,
+              bio: b.bio,
+            }));
+          }
+        }
+      } catch {
+        // JSON parse failed — proceed without builders
+      }
+    }
+
+    return new Response(JSON.stringify({
+      reply,
+      builders: builders.length > 0 ? builders : undefined,
+      searchParams: Object.keys(searchParams).length > 0 ? searchParams : undefined,
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
@@ -49,3 +143,13 @@ Keep responses concise and helpful.`,
     });
   }
 });
+
+function getUrgencyScore(capacity: string[] | null, priorityOrder: string[]): number {
+  if (!capacity || capacity.length === 0) return 99;
+  let best = 99;
+  for (const cap of capacity) {
+    const idx = priorityOrder.indexOf(cap.toLowerCase());
+    if (idx !== -1 && idx < best) best = idx;
+  }
+  return best;
+}
