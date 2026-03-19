@@ -130,7 +130,7 @@ export default function JobDetailScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
         <ActivityIndicator color={colors.tint} style={{ marginTop: 60 }} />
       </SafeAreaView>
     );
@@ -138,7 +138,7 @@ export default function JobDetailScreen() {
 
   if (!job) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
         <View style={styles.centeredContainer}>
           <ThemedText type="subtitle">Job not found</ThemedText>
           <Pressable
@@ -155,7 +155,7 @@ export default function JobDetailScreen() {
   const uc = urgencySemanticColor(job.urgency);
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
       <ScrollView contentContainerStyle={styles.contentContainer}>
         {/* Header */}
         <Pressable

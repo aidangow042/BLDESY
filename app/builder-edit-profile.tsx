@@ -105,7 +105,7 @@ export default function EditProfileScreen() {
   const teal = colors.teal;
   const tealDark = colors.tealDark;
   const tealBg = colors.tealBg;
-  const bgCanvas = colorScheme === 'dark' ? colors.background : '#fafaf8';
+  const bgCanvas = colors.canvas;
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);

@@ -21,6 +21,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
+import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 // Enable LayoutAnimation on Android
@@ -180,6 +181,7 @@ function renderFormattedText(text: string, textColor: string) {
 export default function AIAssistScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
+  const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -382,7 +384,7 @@ export default function AIAssistScreen() {
   const hasText = input.trim().length > 0;
 
   return (
-    <View style={[styles.root, { backgroundColor: isDark ? '#0f172a' : '#F5F5F0' }]}>
+    <View style={[styles.root, { backgroundColor: colors.canvas }]}>
       {/* ── Compact Header ── */}
       <LinearGradient
         colors={isDark ? ['#134E4A', '#0D3B3B'] : [BRAND, BRAND_DARK]}
@@ -453,7 +455,7 @@ export default function AIAssistScreen() {
         <View
           style={[
             styles.inputBarOuter,
-            { backgroundColor: isDark ? '#0f172a' : '#F5F5F0' },
+            { backgroundColor: colors.canvas },
           ]}
         >
           <View

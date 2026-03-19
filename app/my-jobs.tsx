@@ -281,7 +281,7 @@ export default function MyJobsScreen() {
   );
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}

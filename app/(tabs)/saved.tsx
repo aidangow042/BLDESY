@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+// SafeAreaView not needed — PageHeader handles top inset, tab bar handles bottom
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,6 +20,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { PageHeader, HeaderIcon } from '@/components/page-header';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_PADDING = Spacing.xl;
@@ -584,21 +585,20 @@ export default function SavedScreen() {
 
   function renderHeader() {
     return (
-      <View style={styles.headerSection}>
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>Saved</Text>
-            <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-              {builders.length > 0
-                ? `${builders.length} builder${builders.length !== 1 ? 's' : ''} saved`
-                : 'Your favourite tradies'}
-            </Text>
-          </View>
-          <View style={[styles.headerIconWrap, { backgroundColor: colors.tealBg }]}>
-            <Ionicons name="bookmark" size={20} color={teal} />
-          </View>
-        </View>
-      </View>
+      <PageHeader
+        title="Saved"
+        subtitle={
+          builders.length > 0
+            ? `${builders.length} builder${builders.length !== 1 ? 's' : ''} saved`
+            : 'Your favourite tradies'
+        }
+        variant="warm"
+        rightElement={
+          <HeaderIcon size={48} onRichBackground>
+            <Ionicons name="bookmark" size={22} color="#ffffff" />
+          </HeaderIcon>
+        }
+      />
     );
   }
 
@@ -606,23 +606,23 @@ export default function SavedScreen() {
   // STATES
   // ═════════════════════════════════════════════════════════════════════
 
-  const pageBackground = isDark ? colors.background : '#F6F5F3';
+  const pageBackground = colors.canvas;
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: pageBackground }]}>
+      <View style={[styles.safeArea, { backgroundColor: pageBackground }]}>
         {renderHeader()}
         <View style={styles.skeletonList}>
           <SkeletonCard colors={colors} />
           <SkeletonCard colors={colors} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (!loggedIn) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: pageBackground }]}>
+      <View style={[styles.safeArea, { backgroundColor: pageBackground }]}>
         {renderHeader()}
         <View style={styles.emptyState}>
           <View style={[styles.emptyIconWrap, { backgroundColor: colors.tealBg }]}>
@@ -633,13 +633,13 @@ export default function SavedScreen() {
             Keep track of your favourite tradies so you can find them quickly when you need them.
           </Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (builders.length === 0) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: pageBackground }]}>
+      <View style={[styles.safeArea, { backgroundColor: pageBackground }]}>
         {renderHeader()}
         <View style={styles.emptyState}>
           <View style={[styles.emptyIconWrap, { backgroundColor: colors.tealBg }]}>
@@ -663,7 +663,7 @@ export default function SavedScreen() {
             <Text style={styles.emptyCtaText}>Search tradies</Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -672,16 +672,16 @@ export default function SavedScreen() {
   // ═════════════════════════════════════════════════════════════════════
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: pageBackground }]}>
+    <View style={[styles.safeArea, { backgroundColor: pageBackground }]}>
+      {renderHeader()}
       <FlatList
         data={builders}
         keyExtractor={(item) => item.builder_id}
         renderItem={renderCard}
-        ListHeaderComponent={renderHeader}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -694,43 +694,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  /* ─── Header ───────────────────────────────────── */
-  headerSection: {
-    paddingHorizontal: CARD_PADDING,
-    paddingTop: Spacing['2xl'],
-    paddingBottom: Spacing.lg,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -0.6,
-  },
-  headerSubtitle: {
-    fontSize: 15,
-    fontWeight: '400',
-    marginTop: 3,
-    letterSpacing: -0.1,
-  },
-  headerIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
   /* ─── List ─────────────────────────────────────── */
   listContent: {
+    paddingTop: Spacing.lg,
     paddingHorizontal: CARD_PADDING,
     paddingBottom: Spacing['5xl'] + 20,
     gap: Spacing.lg,
   },
   skeletonList: {
+    paddingTop: Spacing.lg,
     paddingHorizontal: CARD_PADDING,
     gap: Spacing.lg,
   },

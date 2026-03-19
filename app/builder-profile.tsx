@@ -507,7 +507,7 @@ export default function BuilderProfileScreen() {
   const tealDark = colors.tealDark;
 
   const tealBg = colors.tealBg;
-  const bgCanvas = colorScheme === 'dark' ? colors.background : '#fafaf8';
+  const bgCanvas = colors.canvas;
 
   if (loading) {
     return (

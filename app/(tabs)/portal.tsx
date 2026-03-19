@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
@@ -7,6 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { PageHeader, HeaderAvatar } from '@/components/page-header';
 
 type BuilderStatus = 'loading' | 'none' | 'pending' | 'approved';
 
@@ -55,7 +56,7 @@ export default function PortalScreen() {
   const colors = Colors[colorScheme];
   const teal = colors.teal;
   const tealBg = colors.tealBg;
-  const bgCanvas = colorScheme === 'dark' ? colors.background : '#fafaf8';
+  const bgCanvas = colors.canvas;
   const router = useRouter();
 
   const [status, setStatus] = useState<BuilderStatus>('loading');
@@ -195,27 +196,21 @@ export default function PortalScreen() {
   ];
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: bgCanvas }]}>
+    <View style={[styles.safeArea, { backgroundColor: bgCanvas }]}>
       <ScrollView contentContainerStyle={styles.dashboardScroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View style={styles.dashboardHeader}>
-          <View style={{ flex: 1 }}>
-            <ThemedText type="title" style={styles.dashboardTitle}>Dashboard</ThemedText>
-            <ThemedText style={[styles.dashboardSubtitle, { color: colors.textSecondary }]}>
-              Welcome back{profile?.business_name ? `, ${profile.business_name}` : ''}!
-            </ThemedText>
-          </View>
-          {profile?.profile_photo_url ? (
-            <Image
-              source={{ uri: profile.profile_photo_url }}
-              style={[styles.headerAvatar, { borderColor: teal }]}
+        <PageHeader
+          title="Dashboard"
+          subtitle={`Welcome back${profile?.business_name ? `, ${profile.business_name}` : ''}!`}
+          variant="professional"
+          watermark="🏗️"
+          rightElement={
+            <HeaderAvatar
+              uri={profile?.profile_photo_url}
+              fallback={<Text style={{ fontSize: 22 }}>👤</Text>}
             />
-          ) : (
-            <View style={[styles.headerAvatarPlaceholder, { backgroundColor: tealBg, borderColor: teal }]}>
-              <Text style={{ fontSize: 22 }}>👤</Text>
-            </View>
-          )}
-        </View>
+          }
+        />
 
         {/* Profile completeness card */}
         <View style={[styles.completenessCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -336,7 +331,7 @@ export default function PortalScreen() {
           </View>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -420,40 +415,10 @@ const styles = StyleSheet.create({
   dashboardScroll: {
     paddingBottom: Spacing['5xl'],
   },
-  dashboardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing['3xl'],
-    paddingBottom: Spacing.lg,
-    gap: Spacing.md,
-  },
-  dashboardTitle: {
-    letterSpacing: -0.5,
-  },
-  dashboardSubtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 2,
-  },
-  headerAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 2,
-  },
-  headerAvatarPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
   // Completeness card
   completenessCard: {
     marginHorizontal: Spacing.xl,
+    marginTop: Spacing.xl,
     borderWidth: 1,
     borderRadius: Radius.xl,
     padding: Spacing.lg,

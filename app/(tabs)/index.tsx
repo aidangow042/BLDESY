@@ -234,7 +234,7 @@ export default function HomeScreen() {
   /* ───────────────────────── Render ───────────────────────── */
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <View style={[styles.root, { backgroundColor: colors.canvas }]}>
       {/* ─── HERO IMAGE — fixed behind scroll view ─── */}
       <View style={styles.heroImageClip}>
         {heroImage ? (
@@ -289,13 +289,13 @@ export default function HomeScreen() {
       >
         {/* ─── 1. HERO SPACER ─── */}
         <View style={styles.heroSpacer}>
-          <View style={[styles.curveContainer, { backgroundColor: isDark ? colors.background : '#FFFFFF' }]}>
-            <View style={[styles.curveShape, { backgroundColor: isDark ? colors.background : '#FFFFFF' }]} />
+          <View style={[styles.curveContainer, { backgroundColor: colors.canvas }]}>
+            <View style={[styles.curveShape, { backgroundColor: colors.canvas }]} />
           </View>
         </View>
 
         {/* ─── CONTENT AREA — solid background so image doesn't bleed through ─── */}
-        <View style={[styles.contentArea, { backgroundColor: colors.background }]}>
+        <View style={[styles.contentArea, { backgroundColor: colors.canvas }]}>
           {/* ─── 2. QUICK ACTION PILLS ─── */}
           <ScrollView
             horizontal
@@ -328,35 +328,37 @@ export default function HomeScreen() {
 
           {/* ─── 3. POPULAR TRADES (4x2 grid) ─── */}
           <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <ThemedText style={[styles.sectionTitle, { color: isDark ? colors.text : '#1A1A2E' }]}>
-                Popular trades
-              </ThemedText>
-              <Pressable onPress={openOverlay} style={({ pressed }) => [pressed && { opacity: 0.7 }]}>
-                <ThemedText style={styles.seeAllText}>See all</ThemedText>
-              </Pressable>
-            </View>
-            <View style={styles.tradeGrid}>
-              {POPULAR_TRADES.map((trade) => {
-                const cfg = TRADE_CONFIG[trade];
-                return (
-                  <Pressable
-                    key={trade}
-                    style={({ pressed }) => [
-                      styles.tradeGridItem,
-                      pressed && { transform: [{ scale: 0.95 }], opacity: 0.8 },
-                    ]}
-                    onPress={() => handleCategoryPress(trade)}
-                  >
-                    <View style={[styles.tradeIconBox, { backgroundColor: isDark ? colors.surface : cfg.bg }]}>
-                      {renderTradeIcon(trade)}
-                    </View>
-                    <ThemedText style={[styles.tradeGridLabel, { color: isDark ? colors.text : '#444444' }]} numberOfLines={1}>
-                      {trade}
-                    </ThemedText>
-                  </Pressable>
-                );
-              })}
+            <View style={[styles.tradesCard, { backgroundColor: isDark ? colors.surface : '#FFFFFF', borderColor: colors.border }]}>
+              <View style={styles.sectionHeaderRow}>
+                <ThemedText style={[styles.sectionTitle, { color: isDark ? colors.text : '#1A1A2E' }]}>
+                  Popular trades
+                </ThemedText>
+                <Pressable onPress={openOverlay} style={({ pressed }) => [pressed && { opacity: 0.7 }]}>
+                  <ThemedText style={styles.seeAllText}>See all</ThemedText>
+                </Pressable>
+              </View>
+              <View style={styles.tradeGrid}>
+                {POPULAR_TRADES.map((trade) => {
+                  const cfg = TRADE_CONFIG[trade];
+                  return (
+                    <Pressable
+                      key={trade}
+                      style={({ pressed }) => [
+                        styles.tradeGridItem,
+                        pressed && { transform: [{ scale: 0.95 }], opacity: 0.8 },
+                      ]}
+                      onPress={() => handleCategoryPress(trade)}
+                    >
+                      <View style={[styles.tradeIconBox, { backgroundColor: isDark ? colors.surface : cfg.bg }]}>
+                        {renderTradeIcon(trade)}
+                      </View>
+                      <ThemedText style={[styles.tradeGridLabel, { color: isDark ? colors.text : '#444444' }]} numberOfLines={1}>
+                        {trade}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
           </View>
 
@@ -436,7 +438,7 @@ export default function HomeScreen() {
               }),
             }}
           >
-            <View style={[styles.stickySearchShadow, { backgroundColor: isDark ? colors.background : '#FFFFFF' }]} />
+            <View style={[styles.stickySearchShadow, { backgroundColor: colors.canvas }]} />
           </Animated.View>
           <Pressable
             style={({ pressed }) => [styles.searchBar, pressed && { opacity: 0.9 }, { marginHorizontal: 16, marginBottom: 10 }]}
@@ -461,7 +463,7 @@ export default function HomeScreen() {
           <Animated.View
             style={[
               styles.overlayPanel,
-              { backgroundColor: isDark ? colors.background : '#F5F5F0', transform: [{ translateY: slideAnim }] },
+              { backgroundColor: colors.canvas, transform: [{ translateY: slideAnim }] },
             ]}
           >
             {/* ── Compact pinned header bar ── */}
@@ -671,7 +673,7 @@ export default function HomeScreen() {
                 style={[
                   styles.stickyButtonContainer,
                   {
-                    backgroundColor: isDark ? colors.background : '#F5F5F0',
+                    backgroundColor: colors.canvas,
                     borderTopColor: isDark ? colors.border : '#E5E7EB',
                     paddingBottom: insets.bottom + Spacing.md,
                   },
@@ -850,13 +852,23 @@ const styles = StyleSheet.create({
   seeAllText: { fontSize: 13, fontWeight: '500', color: '#0D7C66' },
 
   /* ─── Trade Grid (4x2) ─── */
+  tradesCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    ...Platform.select({
+      ios: { shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
+      android: { elevation: 2 },
+      default: {},
+    }),
+  },
   tradeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
   },
   tradeGridItem: {
-    width: (SCREEN_WIDTH - 32 - 36) / 4,
+    width: (SCREEN_WIDTH - 66 - 36) / 4,
     alignItems: 'center',
     gap: 6,
   },

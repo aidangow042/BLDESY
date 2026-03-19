@@ -12,7 +12,7 @@ export default function PendingApprovalScreen() {
   const router = useRouter();
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
       <View style={styles.container}>
         <View
           style={[

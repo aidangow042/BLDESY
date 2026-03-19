@@ -151,7 +151,7 @@ export default function AllTradesScreen() {
   }
 
   return (
-    <View style={[styles.root, { backgroundColor: isDark ? colors.background : '#F5F5F0' }]}>
+    <View style={[styles.root, { backgroundColor: colors.canvas }]}>
       {/* ── Header ── */}
       <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: isDark ? colors.background : '#FFFFFF', borderBottomColor: isDark ? colors.border : '#E5E7EB' }]}>
         <View style={styles.headerRow}>

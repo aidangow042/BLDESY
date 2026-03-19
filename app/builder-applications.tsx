@@ -119,7 +119,7 @@ export default function MyApplicationsScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
       {/* Header */}
       <View style={styles.header}>
         <Pressable

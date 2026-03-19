@@ -10,6 +10,7 @@ export const Colors = {
     text: '#0f172a',          // slate-900
     textSecondary: '#64748b', // slate-500
     background: '#ffffff',
+    canvas: '#F6F5F3',        // warm off-white page background
     surface: '#f8fafc',       // slate-50 — card / section backgrounds
     border: '#e2e8f0',        // slate-200
     borderLight: '#f1f5f9',   // slate-100
@@ -39,6 +40,7 @@ export const Colors = {
     text: '#f1f5f9',          // slate-100
     textSecondary: '#94a3b8', // slate-400
     background: '#0f172a',    // slate-900
+    canvas: '#0f172a',        // same as background in dark mode
     surface: '#1e293b',       // slate-800
     border: '#334155',        // slate-700
     borderLight: '#1e293b',   // slate-800

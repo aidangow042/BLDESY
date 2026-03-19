@@ -799,7 +799,7 @@ export default function ResultsScreen() {
   // ─── Render ───────────────────────────────────────────────────────
 
   return (
-    <View style={[styles.screen, { backgroundColor: isDark ? colors.background : '#f7f7f5' }]}>
+    <View style={[styles.screen, { backgroundColor: colors.canvas }]}>
       <SafeAreaView edges={['top']} style={{ backgroundColor: colors.background }}>
         {/* ─── Header ─── */}
         <View style={[styles.headerBar, { backgroundColor: colors.background }]}>

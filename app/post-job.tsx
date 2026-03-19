@@ -78,7 +78,7 @@ export default function PostJobScreen() {
 
   if (noAuth) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
         <ThemedView style={styles.centeredContainer}>
           <ThemedText type="subtitle" style={styles.centeredText}>
             Sign in required
@@ -104,7 +104,7 @@ export default function PostJobScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={styles.contentContainer}
