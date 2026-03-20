@@ -55,6 +55,16 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
+        name="map"
+        options={{
+          title: 'Map',
+          tabBarIcon: ({ color }: { color: string }) => (
+            <IconSymbol size={26} name="map" color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
         name="saved"
         options={{
           title: 'Saved',
@@ -64,16 +74,8 @@ export default function TabLayout() {
         }}
       />
 
-      <Tabs.Screen
-        name="portal"
-        options={{
-          title: 'Portal',
-          tabBarIcon: ({ color }: { color: string }) => (
-            <IconSymbol size={26} name="person.crop.circle" color={color} />
-          ),
-        }}
-      />
-
+      {/* Portal is now a pushed screen — hide from tab bar */}
+      <Tabs.Screen name="portal" options={{ href: null }} />
       {/* Hide Explore if the file still exists */}
       <Tabs.Screen name="explore" options={{ href: null }} />
     </Tabs>

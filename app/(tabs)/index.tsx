@@ -16,6 +16,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ThemedText } from '@/components/themed-text';
+import { SideDrawer } from '@/components/side-drawer';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -93,6 +94,9 @@ export default function HomeScreen() {
 
   /* ── Scroll tracking for overscroll zoom ── */
   const scrollY = useRef(new Animated.Value(0)).current;
+
+  /* ── Side drawer state ── */
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   /* ── FAB menu state ── */
   const [fabOpen, setFabOpen] = useState(false);
@@ -313,6 +317,17 @@ export default function HomeScreen() {
           ]}
           pointerEvents="box-none"
         >
+          {/* Hamburger button — top-left of hero */}
+          <Pressable
+            style={[styles.hamburgerBtn, { top: insets.top + 10 }]}
+            onPress={() => setDrawerOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Open menu"
+            pointerEvents="auto"
+          >
+            <MaterialIcons name="menu" size={24} color="#ffffff" />
+          </Pressable>
+
           <ThemedText style={styles.heroBrandName}>BLDESY!</ThemedText>
           <ThemedText style={styles.heroBrandTagline}>Find your tradie</ThemedText>
           {/* ── Embedded search prompt pill ── */}
@@ -466,18 +481,30 @@ export default function HomeScreen() {
             },
           ]}
         >
-          <Pressable
-            style={({ pressed }) => [styles.searchBar, { backgroundColor: isDark ? colors.surface : '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4 }, pressed && { opacity: 0.9 }, { marginHorizontal: 16, marginBottom: 6 }]}
-            onPress={openOverlay}
-            accessibilityRole="search"
-            accessibilityLabel="Search for tradies"
-          >
-            <View style={styles.searchBrandIcon}>
-              <Ionicons name="home" size={16} color="#ffffff" />
-            </View>
-            <ThemedText style={[styles.searchPlaceholder, { color: colors.textSecondary }]}>What do you need done?</ThemedText>
-            <MaterialIcons name="search" size={20} color="#9CA3AF" />
-          </Pressable>
+          <View style={styles.stickySearchRow}>
+            {/* Hamburger button in sticky bar */}
+            <Pressable
+              style={[styles.stickyHamburger, { backgroundColor: isDark ? colors.surface : '#FFFFFF', borderColor: colors.border }]}
+              onPress={() => setDrawerOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Open menu"
+            >
+              <MaterialIcons name="menu" size={22} color={colors.text} />
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [styles.searchBar, { backgroundColor: isDark ? colors.surface : '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4 }, pressed && { opacity: 0.9 }, { flex: 1, marginBottom: 6 }]}
+              onPress={openOverlay}
+              accessibilityRole="search"
+              accessibilityLabel="Search for tradies"
+            >
+              <View style={styles.searchBrandIcon}>
+                <Ionicons name="home" size={16} color="#ffffff" />
+              </View>
+              <ThemedText style={[styles.searchPlaceholder, { color: colors.textSecondary }]}>What do you need done?</ThemedText>
+              <MaterialIcons name="search" size={20} color="#9CA3AF" />
+            </Pressable>
+          </View>
         </Animated.View>
       )}
 
@@ -820,6 +847,9 @@ export default function HomeScreen() {
           </Animated.View>
         </View>
       )}
+
+      {/* ─── Side Drawer ─── */}
+      <SideDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </View>
   );
 }
@@ -1303,4 +1333,31 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   searchBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  hamburgerBtn: {
+    position: 'absolute',
+    left: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  stickySearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    gap: 8,
+    marginBottom: 6,
+  },
+  stickyHamburger: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
 });

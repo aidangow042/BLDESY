@@ -24,6 +24,8 @@ const MAPPING = {
   'bookmark': 'bookmark-outline',
   'person.crop.circle.fill': 'person-outline',
   'person.crop.circle': 'person-outline',
+  'map': 'map',
+  'map.fill': 'map',
 } as IconMapping;
 
 /**

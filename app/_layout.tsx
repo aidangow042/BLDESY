@@ -69,6 +69,9 @@ export default function RootLayout() {
         <Stack.Screen name="builder-edit-profile" />
         <Stack.Screen name="my-jobs" />
         <Stack.Screen name="all-trades" />
+        <Stack.Screen name="settings" />
+        <Stack.Screen name="help" />
+        <Stack.Screen name="legal" />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
       <StatusBar style="auto" translucent />
