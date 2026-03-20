@@ -1,11 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import {
+  Alert,
   Animated,
   Dimensions,
   FlatList,
   Image,
   Platform,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
@@ -186,16 +188,35 @@ function HeartButton({ onPress }: { onPress: () => void }) {
   const scale = useRef(new Animated.Value(1)).current;
 
   function handlePress() {
-    Animated.sequence([
-      Animated.timing(scale, { toValue: 1.35, duration: 100, useNativeDriver: true }),
-      Animated.timing(scale, { toValue: 0.9, duration: 80, useNativeDriver: true }),
-      Animated.timing(scale, { toValue: 1, duration: 100, useNativeDriver: true }),
-    ]).start();
-    onPress();
+    Alert.alert(
+      'Remove from Saved?',
+      'This builder will be removed from your saved list.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            Animated.sequence([
+              Animated.timing(scale, { toValue: 1.35, duration: 100, useNativeDriver: true }),
+              Animated.timing(scale, { toValue: 0.9, duration: 80, useNativeDriver: true }),
+              Animated.timing(scale, { toValue: 1, duration: 100, useNativeDriver: true }),
+            ]).start();
+            onPress();
+          },
+        },
+      ],
+    );
   }
 
   return (
-    <Pressable onPress={handlePress} hitSlop={10} style={styles.heartBtn}>
+    <Pressable
+      onPress={handlePress}
+      hitSlop={10}
+      style={styles.heartBtn}
+      accessibilityLabel="Remove from saved"
+      accessibilityRole="button"
+    >
       <Animated.View style={{ transform: [{ scale }] }}>
         <MaterialIcons name="favorite" size={22} color="#EF4444" />
       </Animated.View>
@@ -281,6 +302,7 @@ export default function SavedScreen() {
 
   const [builders, setBuilders] = useState<SavedBuilder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
 
   useFocusEffect(
@@ -289,8 +311,8 @@ export default function SavedScreen() {
     }, []),
   );
 
-  async function fetchSavedBuilders() {
-    setLoading(true);
+  async function fetchSavedBuilders(isRefresh = false) {
+    if (!isRefresh) setLoading(true);
 
     const { data: userData } = await supabase.auth.getUser();
     if (!userData?.user) {
@@ -557,7 +579,10 @@ export default function SavedScreen() {
                 onPress={() =>
                   router.push({ pathname: '/builder-profile', params: { id: item.builder_id } })
                 }
+                accessibilityRole="button"
+                accessibilityLabel={`View ${item.business_name} profile`}
               >
+                <MaterialIcons name="person" size={15} color={colors.text} />
                 <Text style={[styles.btnOutlineText, { color: colors.text }]}>View Profile</Text>
               </Pressable>
               <Pressable
@@ -567,10 +592,16 @@ export default function SavedScreen() {
                   pressed && { opacity: 0.85 },
                 ]}
                 onPress={() =>
-                  router.push({ pathname: '/builder-profile', params: { id: item.builder_id } })
+                  router.push({
+                    pathname: '/post-job',
+                    params: { suggested_trade: item.trade_category },
+                  })
                 }
+                accessibilityRole="button"
+                accessibilityLabel={`Post a job for ${item.business_name}`}
               >
-                <Text style={styles.btnPrimaryText}>Request Quote</Text>
+                <MaterialIcons name="post-add" size={15} color="#fff" />
+                <Text style={styles.btnPrimaryText}>Post a Job</Text>
               </Pressable>
             </View>
           </View>
@@ -680,6 +711,17 @@ export default function SavedScreen() {
         renderItem={renderCard}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={async () => {
+              setRefreshing(true);
+              await fetchSavedBuilders(true);
+              setRefreshing(false);
+            }}
+            tintColor={teal}
+          />
+        }
       />
     </View>
   );
@@ -970,8 +1012,10 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: Radius.md,
     borderWidth: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 5,
   },
   btnOutlineText: {
     fontSize: 14,
@@ -981,8 +1025,10 @@ const styles = StyleSheet.create({
     flex: 1.3,
     height: 44,
     borderRadius: Radius.md,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 5,
   },
   btnPrimaryText: {
     color: '#fff',

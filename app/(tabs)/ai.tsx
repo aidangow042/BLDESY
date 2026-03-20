@@ -448,6 +448,32 @@ export default function AIAssistScreen() {
             <ThemedText style={[styles.welcomeSubtitle, { color: isDark ? '#94a3b8' : '#6B7280' }]}>
               Ask me about finding trades, job costs, or anything building-related.
             </ThemedText>
+            {/* Suggested prompt chips */}
+            <View style={styles.promptChips}>
+              {[
+                'Find a plumber in Surry Hills',
+                'How much does a bathroom reno cost?',
+                'Best electrician near me ASAP',
+                'What questions should I ask a builder?',
+              ].map((prompt) => (
+                <Pressable
+                  key={prompt}
+                  style={({ pressed }) => [
+                    styles.promptChip,
+                    { backgroundColor: isDark ? '#1e293b' : '#FFFFFF', borderColor: isDark ? '#334155' : '#E2E5E9' },
+                    pressed && { opacity: 0.7, transform: [{ scale: 0.97 }] },
+                  ]}
+                  onPress={() => sendMessage(prompt)}
+                  accessibilityRole="button"
+                  accessibilityLabel={prompt}
+                >
+                  <ThemedText style={[styles.promptChipText, { color: isDark ? '#94a3b8' : '#374151' }]}>
+                    {prompt}
+                  </ThemedText>
+                  <Ionicons name="arrow-forward-circle-outline" size={16} color={BRAND} />
+                </Pressable>
+              ))}
+            </View>
           </ScrollView>
         )}
 
@@ -593,6 +619,26 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     maxWidth: 280,
+  },
+  promptChips: {
+    width: '100%',
+    marginTop: 24,
+    gap: 10,
+  },
+  promptChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  promptChipText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
   },
 
   /* ── Messages ── */

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -46,9 +47,40 @@ export default function BuilderSignupScreen() {
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
 
+  // Step transition animation
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+
+  // Dot width animations
+  const dotWidths = useRef([1, 2, 3].map((s) => new Animated.Value(s === 1 ? 24 : 8))).current;
+
+  function animateToStep(from: number, to: number) {
+    const direction = to > from ? -1 : 1; // slide left for forward, right for back
+    // Animate dots
+    Animated.parallel([
+      Animated.spring(dotWidths[from - 1], { toValue: 8, useNativeDriver: false, friction: 8 }),
+      Animated.spring(dotWidths[to - 1], { toValue: 24, useNativeDriver: false, friction: 8 }),
+    ]).start();
+    // Slide out current
+    Animated.parallel([
+      Animated.timing(slideAnim, { toValue: direction * 300, duration: 150, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+    ]).start(() => {
+      setStep(to);
+      // Position new content on opposite side
+      slideAnim.setValue(-direction * 300);
+      // Slide in new
+      Animated.parallel([
+        Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, friction: 8, tension: 60 }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]).start();
+    });
+  }
+
   // Step 1 fields
   const [tradeCategory, setTradeCategory] = useState('');
-  const [specialties, setSpecialties] = useState('');
+  const [specialties, setSpecialties] = useState<string[]>([]);
+  const [specialtyInput, setSpecialtyInput] = useState('');
   const [suburb, setSuburb] = useState('');
   const [postcode, setPostcode] = useState('');
   const [radiusKm, setRadiusKm] = useState('25');
@@ -64,6 +96,18 @@ export default function BuilderSignupScreen() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [website, setWebsite] = useState('');
+
+  function addSpecialty() {
+    const trimmed = specialtyInput.trim();
+    if (trimmed && !specialties.includes(trimmed)) {
+      setSpecialties((prev) => [...prev, trimmed]);
+    }
+    setSpecialtyInput('');
+  }
+
+  function removeSpecialty(s: string) {
+    setSpecialties((prev) => prev.filter((x) => x !== s));
+  }
 
   function toggleUrgency(option: string) {
     setUrgencyCapacity((prev) =>
@@ -95,11 +139,11 @@ export default function BuilderSignupScreen() {
     if (step === 1) {
       const err = validateStep1();
       if (err) { Alert.alert('Missing info', err); return; }
-      setStep(2);
+      animateToStep(1, 2);
     } else if (step === 2) {
       const err = validateStep2();
       if (err) { Alert.alert('Missing info', err); return; }
-      setStep(3);
+      animateToStep(2, 3);
     }
   }
 
@@ -116,10 +160,7 @@ export default function BuilderSignupScreen() {
       return;
     }
 
-    const specialtiesArray = specialties
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const specialtiesArray = specialties.filter(Boolean);
 
     // Geocode the builder's location
     const geo = await geocode(`${suburb.trim()} ${postcode.trim()}`);
@@ -168,7 +209,7 @@ export default function BuilderSignupScreen() {
           {/* Header */}
           <View style={styles.headerRow}>
             <Pressable
-              onPress={() => (step > 1 ? setStep(step - 1) : router.back())}
+              onPress={() => (step > 1 ? animateToStep(step, step - 1) : router.back())}
               style={({ pressed }) => [pressed && { opacity: 0.7 }]}
             >
               <ThemedText style={[styles.backText, { color: colors.tint }]}>
@@ -182,20 +223,21 @@ export default function BuilderSignupScreen() {
 
           {/* Step indicator dots */}
           <View style={styles.stepIndicator}>
-            {[1, 2, 3].map((s) => (
-              <View
+            {[1, 2, 3].map((s, i) => (
+              <Animated.View
                 key={s}
                 style={[
                   styles.stepDot,
                   {
                     backgroundColor: s <= step ? colors.tint : colors.border,
-                    width: s === step ? 24 : 8,
+                    width: dotWidths[i],
                   },
                 ]}
               />
             ))}
           </View>
 
+          <Animated.View style={{ transform: [{ translateX: slideAnim }], opacity: fadeAnim }}>
           <ThemedText type="title" style={styles.title}>
             {step === 1 && 'Your Trade'}
             {step === 2 && 'Credentials'}
@@ -241,13 +283,42 @@ export default function BuilderSignupScreen() {
               <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>
                 Specialties
               </ThemedText>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-                placeholder="e.g. heritage homes, commercial fit-outs"
-                placeholderTextColor={colors.icon}
-                value={specialties}
-                onChangeText={setSpecialties}
-              />
+              <View style={[styles.specialtyInputRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <TextInput
+                  style={[styles.specialtyInput, { color: colors.text }]}
+                  placeholder="e.g. heritage homes, bathrooms…"
+                  placeholderTextColor={colors.icon}
+                  value={specialtyInput}
+                  onChangeText={setSpecialtyInput}
+                  onSubmitEditing={addSpecialty}
+                  returnKeyType="done"
+                  blurOnSubmit={false}
+                />
+                <Pressable
+                  onPress={addSpecialty}
+                  style={({ pressed }) => [styles.specialtyAddBtn, { backgroundColor: colors.tint }, pressed && { opacity: 0.7 }]}
+                  accessibilityLabel="Add specialty"
+                  accessibilityRole="button"
+                >
+                  <ThemedText style={styles.specialtyAddBtnText}>Add</ThemedText>
+                </Pressable>
+              </View>
+              {specialties.length > 0 && (
+                <View style={styles.chipGrid}>
+                  {specialties.map((s) => (
+                    <Pressable
+                      key={s}
+                      onPress={() => removeSpecialty(s)}
+                      style={[styles.chip, { backgroundColor: colors.tintLight, borderColor: colors.tint }]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${s}`}
+                    >
+                      <ThemedText style={[styles.chipText, { color: colors.tint }]}>{s}</ThemedText>
+                      <ThemedText style={[styles.chipText, { color: colors.tint, marginLeft: 4 }]}>×</ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
 
               <View style={styles.row}>
                 <View style={{ flex: 1 }}>
@@ -322,6 +393,16 @@ export default function BuilderSignupScreen() {
           {/* === STEP 2 === */}
           {step === 2 && (
             <View style={styles.formSection}>
+              {/* Trust banner */}
+              <View style={[styles.trustBanner, { backgroundColor: colors.tintLight, borderColor: colors.tint + '30' }]}>
+                <ThemedText style={[styles.trustBannerTitle, { color: colors.tint }]}>
+                  Why this matters
+                </ThemedText>
+                <ThemedText style={[styles.trustBannerText, { color: colors.textSecondary }]}>
+                  Verified tradies get a "Verified" badge on their profile and rank higher in search results. Customers are 3x more likely to contact verified builders.
+                </ThemedText>
+              </View>
+
               <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>
                 ABN
               </ThemedText>
@@ -348,7 +429,7 @@ export default function BuilderSignupScreen() {
 
               <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <ThemedText style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 20 }}>
-                  Document uploads (licence photos, certificates) are coming soon. For now, just enter your licence number and we'll verify manually.
+                  Both fields are optional for now. Document uploads (photos, certificates) are coming soon — we'll verify your details manually.
                 </ThemedText>
               </View>
             </View>
@@ -421,6 +502,7 @@ export default function BuilderSignupScreen() {
               />
             </View>
           )}
+          </Animated.View>
 
           {/* Action button */}
           {step < 3 ? (
@@ -542,6 +624,46 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: Spacing.lg,
     marginTop: Spacing.xl,
+  },
+  specialtyInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    height: 52,
+    marginTop: Spacing.xs,
+    overflow: 'hidden',
+  },
+  specialtyInput: {
+    flex: 1,
+    paddingHorizontal: Spacing.lg,
+    fontSize: 16,
+  },
+  specialtyAddBtn: {
+    paddingHorizontal: Spacing.lg,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  specialtyAddBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  trustBanner: {
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    padding: Spacing.lg,
+    marginTop: Spacing.lg,
+    gap: Spacing.xs,
+  },
+  trustBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  trustBannerText: {
+    fontSize: 13,
+    lineHeight: 19,
   },
   primaryButton: {
     height: 52,

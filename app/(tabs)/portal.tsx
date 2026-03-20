@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
-import { PageHeader, HeaderAvatar } from '@/components/page-header';
+import { PageHeader, HeaderAvatar, HeaderIcon } from '@/components/page-header';
 
 type BuilderStatus = 'loading' | 'none' | 'pending' | 'approved';
 
@@ -62,9 +64,11 @@ export default function PortalScreen() {
   const [status, setStatus] = useState<BuilderStatus>('loading');
   const [profile, setProfile] = useState<ProfileData | null>(null);
 
-  useEffect(() => {
-    checkBuilderStatus();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      checkBuilderStatus();
+    }, [])
+  );
 
   async function checkBuilderStatus() {
     const { data: userData } = await supabase.auth.getUser();
@@ -99,43 +103,78 @@ export default function PortalScreen() {
 
   // Not a builder yet — show sign-up CTA
   if (status === 'none') {
+    const features: { icon: React.ComponentProps<typeof MaterialIcons>['name']; text: string }[] = [
+      { icon: 'search',     text: 'Get found by local customers' },
+      { icon: 'assignment', text: 'Browse and apply to jobs' },
+      { icon: 'star',       text: 'Showcase projects & earn reviews' },
+      { icon: 'insights',   text: 'Manage your professional profile' },
+    ];
+
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: bgCanvas }]}>
-        <View style={styles.ctaContainer}>
-          <Text style={{ fontSize: 48 }}>🏗️</Text>
-          <ThemedText type="title" style={styles.ctaTitle}>Builder Portal</ThemedText>
+      <View style={[styles.safeArea, { backgroundColor: bgCanvas }]}>
+        <ScrollView
+          contentContainerStyle={styles.noneScroll}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <PageHeader
+            title="Builder Portal"
+            subtitle="Grow your trade business"
+            variant="professional"
+            rightElement={
+              <HeaderIcon onRichBackground>
+                <MaterialIcons name="construction" size={24} color="#fff" />
+              </HeaderIcon>
+            }
+          />
 
-          <ThemedText style={[styles.ctaBody, { color: colors.textSecondary }]}>
-            Join as a verified builder or tradesperson to get matched with high-intent customers in your area.
-          </ThemedText>
+          <View style={styles.noneContent}>
+            <ThemedText style={[styles.ctaBody, { color: colors.textSecondary }]}>
+              Join as a verified builder or tradesperson to get matched with high-intent customers in your area.
+            </ThemedText>
 
-          <View style={[styles.bulletList, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            {[
-              { icon: '🔍', text: 'Get found by local customers' },
-              { icon: '📋', text: 'Browse and apply to jobs' },
-              { icon: '⭐', text: 'Showcase projects & earn reviews' },
-              { icon: '📊', text: 'Manage your professional profile' },
-            ].map((item) => (
-              <View key={item.text} style={styles.bulletRow}>
-                <Text style={{ fontSize: 18 }}>{item.icon}</Text>
-                <ThemedText style={[styles.bulletItem, { color: colors.text }]}>
-                  {item.text}
-                </ThemedText>
-              </View>
-            ))}
+            {/* Social proof stat banner */}
+            <View style={[styles.statBanner, { backgroundColor: tealBg }]}>
+              <MaterialIcons name="trending-up" size={20} color="#0d9488" />
+              <Text style={[styles.statText, { color: colors.text }]}>
+                New jobs posted daily in your area
+              </Text>
+            </View>
+
+            {/* Feature list */}
+            <View style={[styles.bulletList, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              {features.map((item) => (
+                <View key={item.text} style={styles.bulletRow}>
+                  <View style={[styles.featureIconCircle, { backgroundColor: tealBg }]}>
+                    <MaterialIcons name={item.icon} size={18} color="#0d9488" />
+                  </View>
+                  <Text style={[styles.bulletItem, { color: colors.text }]}>
+                    {item.text}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Gradient CTA */}
+            <Pressable
+              onPress={() => router.push('/builder-signup')}
+              style={({ pressed }) => [styles.ctaWrapper, pressed && { opacity: 0.85 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Get started as a builder"
+            >
+              <LinearGradient
+                colors={['#0d9488', '#0f766e']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.ctaBtn}
+              >
+                <MaterialIcons name="arrow-forward" size={18} color="#fff" />
+                <Text style={styles.ctaBtnText}>Get Started</Text>
+              </LinearGradient>
+            </Pressable>
           </View>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.primaryButton,
-              { backgroundColor: teal, opacity: pressed ? 0.85 : 1 },
-            ]}
-            onPress={() => router.push('/builder-signup')}
-          >
-            <ThemedText style={styles.primaryButtonText}>Join as a Builder</ThemedText>
-          </Pressable>
-        </View>
-      </SafeAreaView>
+        </ScrollView>
+      </View>
     );
   }
 
@@ -409,6 +448,59 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     fontSize: 16,
     fontWeight: '700',
+  },
+
+  // None state (not a builder yet)
+  noneScroll: {
+    flexGrow: 1,
+    paddingBottom: Spacing['5xl'],
+  },
+  noneContent: {
+    paddingHorizontal: Spacing['3xl'],
+    paddingTop: Spacing.xl,
+    gap: Spacing.lg,
+  },
+  statBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.lg,
+  },
+  statText: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+  featureIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  ctaWrapper: {
+    width: '100%',
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+    ...Shadows.md,
+  },
+  ctaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    height: 54,
+    borderRadius: Radius.lg,
+  },
+  ctaBtnText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.2,
   },
 
   // Dashboard

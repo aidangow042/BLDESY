@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useFonts, RussoOne_400Regular } from '@expo-google-fonts/russo-one';
 import 'react-native-reanimated';
 
 import { supabase } from '@/lib/supabase';
@@ -16,6 +17,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const segments = useSegments();
   const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const [fontsLoaded] = useFonts({ RussoOne_400Regular });
 
   useEffect(() => {
     // Get initial session
@@ -46,25 +48,30 @@ export default function RootLayout() {
     }
   }, [session, segments]);
 
+  // Fix #3: Don't render anything while session is loading (prevents auth flash)
+  if (session === undefined) {
+    return null;
+  }
+
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="results" options={{ headerShown: false }} />
-        <Stack.Screen name="post-job" options={{ headerShown: false }} />
-        <Stack.Screen name="builder-profile" options={{ headerShown: false }} />
-        <Stack.Screen name="builder-signup" options={{ headerShown: false }} />
-        <Stack.Screen name="pending-approval" options={{ headerShown: false }} />
-        <Stack.Screen name="builder-jobs" options={{ headerShown: false }} />
-        <Stack.Screen name="job-detail" options={{ headerShown: false }} />
-        <Stack.Screen name="builder-applications" options={{ headerShown: false }} />
-        <Stack.Screen name="builder-edit-profile" options={{ headerShown: false }} />
-        <Stack.Screen name="my-jobs" options={{ headerShown: false }} />
-        <Stack.Screen name="all-trades" options={{ headerShown: false }} />
+      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
+        <Stack.Screen name="results" />
+        <Stack.Screen name="post-job" />
+        <Stack.Screen name="builder-profile" />
+        <Stack.Screen name="builder-signup" />
+        <Stack.Screen name="pending-approval" />
+        <Stack.Screen name="builder-jobs" />
+        <Stack.Screen name="job-detail" />
+        <Stack.Screen name="builder-applications" />
+        <Stack.Screen name="builder-edit-profile" />
+        <Stack.Screen name="my-jobs" />
+        <Stack.Screen name="all-trades" />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
-      <StatusBar style="light" translucent />
+      <StatusBar style="auto" translucent />
     </ThemeProvider>
   );
 }

@@ -9,7 +9,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from 'react-native';
@@ -299,20 +298,34 @@ function FilterSheet({
         </ScrollView>
 
         {/* Verified only */}
-        <View style={[styles.filterRow, { borderTopColor: colors.border }]}>
-          <View>
-            <Text style={[styles.filterRowLabel, { color: colors.text }]}>Verified only</Text>
-            <Text style={[styles.filterRowSub, { color: colors.textSecondary }]}>
-              Licensed, insured, or ABN verified
-            </Text>
-          </View>
-          <Switch
-            value={local.verifiedOnly}
-            onValueChange={(v) => setLocal((p) => ({ ...p, verifiedOnly: v }))}
-            trackColor={{ true: colors.teal, false: colors.border }}
-            thumbColor="#fff"
+        <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>Verification</Text>
+        <Pressable
+          onPress={() => setLocal((p) => ({ ...p, verifiedOnly: !p.verifiedOnly }))}
+          style={[
+            styles.filterChip,
+            {
+              backgroundColor: local.verifiedOnly ? colors.teal : colors.surface,
+              borderColor: local.verifiedOnly ? colors.teal : colors.border,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              marginBottom: 16,
+              alignSelf: 'flex-start',
+            },
+          ]}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: local.verifiedOnly }}
+          accessibilityLabel="Verified tradies only"
+        >
+          <MaterialIcons
+            name={local.verifiedOnly ? 'check-circle' : 'radio-button-unchecked'}
+            size={16}
+            color={local.verifiedOnly ? '#fff' : colors.textSecondary}
           />
-        </View>
+          <Text style={[styles.filterChipText, { color: local.verifiedOnly ? '#fff' : colors.text }]}>
+            Licensed, insured, or ABN verified
+          </Text>
+        </Pressable>
 
         {/* Buttons */}
         <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
@@ -837,22 +850,25 @@ export default function ResultsScreen() {
                 <Pressable
                   key={opt.key}
                   onPress={() => setSortMode(opt.key)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={`Sort by ${opt.label}`}
                   style={[
                     styles.sortPill,
                     active
-                      ? { backgroundColor: teal }
+                      ? { backgroundColor: teal, borderColor: teal, borderWidth: 1.5 }
                       : { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 },
                   ]}
                 >
                   <MaterialIcons
                     name={opt.icon as any}
                     size={14}
-                    color={active ? '#fff' : colors.textSecondary}
+                    color={active ? '#fff' : colors.icon}
                   />
                   <Text
                     style={[
                       styles.sortPillText,
-                      { color: active ? '#fff' : colors.textSecondary },
+                      { color: active ? '#fff' : colors.textSecondary, fontWeight: active ? '700' : '500' },
                     ]}
                   >
                     {opt.label}

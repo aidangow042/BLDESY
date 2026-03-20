@@ -4,13 +4,16 @@ import {
   Alert,
   FlatList,
   Pressable,
+  RefreshControl,
   StyleSheet,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ThemedText } from '@/components/themed-text';
+import { PageHeader } from '@/components/page-header';
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
@@ -63,9 +66,11 @@ export default function MyJobsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [loadingApplicants, setLoadingApplicants] = useState(false);
@@ -93,6 +98,12 @@ export default function MyJobsScreen() {
       setJobs(data);
     }
     setLoading(false);
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await fetchJobs();
+    setRefreshing(false);
   }
 
   async function fetchApplicants(jobId: string) {
@@ -183,7 +194,10 @@ export default function MyJobsScreen() {
         >
           <Pressable
             onPress={() => toggleExpand(item.id)}
-            style={({ pressed }) => pressed && { opacity: 0.7 }}
+            style={({ pressed }) => [styles.jobPressable, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+            accessibilityLabel={isExpanded ? `Hide applicants for ${item.title}` : `View applicants for ${item.title}`}
+            accessibilityState={{ expanded: isExpanded }}
           >
             <View style={styles.jobHeader}>
               <ThemedText type="defaultSemiBold" style={styles.jobTitle} numberOfLines={1}>
@@ -198,9 +212,16 @@ export default function MyJobsScreen() {
             <ThemedText style={[styles.metaText, { color: colors.textSecondary }]}>
               {item.trade_type} — {item.suburb}, {item.postcode}
             </ThemedText>
-            <ThemedText style={[styles.tapHint, { color: colors.tint }]}>
-              {isExpanded ? 'Hide applicants' : 'View applicants'}
-            </ThemedText>
+            <View style={styles.expandRow}>
+              <Ionicons
+                name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                size={16}
+                color={colors.tint}
+              />
+              <ThemedText style={[styles.tapHint, { color: colors.tint }]}>
+                {isExpanded ? 'Hide applicants' : 'See applicants'}
+              </ThemedText>
+            </View>
           </Pressable>
 
           {isExpanded && (
@@ -281,17 +302,20 @@ export default function MyJobsScreen() {
   );
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => pressed && { opacity: 0.7 }}
-        >
-          <ThemedText style={[styles.backText, { color: colors.tint }]}>Back</ThemedText>
-        </Pressable>
-        <ThemedText type="subtitle">My Jobs</ThemedText>
-        <View style={{ width: 40 }} />
-      </View>
+    <View style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
+      <PageHeader
+        title="My Jobs"
+        subtitle="Manage your posted jobs"
+        variant="professional"
+      />
+      <Pressable
+        onPress={() => router.back()}
+        style={[styles.backButton, { top: insets.top + 12 }]}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+      >
+        <Ionicons name="arrow-back" size={22} color="#ffffff" />
+      </Pressable>
 
       {loading ? (
         <ActivityIndicator color={colors.tint} style={{ marginTop: Spacing['5xl'] }} />
@@ -318,9 +342,12 @@ export default function MyJobsScreen() {
           renderItem={renderJob}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.tint} />
+          }
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -328,16 +355,16 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.15)',
     alignItems: 'center',
-    paddingHorizontal: Spacing['2xl'],
-    paddingVertical: Spacing.md,
-  },
-  backText: {
-    fontSize: 16,
-    fontWeight: '600',
+    justifyContent: 'center',
   },
   listContent: {
     padding: Spacing['2xl'],
@@ -374,10 +401,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textTransform: 'capitalize',
   },
+  jobPressable: {
+    // wrapper so the whole header area is tappable
+  },
+  expandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+  },
   tapHint: {
     fontSize: 14,
     fontWeight: '600',
-    marginTop: Spacing.xs,
   },
   applicantsSection: {
     marginTop: Spacing.lg,

@@ -139,8 +139,7 @@ export default function AllTradesScreen() {
   })).filter((cat) => cat.trades.length > 0);
 
   function selectTrade(tradeName: string) {
-    (global as any).__selectedTrade = tradeName;
-    router.back();
+    router.navigate({ pathname: '/(tabs)', params: { selectedTrade: tradeName } });
   }
 
   function renderIcon(trade: TradeEntry) {
@@ -201,24 +200,28 @@ export default function AllTradesScreen() {
             <ThemedText style={[styles.categoryTitle, { color: isDark ? colors.textSecondary : '#6B7280' }]}>
               {category.title.toUpperCase()}
             </ThemedText>
-            <View style={[styles.categoryCard, { backgroundColor: isDark ? colors.surface : '#FFFFFF' }]}>
-              {category.trades.map((trade, idx) => (
+            <View style={styles.tradeGrid}>
+              {category.trades.map((trade) => (
                 <Pressable
                   key={trade.name}
                   style={({ pressed }) => [
-                    styles.tradeRow,
-                    idx < category.trades.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: isDark ? colors.border : '#F3F4F6' },
-                    pressed && { backgroundColor: isDark ? colors.borderLight : '#F9FAFB' },
+                    styles.tradeGridItem,
+                    { backgroundColor: isDark ? colors.surface : '#FFFFFF', borderColor: isDark ? colors.border : '#F3F4F6' },
+                    pressed && { opacity: 0.75, transform: [{ scale: 0.96 }] },
                   ]}
                   onPress={() => selectTrade(trade.name)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Search ${trade.name} tradies`}
                 >
-                  <View style={[styles.tradeRowIcon, { backgroundColor: isDark ? colors.borderLight : trade.bg }]}>
+                  <View style={[styles.tradeGridIcon, { backgroundColor: isDark ? colors.borderLight : trade.bg }]}>
                     {renderIcon(trade)}
                   </View>
-                  <ThemedText style={[styles.tradeRowText, { color: isDark ? colors.text : '#374151' }]}>
+                  <ThemedText
+                    style={[styles.tradeGridLabel, { color: isDark ? colors.text : '#374151' }]}
+                    numberOfLines={2}
+                  >
                     {trade.name}
                   </ThemedText>
-                  <MaterialIcons name="chevron-right" size={20} color={isDark ? colors.icon : '#D1D5DB'} />
                 </Pressable>
               ))}
             </View>
@@ -297,35 +300,39 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     paddingLeft: 4,
   },
-  categoryCard: {
-    borderRadius: 14,
-    overflow: 'hidden',
+
+  /* 3-column trade grid */
+  tradeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  tradeGridItem: {
+    width: (SCREEN_WIDTH - 32 - 20) / 3, // 16px padding each side, 2 gaps of 10
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    gap: 8,
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4 },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3 },
       android: { elevation: 1 },
       default: {},
     }),
   },
-
-  /* Trade row */
-  tradeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    gap: 14,
-  },
-  tradeRowIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+  tradeGridIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tradeRowText: {
-    flex: 1,
-    fontSize: 15,
+  tradeGridLabel: {
+    fontSize: 12,
     fontWeight: '500',
+    textAlign: 'center',
+    lineHeight: 16,
   },
 
   /* Empty state */

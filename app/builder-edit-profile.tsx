@@ -490,7 +490,7 @@ export default function EditProfileScreen() {
               style={({ pressed }) => [pressed && { opacity: 0.8 }]}
             >
               {coverPhoto ? (
-                <Image source={{ uri: coverPhoto }} style={styles.coverImage} />
+                <Image source={{ uri: coverPhoto }} style={[styles.coverImage, { backgroundColor: colors.border }]} />
               ) : (
                 <View style={[styles.coverPlaceholder, { backgroundColor: colors.surface }]}>
                   <Text style={{ fontSize: 28 }}>📷</Text>
@@ -858,7 +858,7 @@ export default function EditProfileScreen() {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageRow}>
                   {project.images.map((uri, imgIdx) => (
                     <View key={imgIdx} style={styles.projectImageThumb}>
-                      <Image source={{ uri }} style={styles.projectImageFill} />
+                      <Image source={{ uri }} style={[styles.projectImageFill, { backgroundColor: colors.border }]} />
                       <Pressable
                         onPress={() => removeProjectImage(project.id, imgIdx)}
                         style={styles.removeImageBtn}
@@ -1143,7 +1143,6 @@ const styles = StyleSheet.create({
   coverImage: {
     width: '100%',
     height: COVER_HEIGHT,
-    backgroundColor: '#e2e8f0',
   },
   coverPlaceholder: {
     width: '100%',
@@ -1402,7 +1401,6 @@ const styles = StyleSheet.create({
   projectImageFill: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#e2e8f0',
   },
   removeImageBtn: {
     position: 'absolute',

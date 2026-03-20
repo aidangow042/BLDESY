@@ -21,6 +21,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Video, ResizeMode } from 'expo-av';
 
+import { Ionicons } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
+
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -593,7 +596,22 @@ export default function BuilderProfileScreen() {
           {coverUri ? (
             <Image source={{ uri: coverUri }} style={styles.coverImage} />
           ) : (
-            <View style={[styles.coverImage, { backgroundColor: '#1e293b' }]} />
+            <LinearGradient
+              colors={colorScheme === 'dark' ? ['#042f2e', '#0f3d3a', '#134E4A'] : ['#0d9488', '#0f766e', '#115e59']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.coverImage}
+            >
+              <View style={styles.coverDotsLayer} pointerEvents="none">
+                {Array.from({ length: 4 }).map((_, row) => (
+                  <View key={row} style={styles.coverDotsRow}>
+                    {Array.from({ length: 10 }).map((_, col) => (
+                      <View key={col} style={styles.coverDot} />
+                    ))}
+                  </View>
+                ))}
+              </View>
+            </LinearGradient>
           )}
           <LinearGradient
             colors={['transparent', 'rgba(0,0,0,0.65)']}
@@ -603,33 +621,36 @@ export default function BuilderProfileScreen() {
           {/* Back button */}
           <Pressable
             onPress={() => (router.back())}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
             style={({ pressed }) => [
               styles.backBtn,
               { top: insets.top + 8 },
               pressed && { opacity: 0.7 },
             ]}
           >
-            <Text style={styles.backBtnText}>‹</Text>
+            <Ionicons name="arrow-back" size={22} color="#ffffff" />
           </Pressable>
 
           {/* Save button (top right) */}
           <Pressable
             onPress={toggleSave}
             disabled={savingToggle}
+            accessibilityRole="button"
+            accessibilityLabel={isSaved ? 'Remove from saved' : 'Save builder'}
             style={({ pressed }) => [
               styles.saveHeaderBtn,
               { top: insets.top + 8 },
               pressed && { opacity: 0.7 },
             ]}
           >
-            <RNAnimated.Text
-              style={[
-                styles.saveHeaderIcon,
-                { transform: [{ scale: saveScale }] },
-              ]}
-            >
-              {isSaved ? '♥' : '♡'}
-            </RNAnimated.Text>
+            <RNAnimated.View style={{ transform: [{ scale: saveScale }] }}>
+              <MaterialIcons
+                name={isSaved ? 'favorite' : 'favorite-border'}
+                size={22}
+                color={isSaved ? '#EF4444' : '#ffffff'}
+              />
+            </RNAnimated.View>
           </Pressable>
 
           {/* Profile photo + info overlay */}
@@ -691,7 +712,7 @@ export default function BuilderProfileScreen() {
         )}
 
         {/* ─── ACTION BUTTONS ─── */}
-        <View style={styles.sectionContainer}>
+        <View style={[styles.sectionContainer, styles.actionSection]}>
           <View style={styles.actionRow}>
             <Pressable
               onPress={handleCall}
@@ -1173,37 +1194,44 @@ const styles = StyleSheet.create({
     bottom: AVATAR_SIZE / 2,
     height: COVER_HEIGHT / 2,
   },
+  coverDotsLayer: {
+    ...StyleSheet.absoluteFillObject,
+    gap: 16,
+    paddingHorizontal: 10,
+    paddingTop: 20,
+    opacity: 0.5,
+  },
+  coverDotsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  coverDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
   backBtn: {
     position: 'absolute',
     left: 16,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(0,0,0,0.3)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
-  },
-  backBtnText: {
-    color: '#fff',
-    fontSize: 26,
-    fontWeight: '600',
-    marginTop: -2,
   },
   saveHeaderBtn: {
     position: 'absolute',
     right: 16,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(0,0,0,0.3)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
-  },
-  saveHeaderIcon: {
-    color: '#fff',
-    fontSize: 20,
   },
 
   // Header info
@@ -1304,6 +1332,9 @@ const styles = StyleSheet.create({
   sectionContainer: {
     paddingHorizontal: Spacing.lg,
     marginTop: Spacing.xl,
+  },
+  actionSection: {
+    marginTop: Spacing.sm,
   },
   actionRow: {
     flexDirection: 'row',

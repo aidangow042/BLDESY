@@ -3,13 +3,16 @@ import {
   ActivityIndicator,
   FlatList,
   Pressable,
+  RefreshControl,
   StyleSheet,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ThemedText } from '@/components/themed-text';
+import { PageHeader } from '@/components/page-header';
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
@@ -34,9 +37,11 @@ export default function MyApplicationsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const statusSemanticColor = (status: string) => {
     switch (status) {
@@ -70,6 +75,12 @@ export default function MyApplicationsScreen() {
       setApplications(data as unknown as Application[]);
     }
     setLoading(false);
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await fetchApplications();
+    setRefreshing(false);
   }
 
   function renderApplication({ item }: { item: Application }) {
@@ -119,18 +130,20 @@ export default function MyApplicationsScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => [pressed && { opacity: 0.7 }]}
-        >
-          <ThemedText style={[styles.backText, { color: colors.tint }]}>Back</ThemedText>
-        </Pressable>
-        <ThemedText type="subtitle">My Applications</ThemedText>
-        <View style={{ width: 40 }} />
-      </View>
+    <View style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
+      <PageHeader
+        title="My Applications"
+        subtitle="Track your job applications"
+        variant="professional"
+      />
+      <Pressable
+        onPress={() => router.back()}
+        style={[styles.backButton, { top: insets.top + 12 }]}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+      >
+        <Ionicons name="arrow-back" size={22} color="#ffffff" />
+      </Pressable>
 
       {loading ? (
         <ActivityIndicator color={colors.tint} style={{ marginTop: Spacing['5xl'] }} />
@@ -153,9 +166,12 @@ export default function MyApplicationsScreen() {
           renderItem={renderApplication}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.tint} />
+          }
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -163,16 +179,16 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.15)',
     alignItems: 'center',
-    paddingHorizontal: Spacing['2xl'],
-    paddingVertical: Spacing.md,
-  },
-  backText: {
-    fontSize: 16,
-    fontWeight: '600',
+    justifyContent: 'center',
   },
   listContent: {
     padding: Spacing['2xl'],

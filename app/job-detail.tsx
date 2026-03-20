@@ -2,16 +2,20 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ThemedText } from '@/components/themed-text';
+import { PageHeader } from '@/components/page-header';
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
@@ -39,6 +43,7 @@ export default function JobDetailScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [job, setJob] = useState<Job | null>(null);
@@ -130,15 +135,33 @@ export default function JobDetailScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
+      <View style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
+        <PageHeader title="Job Detail" subtitle="Loading..." variant="professional" />
+        <Pressable
+          onPress={() => router.back()}
+          style={[styles.backButton, { top: insets.top + 12 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Ionicons name="arrow-back" size={22} color="#ffffff" />
+        </Pressable>
         <ActivityIndicator color={colors.tint} style={{ marginTop: 60 }} />
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (!job) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
+      <View style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
+        <PageHeader title="Job Detail" subtitle="Not found" variant="professional" />
+        <Pressable
+          onPress={() => router.back()}
+          style={[styles.backButton, { top: insets.top + 12 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Ionicons name="arrow-back" size={22} color="#ffffff" />
+        </Pressable>
         <View style={styles.centeredContainer}>
           <ThemedText type="subtitle">Job not found</ThemedText>
           <Pressable
@@ -148,26 +171,29 @@ export default function JobDetailScreen() {
             <ThemedText style={[styles.linkText, { color: colors.tint }]}>Go back</ThemedText>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   const uc = urgencySemanticColor(job.urgency);
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
+    <View style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
+      <PageHeader
+        title={job.title}
+        subtitle={`${job.trade_type} • ${job.suburb}`}
+        variant="professional"
+      />
+      <Pressable
+        onPress={() => router.back()}
+        style={[styles.backButton, { top: insets.top + 12 }]}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+      >
+        <Ionicons name="arrow-back" size={22} color="#ffffff" />
+      </Pressable>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.contentContainer}>
-        {/* Header */}
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => [pressed && { opacity: 0.7 }]}
-        >
-          <ThemedText style={[styles.backText, { color: colors.tint }]}>Back</ThemedText>
-        </Pressable>
-
-        {/* Title */}
-        <ThemedText type="title" style={styles.titleText}>{job.title}</ThemedText>
-
         {/* Badges row */}
         <View style={styles.badgeRow}>
           <View style={[styles.tradeBadge, { backgroundColor: colors.tintLight }]}>
@@ -290,13 +316,25 @@ export default function JobDetailScreen() {
           </Pressable>
         )}
       </ScrollView>
-    </SafeAreaView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+  },
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   centeredContainer: {
     flex: 1,
@@ -314,13 +352,6 @@ const styles = StyleSheet.create({
     padding: Spacing['2xl'],
     gap: Spacing.lg,
     paddingBottom: Spacing['5xl'],
-  },
-  backText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  titleText: {
-    marginTop: Spacing.sm,
   },
   badgeRow: {
     flexDirection: 'row',

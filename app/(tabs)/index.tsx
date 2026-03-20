@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -29,6 +29,14 @@ const POPULAR_TRADES = [
 ];
 
 const URGENCY_OPTIONS = ['Any', 'ASAP', 'This Week', 'Flexible'];
+
+const COMMON_JOBS = [
+  { label: 'Bathroom renovation', icon: 'water-outline' as const, trade: 'tiler', urgency: undefined },
+  { label: 'Emergency plumber', icon: 'alert-circle-outline' as const, trade: 'plumber', urgency: 'asap' },
+  { label: 'Deck building', icon: 'hammer-outline' as const, trade: 'carpenter', urgency: undefined },
+  { label: 'Kitchen remodel', icon: 'restaurant-outline' as const, trade: 'builder', urgency: undefined },
+  { label: 'Roof repair', icon: 'home-outline' as const, trade: 'roofer', urgency: undefined },
+];
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -60,12 +68,12 @@ const TRADE_CONFIG: Record<string, { icon: string; iconSet: 'material' | 'ionico
   Painter:     { icon: 'format-paint',       iconSet: 'material',  bg: '#FFF1F2', fg: '#E11D48' },
   Landscaper:  { icon: 'leaf',               iconSet: 'ionicon',   bg: '#F0FDF4', fg: '#16A34A' },
   Roofer:      { icon: 'home-outline',       iconSet: 'ionicon',   bg: '#FFFBEB', fg: '#D97706' },
-  Tiler:       { icon: 'grid-outline',        iconSet: 'ionicon',   bg: '#F5F5F4', fg: '#57534E' },
+  Tiler:       { icon: 'grid-outline',        iconSet: 'ionicon',   bg: '#F3E8FF', fg: '#7C3AED' },
 };
 
 /* ───────────────────────── Hero image ───────────────────────── */
 
-const HERO_HEIGHT = 220;
+const HERO_HEIGHT = 280;
 
 let heroImage: any = null;
 try {
@@ -86,6 +94,21 @@ export default function HomeScreen() {
   /* ── Scroll tracking for overscroll zoom ── */
   const scrollY = useRef(new Animated.Value(0)).current;
 
+  /* ── FAB menu state ── */
+  const [fabOpen, setFabOpen] = useState(false);
+  const fabAnim = useRef(new Animated.Value(0)).current;
+
+  function toggleFab() {
+    const toValue = fabOpen ? 0 : 1;
+    Animated.spring(fabAnim, { toValue, useNativeDriver: true, friction: 6 }).start();
+    setFabOpen(!fabOpen);
+  }
+
+  function closeFab() {
+    Animated.spring(fabAnim, { toValue: 0, useNativeDriver: true, friction: 6 }).start();
+    setFabOpen(false);
+  }
+
   /* ── Search overlay state ── */
   const [overlayVisible, setOverlayVisible] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
@@ -100,12 +123,14 @@ export default function HomeScreen() {
   const keywordInputRef = useRef<TextInput>(null);
 
   /* ── Listen for trade selected from all-trades page ── */
+  const { selectedTrade: tradeParam } = useLocalSearchParams<{ selectedTrade?: string }>();
+
   useFocusEffect(
     useCallback(() => {
-      // Check global param (set by all-trades page)
-      if ((global as any).__selectedTrade) {
-        setSelectedTrade((global as any).__selectedTrade);
-        delete (global as any).__selectedTrade;
+      if (tradeParam) {
+        setSelectedTrade(tradeParam);
+        // Clear the param so it doesn't re-trigger
+        router.setParams({ selectedTrade: '' });
         // Ensure overlay is open
         if (!overlayVisible) {
           setOverlayVisible(true);
@@ -115,7 +140,7 @@ export default function HomeScreen() {
           ]).start();
         }
       }
-    }, [overlayVisible]),
+    }, [tradeParam, overlayVisible]),
   );
 
   /* ── Overlay open / close ── */
@@ -207,9 +232,15 @@ export default function HomeScreen() {
     router.push({ pathname: '/results', params: { trade_category: trade.toLowerCase() } });
   }
 
+  function handleTrendingPress(item: typeof COMMON_JOBS[0]) {
+    const params: Record<string, string> = { trade_category: item.trade };
+    if (item.urgency) params.urgency = item.urgency;
+    router.push({ pathname: '/results', params });
+  }
+
   /* ── Trade icon renderer ── */
 
-  function renderTradeIcon(trade: string, size = 24) {
+  function renderTradeIcon(trade: string, size = 22) {
     const cfg = TRADE_CONFIG[trade];
     if (!cfg) return null;
     if (cfg.iconSet === 'ionicon') {
@@ -261,19 +292,39 @@ export default function HomeScreen() {
             />
           </Animated.View>
         )}
+        {/* Dark gradient overlay for text contrast */}
+        <LinearGradient
+          colors={['rgba(0,0,0,0.45)', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.3)']}
+          locations={[0, 0.5, 1]}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
       </View>
 
-      {/* ─── Brand text — fixed on hero image, scrolls away with hero ─── */}
+      {/* ─── Brand text + embedded search prompt — scrolls away with hero ─── */}
       {!overlayVisible && (
         <Animated.View
           style={[
             styles.heroBrandBlock,
-            { transform: [{ translateY: Animated.multiply(scrollY, -1) }] },
+            {
+              paddingTop: insets.top,
+              transform: [{ translateY: Animated.multiply(scrollY, -1) }],
+            },
           ]}
-          pointerEvents="none"
+          pointerEvents="box-none"
         >
           <ThemedText style={styles.heroBrandName}>BLDESY!</ThemedText>
-          <ThemedText style={styles.heroBrandTagline}>Your local trade connector</ThemedText>
+          <ThemedText style={styles.heroBrandTagline}>Find your tradie</ThemedText>
+          {/* ── Embedded search prompt pill ── */}
+          <Pressable
+            style={({ pressed }) => [styles.heroSearchPill, pressed && { opacity: 0.85 }]}
+            onPress={openOverlay}
+            accessibilityRole="search"
+            accessibilityLabel="What do you need done?"
+          >
+            <MaterialIcons name="search" size={17} color="rgba(255,255,255,0.9)" />
+            <ThemedText style={styles.heroSearchPillText}>What do you need done?</ThemedText>
+          </Pressable>
         </Animated.View>
       )}
 
@@ -296,161 +347,219 @@ export default function HomeScreen() {
 
         {/* ─── CONTENT AREA — solid background so image doesn't bleed through ─── */}
         <View style={[styles.contentArea, { backgroundColor: colors.canvas }]}>
-          {/* ─── 2. QUICK ACTION PILLS ─── */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.pillRow}
-            style={styles.pillScroll}
-          >
-            <Pressable
-              style={({ pressed }) => [styles.actionPill, styles.pillAI, pressed && { opacity: 0.7 }]}
-              onPress={() => router.push('/(tabs)/ai')}
-            >
-              <MaterialIcons name="auto-awesome" size={14} color="#5B4CDB" />
-              <ThemedText style={[styles.pillText, { color: '#5B4CDB' }]}>Not sure? Ask AI</ThemedText>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [styles.actionPill, styles.pillJob, pressed && { opacity: 0.7 }]}
-              onPress={handlePostJob}
-            >
-              <MaterialIcons name="add" size={14} color="#3B82F6" />
-              <ThemedText style={[styles.pillText, { color: '#3B82F6' }]}>Post a job</ThemedText>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [styles.actionPill, styles.pillEmergency, pressed && { opacity: 0.7 }]}
-              onPress={() => router.push({ pathname: '/results', params: { urgency: 'asap' } })}
-            >
-              <MaterialIcons name="schedule" size={14} color="#059669" />
-              <ThemedText style={[styles.pillText, { color: '#059669' }]}>Emergency</ThemedText>
-            </Pressable>
-          </ScrollView>
 
-          {/* ─── 3. POPULAR TRADES (4x2 grid) ─── */}
+          {/* ─── 2. POPULAR TRADES — 2-column horizontal card grid ─── */}
           <View style={styles.section}>
-            <View style={[styles.tradesCard, { backgroundColor: isDark ? colors.surface : '#FFFFFF', borderColor: colors.border }]}>
-              <View style={styles.sectionHeaderRow}>
-                <ThemedText style={[styles.sectionTitle, { color: isDark ? colors.text : '#1A1A2E' }]}>
-                  Popular trades
-                </ThemedText>
-                <Pressable onPress={openOverlay} style={({ pressed }) => [pressed && { opacity: 0.7 }]}>
-                  <ThemedText style={styles.seeAllText}>See all</ThemedText>
-                </Pressable>
-              </View>
-              <View style={styles.tradeGrid}>
-                {POPULAR_TRADES.map((trade) => {
-                  const cfg = TRADE_CONFIG[trade];
-                  return (
-                    <Pressable
-                      key={trade}
-                      style={({ pressed }) => [
-                        styles.tradeGridItem,
-                        pressed && { transform: [{ scale: 0.95 }], opacity: 0.8 },
-                      ]}
-                      onPress={() => handleCategoryPress(trade)}
+            <View style={styles.sectionHeaderRow}>
+              <ThemedText style={[styles.sectionTitle, { color: isDark ? colors.text : '#1A1A2E' }]}>
+                Popular trades
+              </ThemedText>
+              <Pressable
+                onPress={() => router.push('/all-trades' as any)}
+                style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+                accessibilityRole="button"
+                accessibilityLabel="See all trades"
+              >
+                <ThemedText style={styles.seeAllText}>See all</ThemedText>
+              </Pressable>
+            </View>
+            <View style={styles.tradeListGrid}>
+              {POPULAR_TRADES.map((trade) => {
+                const cfg = TRADE_CONFIG[trade];
+                return (
+                  <Pressable
+                    key={trade}
+                    style={({ pressed }) => [
+                      styles.tradeListCard,
+                      { backgroundColor: isDark ? colors.surface : (cfg?.bg ?? '#F5F5F4') },
+                      pressed && { transform: [{ scale: 0.97 }], opacity: 0.85 },
+                    ]}
+                    onPress={() => handleCategoryPress(trade)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Search ${trade} tradies`}
+                  >
+                    <View style={[styles.tradeListIconBox, { backgroundColor: isDark ? colors.borderLight : 'rgba(255,255,255,0.7)' }]}>
+                      {renderTradeIcon(trade)}
+                    </View>
+                    <ThemedText
+                      style={[styles.tradeListLabel, { color: isDark ? colors.text : (cfg?.fg ?? '#444444') }]}
+                      numberOfLines={1}
                     >
-                      <View style={[styles.tradeIconBox, { backgroundColor: isDark ? colors.surface : cfg.bg }]}>
-                        {renderTradeIcon(trade)}
-                      </View>
-                      <ThemedText style={[styles.tradeGridLabel, { color: isDark ? colors.text : '#444444' }]} numberOfLines={1}>
-                        {trade}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
+                      {trade}
+                    </ThemedText>
+                    <MaterialIcons name="chevron-right" size={16} color={isDark ? colors.icon : 'rgba(0,0,0,0.25)'} style={styles.tradeListChevron} />
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
 
-          {/* ─── 4. HOW IT WORKS ─── */}
+          {/* ─── 3. COMMON JOBS ─── */}
           <View style={styles.section}>
-            <ThemedText style={[styles.sectionTitle, { color: isDark ? colors.text : '#1A1A2E', marginBottom: 14 }]}>
-              How it works
+            <ThemedText style={[styles.sectionTitle, { color: isDark ? colors.text : '#1A1A2E', marginBottom: 4 }]}>
+              Common jobs
             </ThemedText>
-            <View style={styles.stepsRow}>
-              {([
-                { icon: 'search', title: 'Search', desc: 'Tell us what you need' },
-                { icon: 'people', title: 'Match', desc: 'We find the right tradies' },
-                { icon: 'phone-in-talk', title: 'Connect', desc: 'Contact them directly' },
-              ] as const).map((step) => (
-                <View key={step.title} style={[styles.stepCard, { backgroundColor: isDark ? colors.surface : '#F8F9FC' }]}>
-                  <View style={[styles.stepIconBox, { backgroundColor: isDark ? colors.tintLight : '#EEF2FF' }]}>
-                    <MaterialIcons name={step.icon} size={18} color={isDark ? colors.tint : '#4338CA'} />
-                  </View>
-                  <ThemedText style={[styles.stepTitle, { color: isDark ? colors.text : '#1A1A2E' }]}>
-                    {step.title}
+            <View style={[styles.trendingList, { borderColor: isDark ? colors.border : '#EBEBEB' }]}>
+              {COMMON_JOBS.map((item, idx) => (
+                <Pressable
+                  key={item.label}
+                  style={({ pressed }) => [
+                    styles.trendingRow,
+                    {
+                      borderBottomWidth: idx < COMMON_JOBS.length - 1 ? StyleSheet.hairlineWidth : 0,
+                      borderBottomColor: isDark ? colors.border : '#E5E7EB',
+                    },
+                    pressed && { backgroundColor: isDark ? colors.surface : '#F9F9F7' },
+                  ]}
+                  onPress={() => handleTrendingPress(item)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Search for ${item.label}`}
+                >
+                  <Ionicons name={item.icon} size={16} color={colors.tint} style={styles.trendingIcon} />
+                  <ThemedText style={[styles.trendingLabel, { color: isDark ? colors.text : '#1A1A2E' }]}>
+                    {item.label}
                   </ThemedText>
-                  <ThemedText style={styles.stepDesc}>{step.desc}</ThemedText>
-                </View>
+                  <MaterialIcons name="arrow-forward" size={15} color={isDark ? colors.icon : '#9CA3AF'} />
+                </Pressable>
               ))}
             </View>
           </View>
 
-          {/* ─── 5. POST A JOB CTA ─── */}
-          <View style={styles.ctaSection}>
-            <Pressable onPress={handlePostJob} style={({ pressed }) => [pressed && { opacity: 0.92 }]}>
-              <LinearGradient
-                colors={['#0D7C66', '#14A38B']}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={styles.ctaCard}
+          {/* ─── 4. AI NUDGE ─── */}
+          <View style={styles.section}>
+            <View style={[styles.aiCard, { backgroundColor: isDark ? colors.surface : '#FFFFFF', borderColor: isDark ? colors.border : '#EBEBEB' }]}>
+              <ThemedText style={[styles.aiCardTitle, { color: isDark ? colors.text : '#1A1A2E' }]}>
+                Not sure what you need?
+              </ThemedText>
+              <ThemedText style={[styles.aiCardSubtitle, { color: colors.textSecondary }]}>
+                Our AI can help you figure it out
+              </ThemedText>
+              <Pressable
+                onPress={() => router.push('/(tabs)/ai')}
+                style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Chat with AI"
               >
-                <View style={styles.ctaGeoAccent} />
-                <View style={styles.ctaRow}>
-                  <View style={styles.ctaTextBlock}>
-                    <ThemedText style={styles.ctaTitle}>Got a job?</ThemedText>
-                    <ThemedText style={styles.ctaSubtitle}>Post it and let tradies come to you</ThemedText>
-                  </View>
-                  <View style={styles.ctaButton}>
-                    <ThemedText style={styles.ctaButtonText}>Post a job</ThemedText>
-                  </View>
-                </View>
-              </LinearGradient>
-            </Pressable>
+                <ThemedText style={[styles.aiCardLink, { color: colors.teal }]}>
+                  Chat with AI →
+                </ThemedText>
+              </Pressable>
+            </View>
           </View>
 
           <View style={styles.bottomPad} />
         </View>
       </Animated.ScrollView>
 
-      {/* ─── STICKY SEARCH BAR — hidden when overlay is open ─── */}
+      {/* ─── STICKY SEARCH BAR — fades in only after scrolling past hero ─── */}
       {!overlayVisible && (
         <Animated.View
           style={[
             styles.stickySearchWrapper,
             {
               paddingTop: insets.top + 8,
-              backgroundColor: scrollY.interpolate({
-                inputRange: [0, 80],
-                outputRange: ['transparent', isDark ? colors.background : '#FFFFFF'],
+              opacity: scrollY.interpolate({
+                inputRange: [HERO_HEIGHT - 120, HERO_HEIGHT - 60],
+                outputRange: [0, 1],
                 extrapolate: 'clamp',
               }),
             },
           ]}
-          pointerEvents="box-none"
         >
-          <Animated.View
-            style={{
-              opacity: scrollY.interpolate({
-                inputRange: [0, 80],
-                outputRange: [0, 1],
-                extrapolate: 'clamp',
-              }),
-            }}
-          >
-            <View style={[styles.stickySearchShadow, { backgroundColor: colors.canvas }]} />
-          </Animated.View>
           <Pressable
-            style={({ pressed }) => [styles.searchBar, pressed && { opacity: 0.9 }, { marginHorizontal: 16, marginBottom: 10 }]}
+            style={({ pressed }) => [styles.searchBar, { backgroundColor: isDark ? colors.surface : '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4 }, pressed && { opacity: 0.9 }, { marginHorizontal: 16, marginBottom: 6 }]}
             onPress={openOverlay}
+            accessibilityRole="search"
+            accessibilityLabel="Search for tradies"
           >
             <View style={styles.searchBrandIcon}>
               <Ionicons name="home" size={16} color="#ffffff" />
             </View>
-            <ThemedText style={styles.searchPlaceholder}>What do you need done?</ThemedText>
+            <ThemedText style={[styles.searchPlaceholder, { color: colors.textSecondary }]}>What do you need done?</ThemedText>
             <MaterialIcons name="search" size={20} color="#9CA3AF" />
           </Pressable>
         </Animated.View>
+      )}
+
+      {/* ─── FAB MENU ─── */}
+      {!overlayVisible && (
+        <>
+          {/* Backdrop to close FAB menu */}
+          {fabOpen && (
+            <Pressable
+              style={[StyleSheet.absoluteFill, { zIndex: 28 }]}
+              onPress={closeFab}
+            />
+          )}
+
+          {/* FAB action: Post a Job */}
+          <Animated.View
+            style={[
+              styles.fabAction,
+              {
+                bottom: insets.bottom - 10,
+                opacity: fabAnim,
+                transform: [
+                  { translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -68] }) },
+                  { scale: fabAnim },
+                ],
+              },
+            ]}
+            pointerEvents={fabOpen ? 'auto' : 'none'}
+          >
+            <Pressable
+              style={({ pressed }) => [styles.fabActionBtn, { backgroundColor: colors.teal }, pressed && { opacity: 0.85 }]}
+              onPress={() => { closeFab(); handlePostJob(); }}
+              accessibilityRole="button"
+              accessibilityLabel="Post a job"
+            >
+              <MaterialIcons name="work-outline" size={18} color="#FFFFFF" />
+              <ThemedText style={styles.fabActionLabel}>Post a Job</ThemedText>
+            </Pressable>
+          </Animated.View>
+
+          {/* FAB action: AI Chat */}
+          <Animated.View
+            style={[
+              styles.fabAction,
+              {
+                bottom: insets.bottom - 10,
+                opacity: fabAnim,
+                transform: [
+                  { translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -124] }) },
+                  { scale: fabAnim },
+                ],
+              },
+            ]}
+            pointerEvents={fabOpen ? 'auto' : 'none'}
+          >
+            <Pressable
+              style={({ pressed }) => [styles.fabActionBtn, { backgroundColor: '#6366F1' }, pressed && { opacity: 0.85 }]}
+              onPress={() => { closeFab(); router.push('/(tabs)/ai'); }}
+              accessibilityRole="button"
+              accessibilityLabel="Chat with AI"
+            >
+              <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+              <ThemedText style={styles.fabActionLabel}>AI Chat</ThemedText>
+            </Pressable>
+          </Animated.View>
+
+          {/* Main FAB toggle */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.fab,
+              { backgroundColor: colors.teal, bottom: insets.bottom - 10 },
+              pressed && { opacity: 0.9 },
+            ]}
+            onPress={toggleFab}
+            accessibilityRole="button"
+            accessibilityLabel={fabOpen ? 'Close menu' : 'Open menu'}
+          >
+            <Animated.View style={{ transform: [{ rotate: fabAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '45deg'] }) }] }}>
+              <MaterialIcons name="add" size={26} color="#FFFFFF" />
+            </Animated.View>
+          </Pressable>
+        </>
       )}
 
       {/* ─────────── Search Overlay ─────────── */}
@@ -477,6 +586,8 @@ export default function HomeScreen() {
                 <Pressable
                   style={({ pressed }) => [styles.backButtonHero, pressed && { opacity: 0.7 }]}
                   onPress={closeOverlay}
+                  accessibilityRole="button"
+                  accessibilityLabel="Go back"
                 >
                   <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
                 </Pressable>
@@ -493,6 +604,7 @@ export default function HomeScreen() {
                 style={styles.overlayScroll}
                 contentContainerStyle={[styles.overlayContent, { paddingBottom: insets.bottom + 100 }]}
                 keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
                 showsVerticalScrollIndicator={false}
               >
                 {/* ── 1. LOCATION (top priority) ── */}
@@ -514,7 +626,7 @@ export default function HomeScreen() {
                       onSubmitEditing={() => setLocationSuggestions([])}
                     />
                     {locationText.length > 0 && (
-                      <Pressable onPress={() => { setLocationText(''); setLocationSuggestions([]); }}>
+                      <Pressable onPress={() => { setLocationText(''); setLocationSuggestions([]); }} accessibilityLabel="Clear location" accessibilityRole="button">
                         <MaterialIcons name="close" size={18} color={isDark ? colors.icon : '#9CA3AF'} />
                       </Pressable>
                     )}
@@ -571,6 +683,9 @@ export default function HomeScreen() {
                             pressed && { transform: [{ scale: 0.96 }] },
                           ]}
                           onPress={() => selectTrade(trade)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${trade}`}
+                          accessibilityState={{ selected: isSelected }}
                         >
                           {isSelected && (
                             <View style={styles.tradeCheckmark}>
@@ -595,6 +710,8 @@ export default function HomeScreen() {
                         pressed && { transform: [{ scale: 0.96 }] },
                       ]}
                       onPress={() => router.push('/all-trades' as any)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Browse all trades"
                     >
                       <View style={[styles.overlayTradeIconBox, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
                         <MaterialIcons name="add" size={24} color="#FFFFFF" />
@@ -615,7 +732,7 @@ export default function HomeScreen() {
                       {keywords.map((kw) => (
                         <View key={kw} style={[styles.keywordChip, { backgroundColor: isDark ? '#134E4A' : '#E8F5F3' }]}>
                           <ThemedText style={[styles.keywordChipText, { color: isDark ? '#5EEAD4' : '#0D7C66' }]}>{kw}</ThemedText>
-                          <Pressable onPress={() => removeKeyword(kw)} hitSlop={6}>
+                          <Pressable onPress={() => removeKeyword(kw)} hitSlop={6} accessibilityLabel={`Remove keyword ${kw}`} accessibilityRole="button">
                             <MaterialIcons name="close" size={14} color={isDark ? '#5EEAD4' : '#0D7C66'} />
                           </Pressable>
                         </View>
@@ -659,6 +776,9 @@ export default function HomeScreen() {
                             pressed && { opacity: 0.7 },
                           ]}
                           onPress={() => setSelectedUrgency(option)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${option} urgency`}
+                          accessibilityState={{ selected: sel }}
                         >
                           <ThemedText style={[styles.urgencyChipText, { color: sel ? '#fff' : (isDark ? colors.text : '#374151') }]}>{option}</ThemedText>
                         </Pressable>
@@ -682,6 +802,8 @@ export default function HomeScreen() {
                 <Pressable
                   style={({ pressed }) => [styles.searchBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] }]}
                   onPress={handleSearch}
+                  accessibilityRole="button"
+                  accessibilityLabel="Search tradies"
                 >
                   <LinearGradient
                     colors={['#0D7C66', '#0A6B58']}
@@ -731,29 +853,54 @@ const styles = StyleSheet.create({
   },
   heroBrandBlock: {
     position: 'absolute',
-    top: 140,
+    top: 0,
     left: 0,
     right: 0,
+    height: HERO_HEIGHT,
     alignItems: 'center',
+    justifyContent: 'center',
     zIndex: 5,
+    paddingHorizontal: 24,
   },
   heroBrandName: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 36,
+    lineHeight: 44,
+    fontFamily: 'RussoOne_400Regular',
     color: '#FFFFFF',
     letterSpacing: 2,
-    textShadowColor: 'rgba(0,0,0,0.25)',
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  heroBrandTagline: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 4,
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(0,0,0,0.15)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
-  heroBrandTagline: {
-    fontSize: 10,
+  heroSearchPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 16,
+    backgroundColor: 'rgba(255,255,255,0.32)',
+    borderRadius: 28,
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    width: '100%',
+    maxWidth: 300,
+  },
+  heroSearchPillText: {
+    fontSize: 14,
     fontWeight: '400',
-    color: 'rgba(255,255,255,0.65)',
-    marginTop: 2,
-    textShadowColor: 'rgba(0,0,0,0.15)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    color: 'rgba(255,255,255,0.9)',
+    flex: 1,
   },
   contentArea: {
     marginTop: -1,
@@ -772,7 +919,6 @@ const styles = StyleSheet.create({
     left: -10,
     right: -10,
     height: 40,
-    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
   },
@@ -781,7 +927,6 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
     borderRadius: 28,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -804,7 +949,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '400',
-    color: '#6B7280',
   },
 
   /* ─── Sticky Search Bar ─── */
@@ -814,31 +958,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 20,
+    paddingBottom: 8,
   },
-  stickySearchShadow: {
-    ...StyleSheet.absoluteFillObject,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-
-  /* ─── Quick Action Pills ─── */
-  pillScroll: { marginTop: 0 },
-  pillRow: { paddingHorizontal: 16, gap: 8, paddingTop: 2 },
-  actionPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    gap: 5,
-  },
-  pillAI: { backgroundColor: '#F0EFFF' },
-  pillJob: { backgroundColor: '#F0F9FF' },
-  pillEmergency: { backgroundColor: '#ECFDF5' },
-  pillText: { fontSize: 12, fontWeight: '500' },
 
   /* ─── Sections ─── */
   section: { paddingHorizontal: 16, marginTop: 20 },
@@ -846,105 +967,139 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   sectionTitle: { fontSize: 16, fontWeight: '600' },
   seeAllText: { fontSize: 13, fontWeight: '500', color: '#0D7C66' },
 
-  /* ─── Trade Grid (4x2) ─── */
-  tradesCard: {
-    borderRadius: 16,
+  /* ─── Trade Grid — 2-column horizontal cards ─── */
+  tradeListGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tradeListCard: {
+    width: (SCREEN_WIDTH - 32 - 8) / 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 10,
+    height: 56,
+  },
+  tradeListIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  tradeListLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  tradeListChevron: {
+    flexShrink: 0,
+  },
+
+  /* ─── Trending Now ─── */
+  trendingList: {
+    marginTop: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  trendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 10,
+    minHeight: 48,
+  },
+  trendingIcon: {
+    flexShrink: 0,
+  },
+  trendingLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
+  /* ─── AI Nudge Card ─── */
+  aiCard: {
+    borderRadius: 14,
     borderWidth: 1,
-    padding: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    gap: 4,
     ...Platform.select({
-      ios: { shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
-      android: { elevation: 2 },
+      ios: { shadowColor: '#0f172a', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6 },
+      android: { elevation: 1 },
       default: {},
     }),
   },
-  tradeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
+  aiCardTitle: {
+    fontSize: 15,
+    fontWeight: '600',
   },
-  tradeGridItem: {
-    width: (SCREEN_WIDTH - 66 - 36) / 4,
-    alignItems: 'center',
-    gap: 6,
-  },
-  tradeIconBox: {
-    width: 54,
-    height: 54,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tradeGridLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-
-  /* ─── How It Works ─── */
-  stepsRow: { flexDirection: 'row', gap: 10 },
-  stepCard: {
-    flex: 1,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingTop: 14,
-    paddingBottom: 12,
-    alignItems: 'center',
-  },
-  stepIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  stepTitle: { fontSize: 13, fontWeight: '600' },
-  stepDesc: {
-    fontSize: 11,
+  aiCardSubtitle: {
+    fontSize: 13,
     fontWeight: '400',
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 15,
-    marginTop: 2,
+    lineHeight: 18,
+  },
+  aiCardLink: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 8,
   },
 
-  /* ─── CTA Card ─── */
-  ctaSection: { paddingHorizontal: 16, marginTop: 20, marginBottom: 20 },
-  ctaCard: { borderRadius: 16, padding: 20, overflow: 'hidden' },
-  ctaGeoAccent: {
+  /* ─── Post Job FAB ─── */
+  fab: {
     position: 'absolute',
-    top: -15,
-    right: -8,
-    width: 70,
-    height: 70,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 14,
-    transform: [{ rotate: '20deg' }],
+    right: 16,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 30,
+    ...Platform.select({
+      ios: { shadowColor: '#0f172a', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 },
+      android: { elevation: 8 },
+      default: {},
+    }),
   },
-  ctaRow: {
+  fabAction: {
+    position: 'absolute',
+    right: 16,
+    zIndex: 29,
+    alignItems: 'flex-end',
+  },
+  fabActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  ctaTextBlock: { flex: 1, marginRight: 12 },
-  ctaTitle: { fontSize: 15, fontWeight: '600', color: '#ffffff' },
-  ctaSubtitle: { fontSize: 12, fontWeight: '400', color: 'rgba(255,255,255,0.7)', marginTop: 4 },
-  ctaButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 10,
-    paddingHorizontal: 16,
     paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 24,
+    gap: 8,
+    ...Platform.select({
+      ios: { shadowColor: '#0f172a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.18, shadowRadius: 8 },
+      android: { elevation: 6 },
+      default: {},
+    }),
   },
-  ctaButtonText: { fontSize: 13, fontWeight: '600', color: '#ffffff' },
+  fabActionLabel: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
 
   /* Bottom pad */
-  bottomPad: { height: 20 },
+  bottomPad: { height: 32 },
 
   /* ─── Overlay ─── */
   overlayPanel: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },

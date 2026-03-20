@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing, Shadows } from '@/constants/theme';
@@ -10,27 +10,24 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
   const theme = colorScheme === 'dark' ? 'dark' : 'light';
   const colors = Colors[theme];
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: colors.tint,
-        tabBarInactiveTintColor: colors.icon,
+        tabBarActiveTintColor: colors.teal,
+        tabBarInactiveTintColor: '#3A3A4A',
+        tabBarShowLabel: false,
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarStyle: {
-          backgroundColor: colors.background,
+          backgroundColor: colors.canvas,
           borderTopWidth: 1,
           borderTopColor: colors.border,
-          height: 88,
+          height: 48 + insets.bottom,
           paddingTop: Spacing.sm,
-          paddingBottom: Spacing['3xl'],
+          paddingBottom: insets.bottom,
           ...Shadows.sm,
-        },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
-          marginTop: Spacing.xs,
         },
         tabBarIconStyle: {
           marginTop: Spacing.xs,
@@ -42,7 +39,7 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color }: { color: string }) => (
-            <IconSymbol size={26} name="house.fill" color={color} />
+            <IconSymbol size={26} name="house" color={color} />
           ),
         }}
       />
@@ -62,7 +59,7 @@ export default function TabLayout() {
         options={{
           title: 'Saved',
           tabBarIcon: ({ color }: { color: string }) => (
-            <IconSymbol size={26} name="bookmark.fill" color={color} />
+            <IconSymbol size={26} name="bookmark" color={color} />
           ),
         }}
       />
@@ -72,7 +69,7 @@ export default function TabLayout() {
         options={{
           title: 'Portal',
           tabBarIcon: ({ color }: { color: string }) => (
-            <IconSymbol size={26} name="person.crop.circle.fill" color={color} />
+            <IconSymbol size={26} name="person.crop.circle" color={color} />
           ),
         }}
       />
