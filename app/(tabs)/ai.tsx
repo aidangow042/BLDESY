@@ -5,13 +5,12 @@ import {
   FlatList,
   InputAccessoryView,
   Keyboard,
-  LayoutAnimation,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
-  UIManager,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,21 +19,111 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { useRouter } from 'expo-router';
+import * as Location from 'expo-location';
 import { ThemedText } from '@/components/themed-text';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-
-// Enable LayoutAnimation on Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+import { getSearchHistory, addSearchEntry, type SearchEntry } from '@/lib/search-history';
+import auLocations from '@/lib/au-locations.json';
 
 /* ───────────────────────── Constants ───────────────────────── */
 
 const BRAND = '#0D7C66';
 const BRAND_DARK = '#0A6B58';
 const BRAND_LIGHT = '#E8F5F3';
-const TAB_BAR_HEIGHT = 88;
+
+/* ───────────────────────── Reverse geocode suburb from coords ───────────────────────── */
+
+const localities: Record<string, [number, number]> = (auLocations as any).l;
+
+function reverseGeocodeSuburb(lat: number, lon: number): string | null {
+  let closest: string | null = null;
+  let bestDist = Infinity;
+  for (const [name, coords] of Object.entries(localities)) {
+    const dLat = coords[0] - lat;
+    const dLon = coords[1] - lon;
+    const dist = dLat * dLat + dLon * dLon;
+    if (dist < bestDist) {
+      bestDist = dist;
+      closest = name;
+    }
+  }
+  // Capitalise suburb name
+  if (closest) return closest.replace(/\b\w/g, (c) => c.toUpperCase());
+  return null;
+}
+
+/* ───────────────────────── Build dynamic suggestions ───────────────────────── */
+
+const FALLBACK_PROMPTS = [
+  'Find a plumber nearby',
+  'How much does a bathroom reno cost?',
+  'I need an electrician ASAP',
+  'What questions should I ask a builder?',
+];
+
+function buildWelcomePrompts(suburb: string | null, history: SearchEntry[]): string[] {
+  const prompts: string[] = [];
+
+  // From search history — reword recent trades
+  for (const entry of history.slice(0, 2)) {
+    const loc = entry.location ?? suburb;
+    if (loc) {
+      prompts.push(`Find a ${entry.trade} in ${loc}`);
+    } else {
+      prompts.push(`Find a ${entry.trade} nearby`);
+    }
+  }
+
+  // Location-based if we have a suburb and need more
+  if (suburb && prompts.length < 4) {
+    const already = prompts.map((p) => p.toLowerCase());
+    const locationBased = [
+      `Find a plumber in ${suburb}`,
+      `Best electrician in ${suburb}`,
+      `Need a carpenter in ${suburb}`,
+    ];
+    for (const p of locationBased) {
+      if (prompts.length >= 4) break;
+      if (!already.includes(p.toLowerCase())) prompts.push(p);
+    }
+  }
+
+  // Fill remaining with generic (non-trade-specific) prompts
+  const generic = [
+    'How much does a bathroom reno cost?',
+    'What questions should I ask a builder?',
+    'How do I choose the right tradie?',
+  ];
+  for (const g of generic) {
+    if (prompts.length >= 4) break;
+    prompts.push(g);
+  }
+
+  return prompts;
+}
+
+function buildQuickReplies(suburb: string | null, lastMessage: Message | null): string[] {
+  const chips: string[] = [];
+
+  // Contextual based on last AI message content
+  if (lastMessage?.content) {
+    const text = lastMessage.content.toLowerCase();
+    if (text.includes('cost') || text.includes('price') || text.includes('$')) {
+      chips.push('Is that a fair price?');
+    }
+    if (text.includes('plumber') || text.includes('electrician') || text.includes('tradie')) {
+      chips.push(suburb ? `Show me builders in ${suburb}` : 'Show me builders nearby');
+    }
+  }
+
+  // Always offer these if we have room
+  if (chips.length < 3) chips.push('What will this cost?');
+  if (chips.length < 3) chips.push('Tell me more');
+  if (chips.length < 3) chips.push(suburb ? `Find tradies in ${suburb}` : 'Find tradies nearby');
+
+  return chips.slice(0, 3);
+}
 
 /* ───────────────────────── Types ───────────────────────── */
 
@@ -176,6 +265,59 @@ function renderFormattedText(text: string, textColor: string) {
   return <View>{elements}</View>;
 }
 
+/* ───────────────────────── Quick Reply Chips ───────────────────────── */
+
+function QuickReplies({
+  isDark,
+  chips,
+  onPress,
+}: {
+  isDark: boolean;
+  chips: string[];
+  onPress: (text: string) => void;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.quickRepliesScroll}
+      contentContainerStyle={styles.quickRepliesContent}
+      keyboardShouldPersistTaps="handled"
+    >
+      {chips.map((chip) => (
+        <Pressable
+          key={chip}
+          style={({ pressed }) => [
+            styles.quickReplyChip,
+            { backgroundColor: isDark ? '#134E4A' : BRAND_LIGHT },
+            pressed && { opacity: 0.7 },
+          ]}
+          onPress={() => onPress(chip)}
+          accessibilityRole="button"
+          accessibilityLabel={chip}
+        >
+          <ThemedText style={[styles.quickReplyText, { color: BRAND }]}>{chip}</ThemedText>
+        </Pressable>
+      ))}
+    </ScrollView>
+  );
+}
+
+/* ───────────────────────── New Conversation Pill ───────────────────────── */
+
+function NewConversationPill({ isDark }: { isDark: boolean }) {
+  return (
+    <View style={styles.newConvPillWrapper}>
+      <View style={[styles.newConvPill, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
+        <MaterialIcons name="auto-awesome" size={12} color={isDark ? '#94a3b8' : '#6B7280'} />
+        <ThemedText style={[styles.newConvText, { color: isDark ? '#94a3b8' : '#6B7280' }]}>
+          New conversation
+        </ThemedText>
+      </View>
+    </View>
+  );
+}
+
 /* ───────────────────────── Main Component ───────────────────────── */
 
 export default function AIAssistScreen() {
@@ -187,36 +329,40 @@ export default function AIAssistScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [kbBottomPad, setKbBottomPad] = useState(0);
   const flatListRef = useRef<FlatList<Message>>(null);
+
+  const [suburb, setSuburb] = useState<string | null>(null);
+  const [history, setHistory] = useState<SearchEntry[]>([]);
+  const [welcomePrompts, setWelcomePrompts] = useState<string[]>(FALLBACK_PROMPTS);
 
   const hasMessages = messages.length > 0;
 
-  /* ── Keyboard tracking — plain state, LayoutAnimation for smooth resize ── */
+  // Offset: just enough so the input docks right above the keyboard.
+  // The tab bar sits behind the keyboard, so no extra offset needed.
+  const kbVerticalOffset = 0;
+
+  /* ── Load location + search history on mount ── */
   useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    (async () => {
+      // Load search history
+      const h = await getSearchHistory();
+      setHistory(h);
 
-    const onShow = Keyboard.addListener(showEvent, (e) => {
-      LayoutAnimation.configureNext(LayoutAnimation.create(
-        Platform.OS === 'ios' ? e.duration : 250,
-        LayoutAnimation.Types.keyboard,
-        LayoutAnimation.Properties.opacity,
-      ));
-      // keyboard height minus tab bar = how much we need to shrink
-      setKbBottomPad(Math.max(e.endCoordinates.height - TAB_BAR_HEIGHT, 0));
-    });
-
-    const onHide = Keyboard.addListener(hideEvent, (e) => {
-      LayoutAnimation.configureNext(LayoutAnimation.create(
-        Platform.OS === 'ios' ? (e.duration ?? 250) : 250,
-        LayoutAnimation.Types.keyboard,
-        LayoutAnimation.Properties.opacity,
-      ));
-      setKbBottomPad(0);
-    });
-
-    return () => { onShow.remove(); onHide.remove(); };
+      // Get device location → reverse geocode to suburb
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          const s = reverseGeocodeSuburb(pos.coords.latitude, pos.coords.longitude);
+          if (s) setSuburb(s);
+          setWelcomePrompts(buildWelcomePrompts(s, h));
+        } else {
+          setWelcomePrompts(buildWelcomePrompts(null, h));
+        }
+      } catch {
+        setWelcomePrompts(buildWelcomePrompts(null, h));
+      }
+    })();
   }, []);
 
   /* ── Send message ── */
@@ -254,17 +400,23 @@ export default function AIAssistScreen() {
       if (!response.ok) throw new Error(`Server responded with ${response.status}`);
       const data = await response.json();
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: data.reply,
-          timestamp: Date.now(),
-          builders: data.builders,
-          searchParams: data.searchParams,
-        },
-      ]);
+      const assistantMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: data.reply,
+        timestamp: Date.now(),
+        builders: data.builders,
+        searchParams: data.searchParams,
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+
+      // Persist search to history and refresh welcome prompts
+      if (data.searchParams?.trade_category) {
+        addSearchEntry(data.searchParams.trade_category, data.searchParams.suburb ?? suburb);
+        const h = await getSearchHistory();
+        setHistory(h);
+        setWelcomePrompts(buildWelcomePrompts(suburb, h));
+      }
     } catch (error: any) {
       Alert.alert('Error', error.message ?? 'Something went wrong. Please try again.');
     } finally {
@@ -296,6 +448,8 @@ export default function AIAssistScreen() {
     const isUser = item.role === 'user';
     const showTime = shouldShowTime(index);
     const hasBuilders = !isUser && item.builders && item.builders.length > 0;
+    // Show quick-reply chips only after the last assistant message when not loading
+    const isLastAssistant = !isUser && index === messages.length - 1 && !loading;
 
     return (
       <AnimatedMessage>
@@ -375,9 +529,14 @@ export default function AIAssistScreen() {
             )}
           </View>
         )}
+
+        {/* Quick-reply chips after last assistant message */}
+        {isLastAssistant && (
+          <QuickReplies isDark={isDark} chips={buildQuickReplies(suburb, item)} onPress={sendMessage} />
+        )}
       </AnimatedMessage>
     );
-  }, [isDark, messages, router]);
+  }, [isDark, messages, loading, router, sendMessage]);
 
   /* ───────────────────────── Render ───────────────────────── */
 
@@ -397,8 +556,10 @@ export default function AIAssistScreen() {
             <Pressable
               style={({ pressed }) => [styles.headerBackButton, pressed && { opacity: 0.6 }]}
               onPress={() => { setMessages([]); setInput(''); Keyboard.dismiss(); }}
+              accessibilityRole="button"
+              accessibilityLabel="New conversation"
             >
-              <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
+              <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
             </Pressable>
           ) : (
             <View style={styles.headerSideSpacer} />
@@ -410,16 +571,32 @@ export default function AIAssistScreen() {
             </View>
             <ThemedText style={styles.headerSubtitle}>Powered by Claude</ThemedText>
           </View>
-          <View style={styles.headerSideSpacer} />
+          {hasMessages ? (
+            <Pressable
+              style={({ pressed }) => [styles.headerBackButton, pressed && { opacity: 0.6 }]}
+              onPress={() => { setMessages([]); setInput(''); Keyboard.dismiss(); }}
+              accessibilityRole="button"
+              accessibilityLabel="Reset conversation"
+            >
+              <Ionicons name="refresh" size={20} color="#FFFFFF" />
+            </Pressable>
+          ) : (
+            <View style={styles.headerSideSpacer} />
+          )}
         </View>
       </LinearGradient>
 
-      {/* ── Body — shrinks when keyboard is up ── */}
-      <View style={[styles.flex1, { paddingBottom: kbBottomPad }]}>
+      {/* ── Body — KeyboardAvoidingView handles keyboard displacement ── */}
+      <KeyboardAvoidingView
+        style={styles.flex1}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={kbVerticalOffset}
+      >
         {/* ── Messages or Welcome ── */}
         {hasMessages ? (
           <FlatList
             ref={flatListRef}
+            style={styles.flex1}
             data={messages}
             keyExtractor={(item) => item.id}
             renderItem={renderMessage}
@@ -429,6 +606,7 @@ export default function AIAssistScreen() {
             showsVerticalScrollIndicator={false}
             keyboardDismissMode="interactive"
             keyboardShouldPersistTaps="handled"
+            ListHeaderComponent={<NewConversationPill isDark={isDark} />}
             ListFooterComponent={loading ? <TypingIndicator isDark={isDark} /> : null}
           />
         ) : (
@@ -450,12 +628,7 @@ export default function AIAssistScreen() {
             </ThemedText>
             {/* Suggested prompt chips */}
             <View style={styles.promptChips}>
-              {[
-                'Find a plumber in Surry Hills',
-                'How much does a bathroom reno cost?',
-                'Best electrician near me ASAP',
-                'What questions should I ask a builder?',
-              ].map((prompt) => (
+              {welcomePrompts.map((prompt) => (
                 <Pressable
                   key={prompt}
                   style={({ pressed }) => [
@@ -489,7 +662,7 @@ export default function AIAssistScreen() {
               styles.inputBar,
               {
                 backgroundColor: isDark ? '#1e293b' : '#FFFFFF',
-                borderColor: isDark ? '#334155' : '#E2E5E9',
+                borderColor: isDark ? '#334155' : '#D1D5DB',
               },
             ]}
           >
@@ -523,7 +696,7 @@ export default function AIAssistScreen() {
             </Pressable>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
 
       {/* ── Keyboard dismiss bar (iOS only) ── */}
       {Platform.OS === 'ios' && (
@@ -567,8 +740,6 @@ const styles = StyleSheet.create({
   headerBackButton: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -724,19 +895,19 @@ const styles = StyleSheet.create({
   inputBarOuter: {
     paddingHorizontal: 12,
     paddingTop: 4,
-    paddingBottom: 4,
+    paddingBottom: 8,
   },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     borderRadius: 24,
-    borderWidth: 1,
+    borderWidth: 1.5,
     paddingLeft: 16,
     paddingRight: 6,
     paddingVertical: 4,
     gap: 6,
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12 },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 16 },
       android: { elevation: 4 },
       default: {},
     }),
@@ -803,6 +974,44 @@ const styles = StyleSheet.create({
   viewAllText: {
     fontSize: 13,
     fontWeight: '600',
+  },
+
+  /* ── Quick Reply Chips ── */
+  quickRepliesScroll: {
+    marginLeft: 36,
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  quickRepliesContent: {
+    gap: 6,
+    paddingRight: 16,
+  },
+  quickReplyChip: {
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+  },
+  quickReplyText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+
+  /* ── New Conversation Pill ── */
+  newConvPillWrapper: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  newConvPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 20,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+  },
+  newConvText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 
   /* ── Keyboard dismiss bar ── */

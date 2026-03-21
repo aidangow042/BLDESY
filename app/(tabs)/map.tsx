@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Dimensions,
+  ActivityIndicator,
+  Animated,
+  FlatList,
   Image,
   Linking,
   Platform,
@@ -15,14 +17,15 @@ import * as Location from 'expo-location';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Colors, Radius, Shadows, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { supabase } from '@/lib/supabase';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const DEBOUNCE_MS = 500;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,157 +36,15 @@ type Tradie = {
   latitude: number;
   longitude: number;
   radius_km: number;
-  rating: number;
-  review_count: number;
   availability: string;
+  availability_note: string | null;
   phone: string | null;
   suburb: string;
   bio: string | null;
   profile_photo_url: string | null;
-  abn: boolean;
-  license_key: boolean;
+  abn: string | null;
+  license_key: string | null;
 };
-
-// ─── Mock data — realistic Newcastle NSW coordinates ─────────────────────────
-
-const MOCK_TRADIES: Tradie[] = [
-  {
-    id: 'mock-1',
-    business_name: 'Hamilton Building Co.',
-    trade_category: 'builder',
-    latitude: -32.9282,
-    longitude: 151.7567,
-    radius_km: 25,
-    rating: 4.8,
-    review_count: 34,
-    availability: 'Available',
-    phone: '0412 345 678',
-    suburb: 'Hamilton',
-    bio: 'Residential and commercial builds with 15+ years experience across the Hunter Valley.',
-    profile_photo_url: null,
-    abn: true,
-    license_key: true,
-  },
-  {
-    id: 'mock-2',
-    business_name: 'Merewether Electrical',
-    trade_category: 'electrician',
-    latitude: -32.9542,
-    longitude: 151.7598,
-    radius_km: 20,
-    rating: 4.6,
-    review_count: 22,
-    availability: 'Available',
-    phone: '0423 456 789',
-    suburb: 'Merewether',
-    bio: 'Licensed electrician specialising in solar installs and smart home wiring.',
-    profile_photo_url: null,
-    abn: true,
-    license_key: true,
-  },
-  {
-    id: 'mock-3',
-    business_name: 'Charlestown Plumbing',
-    trade_category: 'plumber',
-    latitude: -32.9706,
-    longitude: 151.7050,
-    radius_km: 18,
-    rating: 4.9,
-    review_count: 61,
-    availability: 'Booked Until Friday',
-    phone: '0434 567 890',
-    suburb: 'Charlestown',
-    bio: '24/7 emergency plumbing for homes and strata across Newcastle.',
-    profile_photo_url: null,
-    abn: true,
-    license_key: false,
-  },
-  {
-    id: 'mock-4',
-    business_name: 'Lambton Carpentry',
-    trade_category: 'carpenter',
-    latitude: -32.9251,
-    longitude: 151.7232,
-    radius_km: 15,
-    rating: 4.7,
-    review_count: 18,
-    availability: 'Available',
-    phone: '0445 678 901',
-    suburb: 'Lambton',
-    bio: 'Custom decks, pergolas, and furniture. Family business since 2008.',
-    profile_photo_url: null,
-    abn: false,
-    license_key: false,
-  },
-  {
-    id: 'mock-5',
-    business_name: 'Adamstown Painting',
-    trade_category: 'painter',
-    latitude: -32.9367,
-    longitude: 151.7309,
-    radius_km: 22,
-    rating: 4.5,
-    review_count: 27,
-    availability: 'Available',
-    phone: '0456 789 012',
-    suburb: 'Adamstown',
-    bio: 'Interior and exterior painting. Dulux certified. Meticulous prep work.',
-    profile_photo_url: null,
-    abn: true,
-    license_key: false,
-  },
-  {
-    id: 'mock-6',
-    business_name: 'Mayfield Roofing',
-    trade_category: 'roofer',
-    latitude: -32.8978,
-    longitude: 151.7356,
-    radius_km: 30,
-    rating: 4.3,
-    review_count: 14,
-    availability: 'Available in 2 days',
-    phone: '0467 890 123',
-    suburb: 'Mayfield',
-    bio: 'Metal, tile, and colorbond roofing. Free quotes within 24h.',
-    profile_photo_url: null,
-    abn: true,
-    license_key: true,
-  },
-  {
-    id: 'mock-7',
-    business_name: 'Cooks Hill Tiling',
-    trade_category: 'tiler',
-    latitude: -32.9334,
-    longitude: 151.7694,
-    radius_km: 12,
-    rating: 5.0,
-    review_count: 9,
-    availability: 'Available',
-    phone: '0478 901 234',
-    suburb: 'Cooks Hill',
-    bio: 'Bathroom and kitchen tiling. Only accept premium projects.',
-    profile_photo_url: null,
-    abn: false,
-    license_key: false,
-  },
-  {
-    id: 'mock-8',
-    business_name: 'Junction Landscaping',
-    trade_category: 'landscaper',
-    latitude: -32.9422,
-    longitude: 151.7641,
-    radius_km: 50,
-    rating: 4.4,
-    review_count: 38,
-    availability: 'Available',
-    phone: '0489 012 345',
-    suburb: 'The Junction',
-    bio: 'Garden design, retaining walls, irrigation, and lawn care across Newcastle and Lake Macquarie.',
-    profile_photo_url: null,
-    abn: true,
-    license_key: false,
-  },
-];
 
 // ─── Filter pills ─────────────────────────────────────────────────────────────
 
@@ -197,6 +58,7 @@ const TRADE_FILTERS = [
   { key: 'landscaper', label: 'Landscaper' },
   { key: 'roofer', label: 'Roofer' },
   { key: 'tiler', label: 'Tiler' },
+  { key: 'all-trades', label: 'All Trades' },
 ];
 
 // Trade → pin color
@@ -209,6 +71,18 @@ const TRADE_COLORS: Record<string, string> = {
   landscaper: '#16A34A',
   roofer: '#D97706',
   tiler: '#7C3AED',
+};
+
+// Trade → MaterialIcons icon name
+const TRADE_ICONS: Record<string, string> = {
+  builder: 'construction',
+  electrician: 'bolt',
+  plumber: 'plumbing',
+  carpenter: 'carpenter',
+  painter: 'format-paint',
+  landscaper: 'grass',
+  roofer: 'roofing',
+  tiler: 'grid-view',
 };
 
 // ─── Default map region (Newcastle NSW) ──────────────────────────────────────
@@ -226,35 +100,131 @@ function getTradeColor(trade: string): string {
   return TRADE_COLORS[trade.toLowerCase()] ?? '#0d9488';
 }
 
-function formatRating(rating: number): string {
-  return rating.toFixed(1);
+function getTradeIcon(trade: string): string {
+  return TRADE_ICONS[trade.toLowerCase()] ?? 'build';
 }
 
-// ─── Star Row ─────────────────────────────────────────────────────────────────
+function getAvailLabel(tradie: Tradie): string {
+  if (tradie.availability_note) return tradie.availability_note;
+  if (tradie.availability === 'available') return 'Available';
+  if (tradie.availability === 'limited') return 'Limited';
+  return 'Unavailable';
+}
 
-function StarRow({ rating, count }: { rating: number; count: number }) {
-  const full = Math.floor(rating);
-  const half = rating - full >= 0.3;
-  const stars: string[] = [];
-  for (let i = 0; i < full; i++) stars.push('star');
-  if (half && stars.length < 5) stars.push('star-half');
-  while (stars.length < 5) stars.push('star-border');
-
+function getAvatarUri(tradie: Tradie, tradeColor: string): string {
   return (
-    <View style={starStyles.row}>
-      {stars.map((s, i) => (
-        <MaterialIcons key={i} name={s as any} size={14} color="#F59E0B" />
-      ))}
-      <Text style={starStyles.value}>{formatRating(rating)}</Text>
-      <Text style={starStyles.count}>({count})</Text>
-    </View>
+    tradie.profile_photo_url ??
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(tradie.business_name)}&background=${tradeColor.slice(1)}&color=fff&size=200`
   );
 }
 
-const starStyles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  value: { fontSize: 13, fontWeight: '700', color: '#78716C', marginLeft: 4 },
-  count: { fontSize: 13, color: '#A3A3A3' },
+// ═════════════════════════════════════════════════════════════════════════════
+// LIST VIEW CARD
+// ═════════════════════════════════════════════════════════════════════════════
+
+function ListCard({
+  tradie,
+  colors,
+  isDark,
+  onPress,
+}: {
+  tradie: Tradie;
+  colors: typeof Colors.light;
+  isDark: boolean;
+  onPress: () => void;
+}) {
+  const color = getTradeColor(tradie.trade_category);
+  const label =
+    tradie.trade_category.charAt(0).toUpperCase() + tradie.trade_category.slice(1);
+  const avail = getAvailLabel(tradie);
+
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        listStyles.card,
+        {
+          backgroundColor: isDark ? colors.surface : '#fff',
+          borderColor: colors.borderLight,
+          opacity: pressed ? 0.9 : 1,
+        },
+      ]}
+      onPress={onPress}
+    >
+      <Image
+        source={{ uri: getAvatarUri(tradie, color) }}
+        style={listStyles.avatar}
+      />
+      <View style={listStyles.info}>
+        <Text style={[listStyles.name, { color: colors.text }]} numberOfLines={1}>
+          {tradie.business_name}
+        </Text>
+        <View style={listStyles.metaRow}>
+          <View style={[listStyles.tradePill, { backgroundColor: `${color}18` }]}>
+            <MaterialIcons name={getTradeIcon(tradie.trade_category) as any} size={11} color={color} />
+            <Text style={[listStyles.tradeText, { color }]}>{label}</Text>
+          </View>
+          <MaterialIcons name="location-on" size={12} color={colors.textSecondary} />
+          <Text style={[listStyles.suburb, { color: colors.textSecondary }]}>
+            {tradie.suburb}
+          </Text>
+        </View>
+        <View style={listStyles.bottomRow}>
+          <MaterialIcons
+            name={avail === 'Available' ? 'check-circle' : 'schedule'}
+            size={12}
+            color={avail === 'Available' ? colors.success : colors.warning}
+          />
+          <Text
+            style={[
+              listStyles.availText,
+              { color: avail === 'Available' ? colors.success : colors.warning },
+            ]}
+          >
+            {avail}
+          </Text>
+          <Text style={[listStyles.radius, { color: colors.textSecondary }]}>
+            {tradie.radius_km}km
+          </Text>
+        </View>
+      </View>
+      <MaterialIcons name="chevron-right" size={20} color={colors.textSecondary} />
+    </Pressable>
+  );
+}
+
+const listStyles = StyleSheet.create({
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.sm,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    gap: Spacing.md,
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#e2e8f0',
+  },
+  info: { flex: 1, gap: 3 },
+  name: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  tradePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+  },
+  tradeText: { fontSize: 11, fontWeight: '700' },
+  suburb: { fontSize: 12 },
+  bottomRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
+  availText: { fontSize: 11, fontWeight: '600' },
+  radius: { fontSize: 11, marginLeft: 'auto' },
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -267,128 +237,433 @@ export default function MapScreen() {
   const colors = Colors[isDark ? 'dark' : 'light'];
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { selectedTrade } = useLocalSearchParams<{ selectedTrade?: string }>();
 
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const [selectedTradie, setSelectedTradie] = useState<Tradie | null>(null);
   const [activeFilter, setActiveFilter] = useState('all');
-  const [tradies] = useState<Tradie[]>(MOCK_TRADIES);
+  const [tradies, setTradies] = useState<Tradie[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [locationDenied, setLocationDenied] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [showListView, setShowListView] = useState(false);
+  const [showSearchArea, setShowSearchArea] = useState(false);
+  const [currentRegion, setCurrentRegion] = useState<Region>(NEWCASTLE_REGION);
 
   const bottomSheetRef = useRef<BottomSheet>(null);
-  const snapPoints = useMemo(() => ['35%', '65%'], []);
+  const mapRef = useRef<MapView>(null);
+  const snapPoints = useMemo(() => ['40%', '70%'], []);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialFetchDone = useRef(false);
+  const emptyHintOpacity = useRef(new Animated.Value(0)).current;
 
-  // Request user location on mount
+  // Apply trade selected from all-trades page
+  useEffect(() => {
+    if (selectedTrade) {
+      setActiveFilter(selectedTrade);
+    }
+  }, [selectedTrade]);
+
+  // ── Request user location on mount ──
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
+      if (status !== 'granted') {
+        setLocationDenied(true);
+        fetchBuilders(NEWCASTLE_REGION);
+        return;
+      }
       const loc = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
-      setUserLocation({
+      const coords = {
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude,
-      });
+      };
+      setUserLocation(coords);
+      const region = { ...coords, latitudeDelta: 0.12, longitudeDelta: 0.12 };
+      setCurrentRegion(region);
+      fetchBuilders(region);
     })();
   }, []);
 
-  // Filtered tradies based on active filter pill
+  // ── Fetch approved builders within region ──
+  async function fetchBuilders(region: Region) {
+    setLoading(true);
+    const latMin = region.latitude - region.latitudeDelta / 2;
+    const latMax = region.latitude + region.latitudeDelta / 2;
+    const lngMin = region.longitude - region.longitudeDelta / 2;
+    const lngMax = region.longitude + region.longitudeDelta / 2;
+
+    const { data, error } = await supabase
+      .from('builder_profiles')
+      .select(
+        'id, business_name, trade_category, suburb, bio, phone, latitude, longitude, radius_km, availability, availability_note, profile_photo_url, abn, license_key',
+      )
+      .eq('approved', true)
+      .not('latitude', 'is', null)
+      .not('longitude', 'is', null)
+      .gte('latitude', latMin)
+      .lte('latitude', latMax)
+      .gte('longitude', lngMin)
+      .lte('longitude', lngMax)
+      .limit(100);
+
+    if (!error && data) {
+      setTradies(data as Tradie[]);
+    }
+    setLoading(false);
+    setShowSearchArea(false);
+    initialFetchDone.current = true;
+  }
+
+  // ── Debounced region change → show "Search this area" button ──
+  const handleRegionChangeComplete = useCallback(
+    (region: Region) => {
+      setCurrentRegion(region);
+      if (!initialFetchDone.current) return;
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      debounceTimer.current = setTimeout(() => {
+        setShowSearchArea(true);
+      }, DEBOUNCE_MS);
+    },
+    [],
+  );
+
+  // ── Filtered tradies ──
   const filteredTradies = useMemo(() => {
     if (activeFilter === 'all') return tradies;
     return tradies.filter((t) => t.trade_category.toLowerCase() === activeFilter);
   }, [tradies, activeFilter]);
 
-  // Open bottom sheet when a marker is tapped
-  const handleMarkerPress = useCallback((tradie: Tradie) => {
-    setSelectedTradie(tradie);
-    bottomSheetRef.current?.snapToIndex(0);
-  }, []);
+  // Flash empty hint: fade in → hold 1.5s → fade out
+  const showEmpty = !loading && filteredTradies.length === 0 && !selectedTradie && !showListView;
+  const emptyHintScale = useRef(new Animated.Value(0.9)).current;
+  const emptyHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (emptyHintTimer.current) clearTimeout(emptyHintTimer.current);
 
-  // Close bottom sheet
+    if (showEmpty) {
+      Animated.parallel([
+        Animated.spring(emptyHintOpacity, { toValue: 1, useNativeDriver: true, tension: 80, friction: 10 }),
+        Animated.spring(emptyHintScale, { toValue: 1, useNativeDriver: true, tension: 80, friction: 10 }),
+      ]).start(() => {
+        emptyHintTimer.current = setTimeout(() => {
+          Animated.parallel([
+            Animated.timing(emptyHintOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+            Animated.timing(emptyHintScale, { toValue: 0.95, duration: 300, useNativeDriver: true }),
+          ]).start();
+        }, 1200);
+      });
+    } else {
+      emptyHintOpacity.setValue(0);
+      emptyHintScale.setValue(0.9);
+    }
+
+    return () => {
+      if (emptyHintTimer.current) clearTimeout(emptyHintTimer.current);
+    };
+  }, [showEmpty]);
+
+  // ── Marker press → animate to tradie + open bottom sheet ──
+  const handleMarkerPress = useCallback(
+    (tradie: Tradie) => {
+      setSelectedTradie(tradie);
+      bottomSheetRef.current?.snapToIndex(0);
+      mapRef.current?.animateToRegion(
+        {
+          latitude: tradie.latitude,
+          longitude: tradie.longitude,
+          latitudeDelta: 0.04,
+          longitudeDelta: 0.04,
+        },
+        400,
+      );
+    },
+    [],
+  );
+
   const handleSheetClose = useCallback(() => {
     setSelectedTradie(null);
   }, []);
 
-  const tradeLabel = selectedTradie
-    ? selectedTradie.trade_category.charAt(0).toUpperCase() + selectedTradie.trade_category.slice(1)
-    : '';
+  // ── Re-center on user location ──
+  const handleRecenter = useCallback(() => {
+    if (!userLocation) return;
+    const region = { ...userLocation, latitudeDelta: 0.12, longitudeDelta: 0.12 };
+    mapRef.current?.animateToRegion(region, 400);
+  }, [userLocation]);
 
-  const tradeColor = selectedTradie ? getTradeColor(selectedTradie.trade_category) : '#0d9488';
-  const avatarUri = selectedTradie?.profile_photo_url
-    ?? (selectedTradie
-      ? `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedTradie.business_name)}&background=${tradeColor.slice(1)}&color=fff&size=120`
-      : null);
+  // ── Derived values for selected tradie ──
+  const tradeLabel = selectedTradie
+    ? selectedTradie.trade_category.charAt(0).toUpperCase() +
+      selectedTradie.trade_category.slice(1)
+    : '';
+  const tradeColor = selectedTradie
+    ? getTradeColor(selectedTradie.trade_category)
+    : '#0d9488';
+  const availLabel = selectedTradie ? getAvailLabel(selectedTradie) : '';
+  const avatarUri = selectedTradie ? getAvatarUri(selectedTradie, tradeColor) : null;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LIST VIEW
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  if (showListView) {
+    return (
+      <GestureHandlerRootView style={styles.root}>
+        <View
+          style={[
+            styles.listContainer,
+            { backgroundColor: isDark ? colors.background : colors.canvas },
+          ]}
+        >
+          {/* ── Header bar ── */}
+          <View
+            style={[
+              styles.listHeader,
+              {
+                paddingTop: insets.top + Spacing.sm,
+                backgroundColor: isDark ? colors.surface : '#fff',
+                borderBottomColor: colors.borderLight,
+              },
+            ]}
+          >
+            {/* Filter pills */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterContent}
+              style={{ marginBottom: Spacing.sm }}
+            >
+              {TRADE_FILTERS.map((filter) => {
+                const isActive = activeFilter === filter.key;
+                return (
+                  <Pressable
+                    key={filter.key}
+                    style={[
+                      styles.filterPill,
+                      {
+                        backgroundColor: isActive
+                          ? colors.teal
+                          : isDark
+                            ? 'rgba(30,41,59,0.95)'
+                            : 'rgba(255,255,255,0.97)',
+                        borderColor: isActive ? colors.teal : colors.border,
+                      },
+                    ]}
+                    onPress={() => setActiveFilter(filter.key)}
+                  >
+                    <Text
+                      style={[
+                        styles.filterPillText,
+                        { color: isActive ? '#fff' : colors.text },
+                      ]}
+                    >
+                      {filter.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            {/* Count + toggle */}
+            <View style={styles.listSubHeader}>
+              <Text style={[styles.listCount, { color: colors.textSecondary }]}>
+                {filteredTradies.length} tradie
+                {filteredTradies.length !== 1 ? 's' : ''} in this area
+              </Text>
+              <Pressable
+                style={[styles.viewToggle, { backgroundColor: isDark ? colors.border : '#F1F5F9' }]}
+                onPress={() => setShowListView(false)}
+              >
+                <MaterialIcons name="map" size={16} color={colors.teal} />
+                <Text style={[styles.viewToggleText, { color: colors.teal }]}>Map</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* ── Tradie list ── */}
+          {loading ? (
+            <View style={styles.listEmpty}>
+              <ActivityIndicator size="large" color={colors.teal} />
+            </View>
+          ) : filteredTradies.length === 0 ? (
+            <View style={styles.listEmpty}>
+              <MaterialIcons name="search-off" size={48} color={colors.borderLight} />
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                No tradies found
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                Try a different filter or search area
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredTradies}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ paddingTop: Spacing.md, paddingBottom: insets.bottom + 90 }}
+              renderItem={({ item }) => (
+                <ListCard
+                  tradie={item}
+                  colors={colors}
+                  isDark={isDark}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/builder-profile',
+                      params: { id: item.id },
+                    })
+                  }
+                />
+              )}
+            />
+          )}
+        </View>
+      </GestureHandlerRootView>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MAP VIEW
+  // ═══════════════════════════════════════════════════════════════════════════
 
   return (
     <GestureHandlerRootView style={styles.root}>
-      {/* ─── Map ─────────────────────────────────────────────── */}
+      {/* ─── Map ─── */}
       <MapView
+        ref={mapRef}
         style={StyleSheet.absoluteFillObject}
-        initialRegion={NEWCASTLE_REGION}
-        region={userLocation
-          ? { ...userLocation, latitudeDelta: 0.12, longitudeDelta: 0.12 }
-          : undefined}
+        initialRegion={
+          userLocation
+            ? { ...userLocation, latitudeDelta: 0.12, longitudeDelta: 0.12 }
+            : NEWCASTLE_REGION
+        }
         showsUserLocation
         showsMyLocationButton={false}
         userInterfaceStyle={isDark ? 'dark' : 'light'}
+        onRegionChangeComplete={handleRegionChangeComplete}
       >
         {filteredTradies.map((tradie) => {
           const pinColor = getTradeColor(tradie.trade_category);
           const isSelected = selectedTradie?.id === tradie.id;
+          const iconName = getTradeIcon(tradie.trade_category);
+          const hasPhoto = !!tradie.profile_photo_url;
 
           return (
             <React.Fragment key={tradie.id}>
-              {/* Service area circle — only show for selected tradie */}
+              {/* Service area circle — brand teal */}
               {isSelected && (
                 <Circle
-                  center={{ latitude: tradie.latitude, longitude: tradie.longitude }}
+                  center={{
+                    latitude: tradie.latitude,
+                    longitude: tradie.longitude,
+                  }}
                   radius={tradie.radius_km * 1000}
-                  fillColor="rgba(29,158,117,0.15)"
-                  strokeColor="rgba(29,158,117,0.4)"
+                  fillColor="rgba(29,158,117,0.12)"
+                  strokeColor="rgba(29,158,117,0.35)"
                   strokeWidth={1.5}
                 />
               )}
 
               <Marker
-                coordinate={{ latitude: tradie.latitude, longitude: tradie.longitude }}
+                coordinate={{
+                  latitude: tradie.latitude,
+                  longitude: tradie.longitude,
+                }}
                 onPress={() => handleMarkerPress(tradie)}
                 tracksViewChanges={false}
               >
-                <View
-                  style={[
-                    styles.markerPin,
-                    {
-                      backgroundColor: pinColor,
-                      borderColor: isSelected ? '#fff' : 'transparent',
-                      borderWidth: isSelected ? 2.5 : 0,
-                      transform: [{ scale: isSelected ? 1.2 : 1 }],
-                    },
-                  ]}
-                >
-                  <Text style={styles.markerInitial}>
-                    {tradie.business_name.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                {/* Pin tail */}
-                <View style={[styles.pinTail, { borderTopColor: pinColor }]} />
+                {/* ── Profile photo marker (Snap Maps style) ── */}
+                {hasPhoto ? (
+                  <View style={styles.markerOuter}>
+                    <View
+                      style={[
+                        styles.markerPhotoRing,
+                        {
+                          borderColor: isSelected ? '#fff' : pinColor,
+                          transform: [{ scale: isSelected ? 1.15 : 1 }],
+                        },
+                      ]}
+                    >
+                      <Image
+                        source={{ uri: tradie.profile_photo_url! }}
+                        style={styles.markerPhoto}
+                      />
+                    </View>
+                    <View
+                      style={[styles.pinTail, { borderTopColor: isSelected ? '#fff' : pinColor }]}
+                    />
+                  </View>
+                ) : (
+                  /* ── Trade icon marker ── */
+                  <View style={styles.markerOuter}>
+                    <View
+                      style={[
+                        styles.markerIcon,
+                        {
+                          backgroundColor: pinColor,
+                          borderColor: isSelected ? '#fff' : pinColor,
+                          borderWidth: isSelected ? 3 : 0,
+                          transform: [{ scale: isSelected ? 1.15 : 1 }],
+                        },
+                      ]}
+                    >
+                      <MaterialIcons
+                        name={iconName as any}
+                        size={18}
+                        color="#fff"
+                      />
+                    </View>
+                    <View
+                      style={[styles.pinTail, { borderTopColor: isSelected ? '#fff' : pinColor }]}
+                    />
+                  </View>
+                )}
               </Marker>
             </React.Fragment>
           );
         })}
       </MapView>
 
-      {/* ─── Trade filter bar ────────────────────────────────── */}
-      <View
-        style={[
-          styles.filterBar,
-          { top: insets.top + Spacing.sm },
-        ]}
-      >
+      {/* ─── Trade filter bar ─── */}
+      <View style={[styles.filterBar, { top: insets.top + Spacing.sm }]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterContent}
         >
           {TRADE_FILTERS.map((filter) => {
+            if (filter.key === 'all-trades') {
+              return (
+                <Pressable
+                  key={filter.key}
+                  style={[
+                    styles.filterPill,
+                    styles.allTradesPill,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(30,41,59,0.95)'
+                        : 'rgba(255,255,255,0.97)',
+                      borderColor: colors.teal,
+                    },
+                  ]}
+                  onPress={() => router.push('/all-trades')}
+                  accessibilityRole="button"
+                  accessibilityLabel="View all trades"
+                >
+                  <MaterialIcons name="apps" size={14} color={colors.teal} />
+                  <Text
+                    style={[styles.filterPillText, { color: colors.teal }]}
+                  >
+                    {filter.label}
+                  </Text>
+                  <MaterialIcons name="chevron-right" size={14} color={colors.teal} />
+                </Pressable>
+              );
+            }
             const isActive = activeFilter === filter.key;
             return (
               <Pressable
@@ -423,24 +698,107 @@ export default function MapScreen() {
         </ScrollView>
       </View>
 
-      {/* ─── Tradie count badge ──────────────────────────────── */}
-      <View
-        style={[
-          styles.countBadge,
-          {
-            top: insets.top + 54,
-            backgroundColor: isDark ? 'rgba(30,41,59,0.95)' : 'rgba(255,255,255,0.97)',
-            borderColor: colors.border,
-          },
-        ]}
-      >
-        <MaterialIcons name="location-on" size={13} color={colors.teal} />
-        <Text style={[styles.countText, { color: colors.textSecondary }]}>
-          {filteredTradies.length} tradie{filteredTradies.length !== 1 ? 's' : ''} nearby
-        </Text>
+      {/* ─── Right-side action buttons ─── */}
+      <View style={[styles.mapActions, { top: insets.top + 54 }]}>
+        {/* List view toggle */}
+        <Pressable
+          style={[
+            styles.mapActionBtn,
+            {
+              backgroundColor: isDark
+                ? 'rgba(30,41,59,0.95)'
+                : 'rgba(255,255,255,0.97)',
+              borderColor: colors.border,
+            },
+          ]}
+          onPress={() => setShowListView(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Switch to list view"
+        >
+          <MaterialIcons name="view-list" size={18} color={colors.teal} />
+        </Pressable>
+
+        {/* Re-center on location */}
+        {userLocation && (
+          <Pressable
+            style={[
+              styles.mapActionBtn,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(30,41,59,0.95)'
+                  : 'rgba(255,255,255,0.97)',
+                borderColor: colors.border,
+              },
+            ]}
+            onPress={handleRecenter}
+            accessibilityRole="button"
+            accessibilityLabel="Re-center on your location"
+          >
+            <MaterialIcons name="my-location" size={18} color={colors.teal} />
+          </Pressable>
+        )}
+
+        {/* Search this area — always visible */}
+        <Pressable
+          style={[
+            styles.mapActionBtn,
+            {
+              backgroundColor: showSearchArea ? colors.teal : (isDark ? 'rgba(30,41,59,0.95)' : 'rgba(255,255,255,0.97)'),
+              borderColor: showSearchArea ? colors.teal : colors.border,
+            },
+          ]}
+          onPress={() => fetchBuilders(currentRegion)}
+          accessibilityRole="button"
+          accessibilityLabel="Search this area"
+        >
+          <MaterialIcons name="refresh" size={18} color={showSearchArea ? '#fff' : colors.teal} />
+        </Pressable>
       </View>
 
-      {/* ─── Bottom sheet (tradie mini-profile) ──────────────── */}
+      {/* ─── Empty state hint (fades in/out) ─── */}
+      <Animated.View
+        pointerEvents={showEmpty ? 'auto' : 'none'}
+        style={[styles.emptyHint, { backgroundColor: isDark ? 'rgba(30,41,59,0.95)' : 'rgba(255,255,255,0.97)', opacity: emptyHintOpacity, transform: [{ scale: emptyHintScale }] }]}
+      >
+        <MaterialIcons name="explore" size={20} color={colors.teal} />
+        <Text style={[styles.emptyHintText, { color: colors.text }]}>
+          No tradies in this area
+        </Text>
+        <Text style={[styles.emptyHintSub, { color: colors.textSecondary }]}>
+          Zoom out or pan to find more
+        </Text>
+      </Animated.View>
+
+      {/* ─── Location denied banner (dismissable) ─── */}
+      {locationDenied && !bannerDismissed && (
+        <View
+          style={[
+            styles.deniedBanner,
+            {
+              bottom: insets.bottom + 8,
+              backgroundColor: isDark
+                ? 'rgba(30,41,59,0.95)'
+                : 'rgba(255,255,255,0.97)',
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <MaterialIcons name="location-off" size={16} color={colors.warning} />
+          <Text style={[styles.deniedText, { color: colors.textSecondary }]}>
+            Enable location for better results
+          </Text>
+          <Pressable
+            onPress={() => setBannerDismissed(true)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss location banner"
+          >
+            <MaterialIcons name="close" size={16} color={colors.textSecondary} />
+          </Pressable>
+        </View>
+      )}
+
+      {/* ─── Bottom sheet (tradie profile) ─── */}
       {selectedTradie && (
         <BottomSheet
           ref={bottomSheetRef}
@@ -452,101 +810,170 @@ export default function MapScreen() {
             backgroundColor: isDark ? colors.surface : '#FFFFFF',
             borderRadius: 20,
           }}
-          handleIndicatorStyle={{ backgroundColor: colors.border }}
+          handleIndicatorStyle={{ backgroundColor: colors.border, width: 40 }}
         >
           <BottomSheetScrollView
-            contentContainerStyle={styles.sheetContent}
+            contentContainerStyle={[
+              styles.sheetContent,
+              { paddingBottom: insets.bottom + 100 },
+            ]}
             showsVerticalScrollIndicator={false}
           >
             {/* ─── Header row ─── */}
             <View style={styles.sheetHeader}>
-              <Image
-                source={{ uri: avatarUri! }}
-                style={styles.sheetAvatar}
-              />
+              <View style={[styles.avatarRing, { borderColor: tradeColor }]}>
+                <Image source={{ uri: avatarUri! }} style={styles.sheetAvatar} />
+              </View>
               <View style={styles.sheetHeaderText}>
-                <Text style={[styles.sheetName, { color: colors.text }]} numberOfLines={1}>
+                <Text
+                  style={[styles.sheetName, { color: colors.text }]}
+                  numberOfLines={1}
+                >
                   {selectedTradie.business_name}
                 </Text>
                 <View style={styles.sheetMetaRow}>
-                  <View style={[styles.tradePill, { backgroundColor: `${tradeColor}20` }]}>
+                  <View
+                    style={[
+                      styles.tradePill,
+                      { backgroundColor: `${tradeColor}18` },
+                    ]}
+                  >
+                    <MaterialIcons
+                      name={getTradeIcon(selectedTradie.trade_category) as any}
+                      size={11}
+                      color={tradeColor}
+                    />
                     <Text style={[styles.tradePillText, { color: tradeColor }]}>
                       {tradeLabel}
                     </Text>
                   </View>
                   <View style={styles.locationRow}>
-                    <MaterialIcons name="location-on" size={13} color={colors.textSecondary} />
-                    <Text style={[styles.locationText, { color: colors.textSecondary }]}>
+                    <MaterialIcons
+                      name="location-on"
+                      size={13}
+                      color={colors.textSecondary}
+                    />
+                    <Text
+                      style={[styles.locationText, { color: colors.textSecondary }]}
+                    >
                       {selectedTradie.suburb}
                     </Text>
                   </View>
                 </View>
               </View>
 
-              {/* Close button */}
               <Pressable
-                style={[styles.closeBtn, { backgroundColor: isDark ? colors.border : '#F1F5F9' }]}
+                style={[
+                  styles.closeBtn,
+                  {
+                    backgroundColor: isDark ? colors.border : '#F1F5F9',
+                  },
+                ]}
                 onPress={() => {
                   bottomSheetRef.current?.close();
                   setSelectedTradie(null);
                 }}
                 accessibilityRole="button"
-                accessibilityLabel="Close tradie sheet"
+                accessibilityLabel="Close"
               >
                 <MaterialIcons name="close" size={18} color={colors.text} />
               </Pressable>
             </View>
 
             {/* ─── Stats row ─── */}
-            <View style={[styles.statsRow, { borderColor: colors.borderLight }]}>
-              <View style={styles.statItem}>
-                <StarRow rating={selectedTradie.rating} count={selectedTradie.review_count} />
-              </View>
-              <View style={[styles.statDivider, { backgroundColor: colors.borderLight }]} />
+            <View
+              style={[styles.statsRow, { borderColor: colors.borderLight }]}
+            >
               <View style={styles.statItem}>
                 <MaterialIcons
-                  name={selectedTradie.availability === 'Available' ? 'check-circle' : 'schedule'}
+                  name={
+                    availLabel === 'Available' ? 'check-circle' : 'schedule'
+                  }
                   size={14}
-                  color={selectedTradie.availability === 'Available' ? colors.success : colors.warning}
+                  color={
+                    availLabel === 'Available' ? colors.success : colors.warning
+                  }
                 />
                 <Text
                   style={[
                     styles.availText,
                     {
-                      color: selectedTradie.availability === 'Available'
-                        ? colors.success
-                        : colors.warning,
+                      color:
+                        availLabel === 'Available'
+                          ? colors.success
+                          : colors.warning,
                     },
                   ]}
                   numberOfLines={1}
                 >
-                  {selectedTradie.availability}
+                  {availLabel}
                 </Text>
               </View>
-              <View style={[styles.statDivider, { backgroundColor: colors.borderLight }]} />
+              <View
+                style={[
+                  styles.statDivider,
+                  { backgroundColor: colors.borderLight },
+                ]}
+              />
               <View style={styles.statItem}>
-                <MaterialIcons name="radar" size={14} color={colors.textSecondary} />
-                <Text style={[styles.radiusText, { color: colors.textSecondary }]}>
+                <MaterialIcons
+                  name="radar"
+                  size={14}
+                  color={colors.textSecondary}
+                />
+                <Text
+                  style={[styles.radiusText, { color: colors.textSecondary }]}
+                >
                   {selectedTradie.radius_km}km radius
                 </Text>
               </View>
             </View>
 
             {/* ─── Verification badges ─── */}
-            <View style={styles.badgeRow}>
-              {selectedTradie.abn && (
-                <View style={[styles.badge, { borderColor: `${tradeColor}40`, backgroundColor: `${tradeColor}10` }]}>
-                  <MaterialIcons name="check-circle" size={12} color={tradeColor} />
-                  <Text style={[styles.badgeText, { color: tradeColor }]}>ABN</Text>
-                </View>
-              )}
-              {selectedTradie.license_key && (
-                <View style={[styles.badge, { borderColor: `${tradeColor}40`, backgroundColor: `${tradeColor}10` }]}>
-                  <MaterialIcons name="verified" size={12} color={tradeColor} />
-                  <Text style={[styles.badgeText, { color: tradeColor }]}>Licensed</Text>
-                </View>
-              )}
-            </View>
+            {(selectedTradie.abn || selectedTradie.license_key) && (
+              <View style={styles.badgeRow}>
+                {selectedTradie.abn && (
+                  <View
+                    style={[
+                      styles.badge,
+                      {
+                        borderColor: `${tradeColor}40`,
+                        backgroundColor: `${tradeColor}10`,
+                      },
+                    ]}
+                  >
+                    <MaterialIcons
+                      name="check-circle"
+                      size={12}
+                      color={tradeColor}
+                    />
+                    <Text style={[styles.badgeText, { color: tradeColor }]}>
+                      ABN
+                    </Text>
+                  </View>
+                )}
+                {selectedTradie.license_key && (
+                  <View
+                    style={[
+                      styles.badge,
+                      {
+                        borderColor: `${tradeColor}40`,
+                        backgroundColor: `${tradeColor}10`,
+                      },
+                    ]}
+                  >
+                    <MaterialIcons
+                      name="verified"
+                      size={12}
+                      color={tradeColor}
+                    />
+                    <Text style={[styles.badgeText, { color: tradeColor }]}>
+                      Licensed
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
 
             {/* ─── Bio ─── */}
             {selectedTradie.bio ? (
@@ -562,14 +989,21 @@ export default function MapScreen() {
                   style={({ pressed }) => [
                     styles.actionBtn,
                     styles.actionBtnOutline,
-                    { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+                    {
+                      borderColor: colors.border,
+                      opacity: pressed ? 0.7 : 1,
+                    },
                   ]}
-                  onPress={() => Linking.openURL(`tel:${selectedTradie.phone}`)}
+                  onPress={() =>
+                    Linking.openURL(`tel:${selectedTradie.phone}`)
+                  }
                   accessibilityRole="button"
                   accessibilityLabel={`Call ${selectedTradie.business_name}`}
                 >
                   <MaterialIcons name="phone" size={16} color={colors.text} />
-                  <Text style={[styles.actionBtnText, { color: colors.text }]}>Call</Text>
+                  <Text style={[styles.actionBtnText, { color: colors.text }]}>
+                    Call
+                  </Text>
                 </Pressable>
               )}
 
@@ -577,15 +1011,25 @@ export default function MapScreen() {
                 style={({ pressed }) => [
                   styles.actionBtn,
                   styles.actionBtnPrimary,
-                  { backgroundColor: tradeColor, opacity: pressed ? 0.85 : 1 },
+                  {
+                    backgroundColor: tradeColor,
+                    opacity: pressed ? 0.85 : 1,
+                  },
                 ]}
                 onPress={() =>
-                  router.push({ pathname: '/builder-profile', params: { id: selectedTradie.id } })
+                  router.push({
+                    pathname: '/builder-profile',
+                    params: { id: selectedTradie.id },
+                  })
                 }
                 accessibilityRole="button"
                 accessibilityLabel={`View ${selectedTradie.business_name} profile`}
               >
-                <Ionicons name="person-circle-outline" size={16} color="#fff" />
+                <Ionicons
+                  name="person-circle-outline"
+                  size={16}
+                  color="#fff"
+                />
                 <Text style={styles.actionBtnPrimaryText}>View Profile</Text>
               </Pressable>
             </View>
@@ -603,11 +1047,39 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // ── Marker ──
-  markerPin: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  // ── Marker (photo style — Snap Maps) ──
+  markerOuter: {
+    alignItems: 'center',
+  },
+  markerPhotoRing: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+      },
+      android: { elevation: 4 },
+      default: {},
+    }),
+  },
+  markerPhoto: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
+  // ── Marker (trade icon style) ──
+  markerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     ...Platform.select({
@@ -621,11 +1093,6 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  markerInitial: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '800',
-  },
   pinTail: {
     width: 0,
     height: 0,
@@ -635,7 +1102,7 @@ const styles = StyleSheet.create({
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
     alignSelf: 'center',
-    marginTop: -1,
+    marginTop: -2,
   },
 
   // ── Filter bar ──
@@ -668,16 +1135,84 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  allTradesPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
 
-  // ── Count badge ──
-  countBadge: {
+  // ── Right-side map actions ──
+  mapActions: {
     position: 'absolute',
+    right: Spacing.lg,
+    gap: Spacing.sm,
+    alignItems: 'center',
+  },
+  mapActionBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.12,
+        shadowRadius: 3,
+      },
+      android: { elevation: 2 },
+      default: {},
+    }),
+  },
+  countText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  // ── Empty state hint ──
+  emptyHint: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: '45%',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    borderRadius: Radius.lg,
+    gap: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.12,
+        shadowRadius: 6,
+      },
+      android: { elevation: 3 },
+      default: {},
+    }),
+  },
+  emptyHintText: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  emptyHintSub: {
+    fontSize: 13,
+  },
+
+  // ── Location denied banner (dismissable, bottom-positioned) ──
+  deniedBanner: {
+    position: 'absolute',
+    left: Spacing.lg,
     right: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: Spacing.sm + 2,
-    paddingVertical: 5,
+    gap: 8,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
     borderRadius: Radius.full,
     borderWidth: 1,
     ...Platform.select({
@@ -691,36 +1226,44 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  countText: {
-    fontSize: 12,
-    fontWeight: '600',
+  deniedText: {
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
   },
 
   // ── Bottom sheet ──
   sheetContent: {
     paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing['3xl'],
     gap: Spacing.lg,
   },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    paddingTop: Spacing.sm,
+    paddingTop: Spacing.xs,
+  },
+  avatarRing: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    borderWidth: 2.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e2e8f0',
   },
   sheetAvatar: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: '#e2e8f0',
+    width: 58,
+    height: 58,
+    borderRadius: 29,
   },
   sheetHeaderText: {
     flex: 1,
-    gap: 4,
+    gap: 5,
   },
   sheetName: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 19,
+    fontWeight: '800',
     letterSpacing: -0.3,
   },
   sheetMetaRow: {
@@ -730,6 +1273,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   tradePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 9,
     paddingVertical: 3,
     borderRadius: Radius.full,
@@ -842,5 +1388,50 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '700',
+  },
+
+  // ── List view ──
+  listContainer: {
+    flex: 1,
+  },
+  listHeader: {
+    paddingHorizontal: 0,
+    paddingBottom: Spacing.sm,
+    borderBottomWidth: 1,
+  },
+  listSubHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg,
+  },
+  listCount: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+    borderRadius: Radius.full,
+  },
+  viewToggleText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  listEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  emptySubtitle: {
+    fontSize: 14,
   },
 });

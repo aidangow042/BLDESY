@@ -1,40 +1,100 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
+import React, { useState, useCallback } from 'react';
+import { View, Pressable, StyleSheet } from 'react-native';
+import { withLayoutContext } from 'expo-router';
+import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
+import type { MaterialTopTabBarProps } from '@react-navigation/material-top-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { HapticTab } from '@/components/haptic-tab';
+import * as Haptics from 'expo-haptics';
+
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-export default function TabLayout() {
+const { Navigator } = createMaterialTopTabNavigator();
+const TopTabs = withLayoutContext(Navigator);
+
+// Shared flag so BottomTabBar can tell TabLayout to skip animation
+let disableAnimation: (() => void) | null = null;
+
+function BottomTabBar({ state, descriptors, navigation }: MaterialTopTabBarProps) {
   const colorScheme = useColorScheme();
   const theme = colorScheme === 'dark' ? 'dark' : 'light';
   const colors = Colors[theme];
   const insets = useSafeAreaInsets();
 
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: colors.teal,
-        tabBarInactiveTintColor: '#3A3A4A',
-        tabBarShowLabel: false,
-        headerShown: false,
-        tabBarButton: HapticTab,
-        tabBarStyle: {
+    <View
+      style={[
+        styles.tabBar,
+        {
           backgroundColor: colors.canvas,
-          borderTopWidth: 1,
           borderTopColor: colors.border,
-          height: 48 + insets.bottom,
-          paddingTop: Spacing.sm,
           paddingBottom: insets.bottom,
+          height: 48 + insets.bottom,
           ...Shadows.sm,
         },
-        tabBarIconStyle: {
-          marginTop: Spacing.xs,
-        },
+      ]}
+    >
+      {state.routes.map((route, index) => {
+        const { options } = descriptors[route.key];
+
+        // Skip hidden screens
+        if ((options as any).href === null) return null;
+
+        const isFocused = state.index === index;
+        const color = isFocused ? colors.teal : '#3A3A4A';
+        const icon = options.tabBarIcon?.({ color, focused: isFocused } as any);
+
+        const onPress = () => {
+          if (process.env.EXPO_OS === 'ios') {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }
+          const event = navigation.emit({
+            type: 'tabPress',
+            target: route.key,
+            canPreventDefault: true,
+          });
+          if (!isFocused && !event.defaultPrevented) {
+            // Temporarily disable animation for instant switch
+            disableAnimation?.();
+            navigation.navigate(route.name);
+          }
+        };
+
+        return (
+          <Pressable
+            key={route.key}
+            onPress={onPress}
+            style={styles.tabItem}
+          >
+            {icon}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+export default function TabLayout() {
+  const [animationEnabled, setAnimationEnabled] = useState(true);
+
+  disableAnimation = useCallback(() => {
+    setAnimationEnabled(false);
+    // Re-enable after the navigation completes so swipes still animate
+    setTimeout(() => setAnimationEnabled(true), 50);
+  }, []);
+
+  return (
+    <TopTabs
+      tabBarPosition="bottom"
+      tabBar={(props) => <BottomTabBar {...props} />}
+      screenOptions={{
+        swipeEnabled: true,
+        lazy: true,
+        animationEnabled,
       }}
     >
-      <Tabs.Screen
+      <TopTabs.Screen
         name="index"
         options={{
           title: 'Home',
@@ -44,7 +104,7 @@ export default function TabLayout() {
         }}
       />
 
-      <Tabs.Screen
+      <TopTabs.Screen
         name="ai"
         options={{
           title: 'AI Assist',
@@ -54,17 +114,18 @@ export default function TabLayout() {
         }}
       />
 
-      <Tabs.Screen
+      <TopTabs.Screen
         name="map"
         options={{
           title: 'Map',
+          swipeEnabled: false,
           tabBarIcon: ({ color }: { color: string }) => (
             <IconSymbol size={26} name="map" color={color} />
           ),
         }}
       />
 
-      <Tabs.Screen
+      <TopTabs.Screen
         name="saved"
         options={{
           title: 'Saved',
@@ -74,10 +135,22 @@ export default function TabLayout() {
         }}
       />
 
-      {/* Portal is now a pushed screen — hide from tab bar */}
-      <Tabs.Screen name="portal" options={{ href: null }} />
-      {/* Hide Explore if the file still exists */}
-      <Tabs.Screen name="explore" options={{ href: null }} />
-    </Tabs>
+      {/* Hidden screens — keep in route tree but not in tab bar */}
+      <TopTabs.Screen name="portal" options={{ href: null }} />
+      <TopTabs.Screen name="explore" options={{ href: null }} />
+    </TopTabs>
   );
 }
+
+const styles = StyleSheet.create({
+  tabBar: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    paddingTop: Spacing.sm,
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

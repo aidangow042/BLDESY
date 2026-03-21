@@ -141,12 +141,6 @@ export function SideDrawer({ visible, onClose }: SideDrawerProps) {
 
   const mainItems: DrawerItem[] = [
     {
-      key: 'portal',
-      label: userInfo.isBuilder ? 'Builder Portal' : 'Join as Builder',
-      icon: <MaterialIcons name="construction" size={20} color={colors.teal} />,
-      onPress: () => navigate('/(tabs)/portal'),
-    },
-    {
       key: 'settings',
       label: 'Settings',
       icon: <MaterialIcons name="settings" size={20} color={colors.textSecondary} />,
@@ -195,21 +189,23 @@ export function SideDrawer({ visible, onClose }: SideDrawerProps) {
           },
         ]}
       >
-        {/* ─── User header with teal gradient ─── */}
+        {/* ─── User header with premium gradient ─── */}
         <LinearGradient
-          colors={['#0d9488', '#0f766e']}
+          colors={isDark ? ['#042f2e', '#0a3a38', '#134E4A'] : ['#064E3B', '#0F6E56', '#1D9E75']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[styles.userHeader, { paddingTop: insets.top + Spacing.lg }]}
         >
-          {/* Decorative dots pattern */}
-          <View style={styles.headerDots} pointerEvents="none">
-            {Array.from({ length: 16 }).map((_, i) => (
-              <View
-                key={i}
-                style={[styles.dot, { backgroundColor: 'rgba(255,255,255,0.09)' }]}
-              />
-            ))}
+          {/* Subtle radial glow */}
+          <View style={styles.glowWrap} pointerEvents="none">
+            <View style={[styles.glow, isDark && { opacity: 0.06 }]} />
+          </View>
+
+          {/* Diagonal accent lines */}
+          <View style={styles.accentLines} pointerEvents="none">
+            <View style={[styles.accentLine, { left: '25%', opacity: 0.04 }]} />
+            <View style={[styles.accentLine, { left: '55%', opacity: 0.03 }]} />
+            <View style={[styles.accentLine, { left: '80%', opacity: 0.025 }]} />
           </View>
 
           <View style={styles.avatarWrap}>
@@ -357,19 +353,31 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
   },
-  headerDots: {
+  glowWrap: {
     ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    alignContent: 'center',
-    gap: 26,
-    opacity: 0.7,
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    overflow: 'hidden',
   },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  glow: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginTop: -30,
+    marginRight: -30,
+  },
+  accentLines: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  accentLine: {
+    position: 'absolute' as const,
+    top: -20,
+    width: 1,
+    height: '150%',
+    backgroundColor: '#fff',
+    transform: [{ rotate: '15deg' }],
   },
   avatarWrap: {
     width: 68,

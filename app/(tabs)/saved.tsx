@@ -12,23 +12,24 @@ import {
   Text,
   View,
 } from 'react-native';
-// SafeAreaView not needed — PageHeader handles top inset, tab bar handles bottom
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
-import { PageHeader, HeaderIcon } from '@/components/page-header';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_PADDING = Spacing.xl;
 const CARD_WIDTH = SCREEN_WIDTH - CARD_PADDING * 2;
-const CAROUSEL_HEIGHT = 200;
-const AVATAR_SIZE = 48;
+const CAROUSEL_HEIGHT = 190;
+const AVATAR_SIZE = 60;
+const AVATAR_OVERLAP = AVATAR_SIZE / 2;
 
 // ─── Trade icons for placeholders ────────────────────────────────────────────
 
@@ -71,12 +72,10 @@ type SavedBuilder = {
 function PhotoCarousel({
   images,
   tradeCategory,
-  colors,
   isDark,
 }: {
   images: string[];
   tradeCategory: string;
-  colors: any;
   isDark: boolean;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -90,15 +89,16 @@ function PhotoCarousel({
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
-  // No images — branded placeholder
+  // No images — branded placeholder with trade icon on teal-to-grey gradient
   if (images.length === 0) {
     return (
       <LinearGradient
-        colors={isDark ? ['#134E4A', '#0f2a2a'] : ['#e6f7f5', '#f0fdfa']}
+        colors={isDark ? ['#134E4A', '#1e293b'] : ['#e6f7f5', '#e2e8f0']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
         style={styles.carouselPlaceholder}
       >
         <View style={styles.placeholderPattern}>
-          {/* Subtle repeating dots */}
           {Array.from({ length: 24 }).map((_, i) => (
             <View
               key={i}
@@ -110,9 +110,6 @@ function PhotoCarousel({
           ))}
         </View>
         <Text style={styles.placeholderIcon}>{getTradeIcon(tradeCategory)}</Text>
-        <Text style={[styles.placeholderText, { color: colors.teal }]}>
-          {tradeCategory.charAt(0).toUpperCase() + tradeCategory.slice(1)}
-        </Text>
       </LinearGradient>
     );
   }
@@ -161,17 +158,17 @@ function PhotoCarousel({
   );
 }
 
-// ─── Animated card entrance ──────────────────────────────────────────────────
+// ─── Animated card entrance (staggered 50ms) ────────────────────────────────
 
 function AnimatedCard({ index, children }: { index: number; children: React.ReactNode }) {
   const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(28)).current;
+  const translateY = useRef(new Animated.Value(24)).current;
 
   useEffect(() => {
-    const delay = Math.min(index * 100, 400);
+    const delay = Math.min(index * 50, 300);
     Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 420, delay, useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 0, duration: 420, delay, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 380, delay, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 0, duration: 380, delay, useNativeDriver: true }),
     ]).start();
   }, []);
 
@@ -182,7 +179,7 @@ function AnimatedCard({ index, children }: { index: number; children: React.Reac
   );
 }
 
-// ─── Heart button with pop animation ─────────────────────────────────────────
+// ─── Heart button with frosted glass + pop animation ─────────────────────────
 
 function HeartButton({ onPress }: { onPress: () => void }) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -198,8 +195,8 @@ function HeartButton({ onPress }: { onPress: () => void }) {
           style: 'destructive',
           onPress: () => {
             Animated.sequence([
-              Animated.timing(scale, { toValue: 1.35, duration: 100, useNativeDriver: true }),
-              Animated.timing(scale, { toValue: 0.9, duration: 80, useNativeDriver: true }),
+              Animated.timing(scale, { toValue: 1.4, duration: 90, useNativeDriver: true }),
+              Animated.timing(scale, { toValue: 0.85, duration: 70, useNativeDriver: true }),
               Animated.timing(scale, { toValue: 1, duration: 100, useNativeDriver: true }),
             ]).start();
             onPress();
@@ -224,27 +221,6 @@ function HeartButton({ onPress }: { onPress: () => void }) {
   );
 }
 
-// ─── Star display ────────────────────────────────────────────────────────────
-
-function StarRating({ rating, count }: { rating: number; count: number }) {
-  const full = Math.floor(rating);
-  const half = rating - full >= 0.25;
-  const stars: string[] = [];
-  for (let i = 0; i < full; i++) stars.push('star');
-  if (half) stars.push('star-half');
-  while (stars.length < 5) stars.push('star-border');
-
-  return (
-    <View style={styles.starRow}>
-      {stars.map((s, i) => (
-        <MaterialIcons key={i} name={s as any} size={14} color="#F59E0B" />
-      ))}
-      <Text style={styles.ratingText}>{rating.toFixed(1)}</Text>
-      <Text style={styles.reviewCountText}>({count})</Text>
-    </View>
-  );
-}
-
 // ─── Skeleton loading card ───────────────────────────────────────────────────
 
 function SkeletonCard({ colors }: { colors: any }) {
@@ -266,26 +242,57 @@ function SkeletonCard({ colors }: { colors: any }) {
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Animated.View style={{ height: CAROUSEL_HEIGHT, backgroundColor: colors.border, opacity, borderTopLeftRadius: 15, borderTopRightRadius: 15 }} />
-      <View style={{ padding: Spacing.lg, gap: Spacing.md }}>
-        <View style={{ flexDirection: 'row', gap: Spacing.md, alignItems: 'center' }}>
-          <Animated.View style={{ width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2, backgroundColor: colors.border, opacity }} />
+      <View style={{ padding: Spacing.md, paddingTop: AVATAR_OVERLAP + Spacing.sm, gap: 8 }}>
+        <View style={{ flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' }}>
           <View style={{ flex: 1, gap: 6 }}>
             <Animated.View style={{ height: 14, width: '65%', borderRadius: 7, backgroundColor: colors.border, opacity }} />
             <Animated.View style={{ height: 11, width: '45%', borderRadius: 5, backgroundColor: colors.border, opacity }} />
           </View>
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Animated.View style={{ height: 28, width: 80, borderRadius: Radius.full, backgroundColor: colors.border, opacity }} />
-          <Animated.View style={{ height: 28, width: 90, borderRadius: Radius.full, backgroundColor: colors.border, opacity }} />
+          <Animated.View style={{ height: 26, width: 80, borderRadius: Radius.full, backgroundColor: colors.border, opacity }} />
+          <Animated.View style={{ height: 26, width: 90, borderRadius: Radius.full, backgroundColor: colors.border, opacity }} />
         </View>
         <Animated.View style={{ height: 12, width: '100%', borderRadius: 6, backgroundColor: colors.border, opacity }} />
-        <Animated.View style={{ height: 12, width: '80%', borderRadius: 6, backgroundColor: colors.border, opacity }} />
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
-          <Animated.View style={{ flex: 1, height: 44, borderRadius: Radius.md, backgroundColor: colors.border, opacity }} />
-          <Animated.View style={{ flex: 1.3, height: 44, borderRadius: Radius.md, backgroundColor: colors.border, opacity }} />
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+          <Animated.View style={{ flex: 1, height: 42, borderRadius: Radius.md, backgroundColor: colors.border, opacity }} />
+          <Animated.View style={{ flex: 1, height: 42, borderRadius: Radius.md, backgroundColor: colors.border, opacity }} />
         </View>
       </View>
     </View>
+  );
+}
+
+// ─── Discover more tradies suggestion card ───────────────────────────────────
+
+function DiscoverCard({ colors, teal, onPress }: { colors: any; teal: string; onPress: () => void }) {
+  return (
+    <AnimatedCard index={1}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.discoverCard,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+          },
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        <View style={[styles.discoverIconWrap, { backgroundColor: colors.tealBg }]}>
+          <MaterialIcons name="search" size={28} color={teal} />
+        </View>
+        <View style={styles.discoverTextCol}>
+          <Text style={[styles.discoverTitle, { color: colors.text }]}>
+            Discover more tradies
+          </Text>
+          <Text style={[styles.discoverSub, { color: colors.textSecondary }]}>
+            Find the right trade for your next job
+          </Text>
+        </View>
+        <MaterialIcons name="chevron-right" size={22} color={colors.icon} />
+      </Pressable>
+    </AnimatedCard>
   );
 }
 
@@ -337,7 +344,6 @@ export default function SavedScreen() {
       return;
     }
 
-    // Map the base data
     const mapped: SavedBuilder[] = (data ?? [])
       .filter((row: any) => row.builder_profiles)
       .map((row: any) => ({
@@ -399,11 +405,11 @@ export default function SavedScreen() {
       .eq('builder_id', builderId);
   }
 
-  // ─── Collect project images for carousel ──────────────────────────
+  // ─── Collect project images for carousel (project photos only, not logo) ──
 
   function getCarouselImages(builder: SavedBuilder): string[] {
     const images: string[] = [];
-    if (builder.cover_photo_url) images.push(builder.cover_photo_url);
+    // Only use actual project photos, not logo/profile photo
     if (builder.projects?.length) {
       for (const proj of builder.projects) {
         if (proj.images?.length) {
@@ -412,6 +418,10 @@ export default function SavedScreen() {
           images.push(proj.image_url);
         }
       }
+    }
+    // Fall back to cover photo only if it exists and we have no project photos
+    if (images.length === 0 && builder.cover_photo_url) {
+      images.push(builder.cover_photo_url);
     }
     return images.slice(0, 5);
   }
@@ -454,13 +464,12 @@ export default function SavedScreen() {
             <PhotoCarousel
               images={images}
               tradeCategory={item.trade_category}
-              colors={colors}
               isDark={isDark}
             />
 
             {/* Gradient overlay at bottom */}
             <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.35)']}
+              colors={['transparent', 'rgba(0,0,0,0.3)']}
               style={styles.carouselGradient}
               pointerEvents="none"
             />
@@ -469,7 +478,7 @@ export default function SavedScreen() {
             <HeartButton onPress={() => unsaveBuilder(item.builder_id)} />
 
             {/* Image count pill */}
-            {images.length > 1 && (
+            {images.length > 0 && (
               <View style={styles.imageCountPill}>
                 <MaterialIcons name="photo-library" size={12} color="#fff" />
                 <Text style={styles.imageCountText}>{images.length}</Text>
@@ -477,43 +486,54 @@ export default function SavedScreen() {
             )}
           </View>
 
+          {/* ─── Avatar overlapping banner ─── */}
+          <View style={styles.avatarOverlapWrap}>
+            <View style={styles.avatarRing}>
+              <Image source={{ uri: avatarUri }} style={styles.avatar} />
+            </View>
+          </View>
+
           {/* ─── Profile section ─── */}
           <View style={styles.profileSection}>
-            {/* Avatar + name + trade */}
-            <View style={styles.profileRow}>
-              <View style={styles.avatarWrap}>
-                <Image source={{ uri: avatarUri }} style={styles.avatar} />
-              </View>
-              <View style={styles.profileInfo}>
-                <Text
-                  style={[styles.businessName, { color: colors.text }]}
-                  numberOfLines={1}
-                >
-                  {item.business_name}
-                </Text>
-                <View style={styles.tradeLocationRow}>
-                  <View style={[styles.tradePill, { backgroundColor: colors.tealBg }]}>
-                    <Text style={[styles.tradePillText, { color: teal }]}>{tradeLabel}</Text>
-                  </View>
-                  <View style={styles.locationChip}>
-                    <MaterialIcons name="location-on" size={13} color={colors.textSecondary} />
-                    <Text style={[styles.locationText, { color: colors.textSecondary }]}>
-                      {item.suburb}, {item.postcode}
-                    </Text>
-                  </View>
+            {/* Name + trade + location + saved date */}
+            <View style={styles.profileInfo}>
+              <Text
+                style={[styles.businessName, { color: colors.text }]}
+                numberOfLines={1}
+              >
+                {item.business_name}
+              </Text>
+              <View style={styles.tradeLocationRow}>
+                <View style={[styles.tradePill, { backgroundColor: colors.tealBg }]}>
+                  <Text style={[styles.tradePillText, { color: teal }]}>{tradeLabel}</Text>
                 </View>
+                <View style={styles.locationChip}>
+                  <MaterialIcons name="location-on" size={12} color={colors.textSecondary} />
+                  <Text style={[styles.locationText, { color: colors.textSecondary }]}>
+                    {item.suburb}, {item.postcode}
+                  </Text>
+                </View>
+                <Text style={[styles.savedDateInline, { color: colors.icon }]}>
+                  · Saved {savedDate}
+                </Text>
               </View>
             </View>
 
-            {/* Star rating */}
+            {/* Rating or "New on BLDEASY" */}
             {item.review_count > 0 ? (
-              <StarRating rating={item.avg_rating} count={item.review_count} />
-            ) : (
-              <View style={styles.starRow}>
-                <MaterialIcons name="star-border" size={14} color={colors.icon} />
+              <View style={styles.ratingRow}>
+                <Text style={styles.ratingBig}>{item.avg_rating.toFixed(1)}</Text>
+                <MaterialIcons name="star" size={16} color="#F59E0B" />
                 <Text style={[styles.reviewCountText, { color: colors.textSecondary }]}>
-                  No reviews yet
+                  · {item.review_count} review{item.review_count !== 1 ? 's' : ''}
                 </Text>
+              </View>
+            ) : (
+              <View style={styles.newBadgeRow}>
+                <View style={styles.newBadge}>
+                  <MaterialIcons name="auto-awesome" size={12} color="#92400E" />
+                  <Text style={styles.newBadgeText}>New on BLDEASY</Text>
+                </View>
               </View>
             )}
 
@@ -538,7 +558,10 @@ export default function SavedScreen() {
                 <Pressable
                   style={[
                     styles.specBadge,
-                    { backgroundColor: isDark ? colors.tintLight : '#F0F0FF' },
+                    {
+                      borderColor: isDark ? 'rgba(99,102,241,0.3)' : 'rgba(79,70,229,0.2)',
+                      backgroundColor: isDark ? colors.tintLight : '#F0F0FF',
+                    },
                   ]}
                   onPress={() =>
                     router.push({ pathname: '/builder-profile', params: { id: item.builder_id } })
@@ -562,19 +585,17 @@ export default function SavedScreen() {
               </Text>
             ) : null}
 
-            {/* Saved date */}
-            <Text style={[styles.savedDate, { color: colors.icon }]}>
-              Saved {savedDate}
-            </Text>
-
             {/* ─── CTA buttons ─── */}
             <View style={[styles.ctaDivider, { backgroundColor: colors.border }]} />
             <View style={styles.ctaRow}>
               <Pressable
                 style={({ pressed }) => [
                   styles.btnOutline,
-                  { borderColor: colors.border, backgroundColor: isDark ? colors.surface : '#fff' },
-                  pressed && { opacity: 0.7, backgroundColor: colors.borderLight },
+                  {
+                    borderColor: isDark ? colors.border : '#C4C9CF',
+                    backgroundColor: isDark ? colors.surface : '#F8F9FA',
+                  },
+                  pressed && { opacity: 0.7 },
                 ]}
                 onPress={() =>
                   router.push({ pathname: '/builder-profile', params: { id: item.builder_id } })
@@ -592,16 +613,13 @@ export default function SavedScreen() {
                   pressed && { opacity: 0.85 },
                 ]}
                 onPress={() =>
-                  router.push({
-                    pathname: '/post-job',
-                    params: { suggested_trade: item.trade_category },
-                  })
+                  router.push({ pathname: '/builder-profile', params: { id: item.builder_id } })
                 }
                 accessibilityRole="button"
-                accessibilityLabel={`Post a job for ${item.business_name}`}
+                accessibilityLabel={`Contact ${item.business_name}`}
               >
-                <MaterialIcons name="post-add" size={15} color="#fff" />
-                <Text style={styles.btnPrimaryText}>Post a Job</Text>
+                <MaterialIcons name="phone" size={15} color="#fff" />
+                <Text style={styles.btnPrimaryText}>Contact</Text>
               </Pressable>
             </View>
           </View>
@@ -614,22 +632,60 @@ export default function SavedScreen() {
   // HEADER
   // ═════════════════════════════════════════════════════════════════════
 
+  const insets = useSafeAreaInsets();
+  const count = builders.length;
+  const subtitleText = count > 0
+    ? `${count} builder${count !== 1 ? 's' : ''} saved`
+    : 'Your favourite tradies';
+
   function renderHeader() {
     return (
-      <PageHeader
-        title="Saved"
-        subtitle={
-          builders.length > 0
-            ? `${builders.length} builder${builders.length !== 1 ? 's' : ''} saved`
-            : 'Your favourite tradies'
-        }
-        variant="warm"
-        rightElement={
-          <HeaderIcon size={48} onRichBackground>
-            <Ionicons name="bookmark" size={22} color="#ffffff" />
-          </HeaderIcon>
-        }
-      />
+      <View style={headerStyles.container}>
+        <LinearGradient
+          colors={isDark ? ['#042f2e', '#0a3a38', '#134E4A'] : ['#064E3B', '#0F6E56', '#1D9E75']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[headerStyles.gradient, { paddingTop: insets.top + Spacing.lg }]}
+        >
+          {/* Subtle radial glow */}
+          <View style={headerStyles.glowWrap} pointerEvents="none">
+            <View style={[headerStyles.glow, isDark && { opacity: 0.06 }]} />
+          </View>
+
+          {/* Diagonal accent lines */}
+          <View style={headerStyles.accentLines} pointerEvents="none">
+            <View style={[headerStyles.accentLine, { left: '20%', opacity: 0.04 }]} />
+            <View style={[headerStyles.accentLine, { left: '50%', opacity: 0.03 }]} />
+            <View style={[headerStyles.accentLine, { left: '75%', opacity: 0.025 }]} />
+          </View>
+
+          {/* Content row */}
+          <View style={headerStyles.content}>
+            <View style={headerStyles.textCol}>
+              <Text style={headerStyles.title}>Saved</Text>
+              <Text style={headerStyles.subtitle}>{subtitleText}</Text>
+            </View>
+
+            {/* Count badge / icon */}
+            {count > 0 ? (
+              <View style={headerStyles.countBadge}>
+                <Text style={headerStyles.countNumber}>{count}</Text>
+                <Ionicons name="bookmark" size={11} color="rgba(255,255,255,0.7)" />
+              </View>
+            ) : (
+              <View style={headerStyles.iconCircle}>
+                <Ionicons name="bookmark-outline" size={22} color="#fff" />
+              </View>
+            )}
+          </View>
+        </LinearGradient>
+
+        {/* Bottom fade edge */}
+        <LinearGradient
+          colors={['rgba(13,148,136,0.12)', 'transparent']}
+          style={headerStyles.bottomEdge}
+        />
+      </View>
     );
   }
 
@@ -641,6 +697,7 @@ export default function SavedScreen() {
 
   if (loading) {
     return (
+
       <View style={[styles.safeArea, { backgroundColor: pageBackground }]}>
         {renderHeader()}
         <View style={styles.skeletonList}>
@@ -653,6 +710,7 @@ export default function SavedScreen() {
 
   if (!loggedIn) {
     return (
+
       <View style={[styles.safeArea, { backgroundColor: pageBackground }]}>
         {renderHeader()}
         <View style={styles.emptyState}>
@@ -668,8 +726,10 @@ export default function SavedScreen() {
     );
   }
 
+  // ─── Zero saved tradies — full empty state ───
   if (builders.length === 0) {
     return (
+
       <View style={[styles.safeArea, { backgroundColor: pageBackground }]}>
         {renderHeader()}
         <View style={styles.emptyState}>
@@ -711,6 +771,15 @@ export default function SavedScreen() {
         renderItem={renderCard}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        ListFooterComponent={
+          builders.length <= 2 ? (
+            <DiscoverCard
+              colors={colors}
+              teal={teal}
+              onPress={() => router.push('/(tabs)' as any)}
+            />
+          ) : null
+        }
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -741,12 +810,12 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.lg,
     paddingHorizontal: CARD_PADDING,
     paddingBottom: Spacing['5xl'] + 20,
-    gap: Spacing.lg,
+    gap: 15,
   },
   skeletonList: {
     paddingTop: Spacing.lg,
     paddingHorizontal: CARD_PADDING,
-    gap: Spacing.lg,
+    gap: 15,
   },
 
   /* ─── Card ─────────────────────────────────────── */
@@ -757,11 +826,11 @@ const styles = StyleSheet.create({
     ...Platform.select({
       ios: {
         shadowColor: '#0f172a',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
       },
-      android: { elevation: 2 },
+      android: { elevation: 3 },
       default: {},
     }),
   },
@@ -781,7 +850,6 @@ const styles = StyleSheet.create({
     height: CAROUSEL_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
     overflow: 'hidden',
   },
   placeholderPattern: {
@@ -799,23 +867,18 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   placeholderIcon: {
-    fontSize: 44,
-  },
-  placeholderText: {
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: 0.3,
+    fontSize: 48,
   },
   carouselGradient: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: 70,
+    height: 60,
   },
   dotRow: {
     position: 'absolute',
-    bottom: 12,
+    bottom: 10,
     left: 0,
     right: 0,
     flexDirection: 'row',
@@ -828,35 +891,34 @@ const styles = StyleSheet.create({
   },
   heartBtn: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    top: 10,
+    right: 10,
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    backgroundColor: 'rgba(255,255,255,0.75)',
     alignItems: 'center',
     justifyContent: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.15,
-        shadowRadius: 3,
-      },
-      android: { elevation: 3 },
-      default: {},
-    }),
+    // Frosted glass effect
+    ...(Platform.OS === 'ios'
+      ? {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.12,
+          shadowRadius: 4,
+        }
+      : { elevation: 4 }),
   },
   imageCountPill: {
     position: 'absolute',
-    bottom: 12,
-    right: 12,
+    bottom: 10,
+    right: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: 'rgba(0,0,0,0.5)',
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: Radius.full,
   },
   imageCountText: {
@@ -865,21 +927,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  /* ─── Profile section ──────────────────────────── */
-  profileSection: {
-    padding: Spacing.lg,
-    gap: 10,
+  /* ─── Avatar overlapping banner ──────────────────── */
+  avatarOverlapWrap: {
+    position: 'relative',
+    height: AVATAR_OVERLAP,
+    marginTop: -AVATAR_OVERLAP,
+    paddingLeft: Spacing.md,
+    zIndex: 2,
   },
-  profileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  avatarWrap: {
-    width: AVATAR_SIZE + 4,
-    height: AVATAR_SIZE + 4,
-    borderRadius: (AVATAR_SIZE + 4) / 2,
-    borderWidth: 2.5,
+  avatarRing: {
+    width: AVATAR_SIZE + 6,
+    height: AVATAR_SIZE + 6,
+    borderRadius: (AVATAR_SIZE + 6) / 2,
+    borderWidth: 3,
     borderColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
@@ -887,11 +947,11 @@ const styles = StyleSheet.create({
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.08,
-        shadowRadius: 3,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
       },
-      android: { elevation: 2 },
+      android: { elevation: 3 },
       default: {},
     }),
   },
@@ -900,9 +960,16 @@ const styles = StyleSheet.create({
     height: AVATAR_SIZE,
     borderRadius: AVATAR_SIZE / 2,
   },
+
+  /* ─── Profile section ──────────────────────────── */
+  profileSection: {
+    paddingHorizontal: Spacing.md,
+    paddingTop: AVATAR_OVERLAP + 4,
+    paddingBottom: Spacing.md,
+    gap: 7,
+  },
   profileInfo: {
-    flex: 1,
-    gap: 4,
+    gap: 3,
   },
   businessName: {
     fontSize: 17,
@@ -912,16 +979,16 @@ const styles = StyleSheet.create({
   tradeLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     flexWrap: 'wrap',
   },
   tradePill: {
-    paddingHorizontal: 9,
-    paddingVertical: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: Radius.full,
   },
   tradePillText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   locationChip: {
@@ -930,32 +997,53 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   locationText: {
-    fontSize: 13,
+    fontSize: 12,
+  },
+  savedDateInline: {
+    fontSize: 12,
+    fontWeight: '400',
   },
 
-  /* ─── Stars ────────────────────────────────────── */
-  starRow: {
+  /* ─── Rating ────────────────────────────────────── */
+  ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
   },
-  ratingText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#78716C',
-    marginLeft: 3,
+  ratingBig: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#92400E',
   },
   reviewCountText: {
     fontSize: 13,
     fontWeight: '400',
-    color: '#A3A3A3',
+  },
+
+  /* ─── New badge ─────────────────────────────────── */
+  newBadgeRow: {
+    flexDirection: 'row',
+  },
+  newBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: Radius.full,
+  },
+  newBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#92400E',
   },
 
   /* ─── Badges ───────────────────────────────────── */
   badgeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
     alignItems: 'center',
   },
   verifyBadge: {
@@ -978,6 +1066,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: Radius.full,
+    borderWidth: 1,
   },
   specBadgeText: {
     fontSize: 12,
@@ -986,21 +1075,15 @@ const styles = StyleSheet.create({
 
   /* ─── Bio ──────────────────────────────────────── */
   bio: {
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 13,
+    lineHeight: 19,
     letterSpacing: -0.1,
-  },
-
-  /* ─── Saved date ───────────────────────────────── */
-  savedDate: {
-    fontSize: 12,
-    fontWeight: '500',
   },
 
   /* ─── CTA buttons ──────────────────────────────── */
   ctaDivider: {
     height: 1,
-    marginTop: 4,
+    marginTop: 2,
   },
   ctaRow: {
     flexDirection: 'row',
@@ -1009,9 +1092,9 @@ const styles = StyleSheet.create({
   },
   btnOutline: {
     flex: 1,
-    height: 44,
+    height: 42,
     borderRadius: Radius.md,
-    borderWidth: 1,
+    borderWidth: 1.5,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1022,8 +1105,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   btnPrimary: {
-    flex: 1.3,
-    height: 44,
+    flex: 1,
+    height: 42,
     borderRadius: Radius.md,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1034,6 +1117,36 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '700',
+  },
+
+  /* ─── Discover card ─────────────────────────────── */
+  discoverCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    gap: Spacing.md,
+  },
+  discoverIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  discoverTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  discoverTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  discoverSub: {
+    fontSize: 13,
+    lineHeight: 18,
   },
 
   /* ─── Empty state ──────────────────────────────── */
@@ -1078,5 +1191,102 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// HEADER STYLES
+// ═════════════════════════════════════════════════════════════════════════════
+
+const headerStyles = StyleSheet.create({
+  container: {
+    position: 'relative',
+  },
+  gradient: {
+    paddingBottom: Spacing['2xl'],
+    paddingHorizontal: Spacing.xl,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  glowWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    overflow: 'hidden',
+  },
+  glow: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginTop: -40,
+    marginRight: -40,
+  },
+  accentLines: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  accentLine: {
+    position: 'absolute',
+    top: -20,
+    width: 1,
+    height: '150%',
+    backgroundColor: '#fff',
+    transform: [{ rotate: '15deg' }],
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.lg,
+    zIndex: 1,
+  },
+  textCol: {
+    flex: 1,
+    gap: 4,
+  },
+  title: {
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+    lineHeight: 36,
+    color: '#fff',
+  },
+  subtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: -0.1,
+    lineHeight: 19,
+    color: 'rgba(255,255,255,0.75)',
+  },
+  countBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: Radius.full,
+  },
+  countNumber: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: -0.3,
+  },
+  iconCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomEdge: {
+    height: 3,
   },
 });
