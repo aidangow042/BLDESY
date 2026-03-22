@@ -8,6 +8,7 @@ import {
   Image,
   Linking,
   Modal,
+
   Platform,
   Pressable,
   ScrollView,
@@ -59,6 +60,8 @@ type BuilderProfile = {
   profile_photo_url?: string | null;
   projects?: ProjectData[] | null;
   credentials?: CredentialData[] | null;
+  team_members?: TeamMember[] | null;
+  faqs?: FAQItem[] | null;
 };
 
 type ProjectData = {
@@ -67,6 +70,9 @@ type ProjectData = {
   description?: string;
   costRange?: string;
   images: string[];
+  beforeImage?: string | null;
+  afterImage?: string | null;
+  testimonial?: { name: string; videoUri?: string; text?: string } | null;
 };
 
 type CredentialData = {
@@ -75,12 +81,28 @@ type CredentialData = {
   type: string;
 };
 
+type TeamMember = {
+  id: string;
+  name: string;
+  role: string;
+  photoUri?: string | null;
+};
+
+type FAQItem = {
+  id: string;
+  question: string;
+  answer: string;
+};
+
 type Project = {
   id: string;
   title: string;
   description?: string;
   costRange?: string;
   media: { uri: string; type: 'image' | 'video' }[];
+  beforeImage?: string | null;
+  afterImage?: string | null;
+  testimonial?: { name: string; videoUri?: string; text?: string } | null;
 };
 
 type Review = {
@@ -101,18 +123,6 @@ type SimilarBuilder = {
   photo: string;
 };
 
-// ─── Credential icon helper ──────────────────────────────────────────────────
-
-function credentialIcon(type: string): string {
-  switch (type) {
-    case 'licence': return '🛡️';
-    case 'insurance': return '📋';
-    case 'membership': return '🏆';
-    case 'award': return '⭐';
-    default: return '📄';
-  }
-}
-
 // ─── Convert DB project to display format ────────────────────────────────────
 
 function projectToDisplay(p: ProjectData): Project {
@@ -121,7 +131,13 @@ function projectToDisplay(p: ProjectData): Project {
     title: p.title,
     description: p.description,
     costRange: p.costRange,
-    media: (p.images ?? []).map(uri => ({ uri, type: 'image' as const })),
+    media: (p.images ?? []).map(uri => ({
+      uri,
+      type: (uri.match(/\.(mp4|mov|webm)$/i) ? 'video' : 'image') as 'image' | 'video',
+    })),
+    beforeImage: p.beforeImage,
+    afterImage: p.afterImage,
+    testimonial: p.testimonial,
   };
 }
 
@@ -142,10 +158,12 @@ function StarRow({ rating, size = 14, color }: { rating: number; size?: number; 
 }
 
 function SectionHeader({ title, colors }: { title: string; colors: any }) {
+  const teal = colors.teal;
   return (
     <View style={sectionStyles.headerContainer}>
+      <View style={[sectionStyles.headerAccent, { backgroundColor: teal }]} />
       <Text style={[sectionStyles.headerText, { color: colors.text }]}>{title}</Text>
-      <View style={[sectionStyles.headerLine, { backgroundColor: colors.border }]} />
+      <View style={[sectionStyles.headerLine, { backgroundColor: colors.border, opacity: 0.5 }]} />
     </View>
   );
 }
@@ -154,8 +172,13 @@ const sectionStyles = StyleSheet.create({
   headerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     marginBottom: Spacing.lg,
+  },
+  headerAccent: {
+    width: 3,
+    height: 16,
+    borderRadius: 1.5,
   },
   headerText: {
     fontSize: 13,
@@ -165,7 +188,7 @@ const sectionStyles = StyleSheet.create({
   },
   headerLine: {
     flex: 1,
-    height: 1,
+    height: 0.5,
   },
 });
 
@@ -303,6 +326,226 @@ const lightboxStyles = StyleSheet.create({
   },
 });
 
+// ─── Before / After Slider ──────────────────────────────────────────────────
+
+function BeforeAfterCompare({ beforeUri, afterUri, onPress }: { beforeUri: string; afterUri: string; onPress?: (index: number) => void }) {
+  const halfWidth = (SCREEN_WIDTH - Spacing.lg * 2 - Spacing.lg * 2 - 3) / 2;
+
+  return (
+    <View style={baStyles.container}>
+      <View style={baStyles.header}>
+        <Ionicons name="git-compare-outline" size={14} color="#fff" />
+        <Text style={baStyles.headerText}>Before & After</Text>
+      </View>
+      <View style={baStyles.row}>
+        <Pressable
+          onPress={() => onPress?.(0)}
+          style={({ pressed }) => [baStyles.half, pressed && { opacity: 0.9 }]}
+        >
+          <Image source={{ uri: beforeUri }} style={[baStyles.image, { width: halfWidth }]} />
+          <View style={baStyles.label}>
+            <Text style={baStyles.labelText}>BEFORE</Text>
+          </View>
+        </Pressable>
+        <View style={baStyles.divider} />
+        <Pressable
+          onPress={() => onPress?.(1)}
+          style={({ pressed }) => [baStyles.half, pressed && { opacity: 0.9 }]}
+        >
+          <Image source={{ uri: afterUri }} style={[baStyles.image, { width: halfWidth }]} />
+          <View style={[baStyles.label, baStyles.labelAfter]}>
+            <Text style={baStyles.labelText}>AFTER</Text>
+          </View>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const baStyles = StyleSheet.create({
+  container: {
+    borderRadius: Radius.md,
+    overflow: 'hidden',
+    marginBottom: Spacing.sm,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  headerText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  row: {
+    flexDirection: 'row',
+  },
+  half: {
+    flex: 1,
+    height: 180,
+    overflow: 'hidden',
+  },
+  image: {
+    height: 180,
+    resizeMode: 'cover',
+  },
+  divider: {
+    width: 3,
+    backgroundColor: '#fff',
+  },
+  label: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(220,50,50,0.85)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  labelAfter: {
+    backgroundColor: 'rgba(16,185,129,0.85)',
+    left: undefined,
+    right: 8,
+  },
+  labelText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+});
+
+// ─── Project Image Carousel ──────────────────────────────────────────────────
+
+function ProjectCarousel({ media, onPress }: { media: { uri: string; type: 'image' | 'video' }[]; onPress: (index: number) => void }) {
+  const CAROUSEL_WIDTH = SCREEN_WIDTH - Spacing.lg * 2 - 2; // card padding + border
+  const CAROUSEL_HEIGHT = 220;
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const onScroll = useRef((e: any) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / CAROUSEL_WIDTH);
+    setActiveIndex(idx);
+  }).current;
+
+  if (media.length === 1) {
+    return (
+      <Pressable onPress={() => onPress(0)} style={({ pressed }) => pressed && { opacity: 0.9 }}>
+        <View style={{ height: CAROUSEL_HEIGHT, overflow: 'hidden' }}>
+          <Image source={{ uri: media[0].uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+          {media[0].type === 'video' && (
+            <View style={carouselStyles.playOverlay}>
+              <View style={carouselStyles.playCircle}>
+                <Ionicons name="play" size={22} color="#fff" />
+              </View>
+            </View>
+          )}
+        </View>
+      </Pressable>
+    );
+  }
+
+  return (
+    <View>
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        decelerationRate="fast"
+        snapToInterval={CAROUSEL_WIDTH}
+      >
+        {media.map((m, idx) => (
+          <Pressable
+            key={idx}
+            onPress={() => onPress(idx)}
+            style={({ pressed }) => pressed && { opacity: 0.9 }}
+          >
+            <View style={{ width: CAROUSEL_WIDTH, height: CAROUSEL_HEIGHT }}>
+              <Image source={{ uri: m.uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+              {m.type === 'video' && (
+                <View style={carouselStyles.playOverlay}>
+                  <View style={carouselStyles.playCircle}>
+                    <Ionicons name="play" size={22} color="#fff" />
+                  </View>
+                </View>
+              )}
+            </View>
+          </Pressable>
+        ))}
+      </ScrollView>
+      {/* Dots */}
+      {media.length > 1 && (
+        <View style={carouselStyles.dots}>
+          {media.map((_, idx) => (
+            <View
+              key={idx}
+              style={[
+                carouselStyles.dot,
+                idx === activeIndex ? carouselStyles.dotActive : carouselStyles.dotInactive,
+              ]}
+            />
+          ))}
+          {media.length > 1 && (
+            <Text style={carouselStyles.countText}>{activeIndex + 1}/{media.length}</Text>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const carouselStyles = StyleSheet.create({
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 2.5,
+    borderColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 3,
+  },
+  dots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 10,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  dotActive: {
+    backgroundColor: '#0d9488',
+    width: 18,
+    borderRadius: 4,
+  },
+  dotInactive: {
+    backgroundColor: 'rgba(0,0,0,0.15)',
+  },
+  countText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#94a3b8',
+    marginLeft: 6,
+  },
+});
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function BuilderProfileScreen() {
@@ -325,6 +568,7 @@ export default function BuilderProfileScreen() {
   const [lightboxMedia, setLightboxMedia] = useState<{ uri: string; type: 'image' | 'video' }[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [expandedReviews, setExpandedReviews] = useState<Set<string>>(new Set());
+  const [expandedFAQs, setExpandedFAQs] = useState<Set<string>>(new Set());
 
   // Animated save icon
   const saveScale = useRef(new RNAnimated.Value(1)).current;
@@ -545,7 +789,8 @@ export default function BuilderProfileScreen() {
 
   // Derive display data from real builder object
   const builderProjects: Project[] = (builder.projects ?? []).map(projectToDisplay);
-  const displayProjects = showAllProjects ? builderProjects : builderProjects.slice(0, 4);
+  const totalVideos = builderProjects.reduce((acc: number, p) => acc + p.media.filter(m => m.type === 'video').length, 0);
+  const displayProjects = showAllProjects ? builderProjects : builderProjects.slice(0, 3);
   const displayReviews = showAllReviews ? reviews : reviews.slice(0, 3);
   const bio = builder.bio ?? '';
   const builderSpecialties = builder.specialties ?? [];
@@ -614,7 +859,7 @@ export default function BuilderProfileScreen() {
             </LinearGradient>
           )}
           <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.65)']}
+            colors={['transparent', 'rgba(0,0,0,0.7)']}
             style={styles.coverGradient}
           />
 
@@ -646,16 +891,16 @@ export default function BuilderProfileScreen() {
           >
             <RNAnimated.View style={{ transform: [{ scale: saveScale }] }}>
               <MaterialIcons
-                name={isSaved ? 'favorite' : 'favorite-border'}
+                name={isSaved ? 'bookmark' : 'bookmark-border'}
                 size={22}
-                color={isSaved ? '#EF4444' : '#ffffff'}
+                color={isSaved ? teal : '#ffffff'}
               />
             </RNAnimated.View>
           </Pressable>
 
           {/* Profile photo + info overlay */}
           <View style={styles.headerInfoContainer}>
-            <View style={[styles.avatarContainer, { borderColor: bgCanvas }]}>
+            <View style={[styles.avatarContainer, { borderColor: '#ffffff' }]}>
               <Image source={{ uri: avatarUri }} style={styles.avatar} />
             </View>
             <View style={styles.headerTextContainer}>
@@ -669,60 +914,60 @@ export default function BuilderProfileScreen() {
           </View>
         </View>
 
-        {/* ─── META INFO BAR ─── */}
+        {/* ─── QUICK INFO BAR ─── */}
         <View style={[styles.metaBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.metaItem}>
-            <Text style={{ fontSize: 13, color: colors.textSecondary }}>📍</Text>
+            <Ionicons name="location-sharp" size={14} color={teal} />
             <Text style={[styles.metaText, { color: colors.text }]}>
               {builder.suburb}, NSW
             </Text>
           </View>
-          {reviewCount > 0 && (
-            <>
-              <View style={[styles.metaDivider, { backgroundColor: colors.border }]} />
-              <View style={styles.metaItem}>
-                <StarRow rating={avgRating} size={13} color="#f59e0b" />
-                <Text style={[styles.metaText, { color: colors.text }]}>
-                  {avgRating} · {reviewCount} reviews
-                </Text>
-              </View>
-            </>
-          )}
           {estYear && (
             <>
               <View style={[styles.metaDivider, { backgroundColor: colors.border }]} />
               <View style={styles.metaItem}>
-                <Text style={{ fontSize: 13, color: colors.textSecondary }}>🏗️</Text>
+                <Ionicons name="business-outline" size={14} color={teal} />
                 <Text style={[styles.metaText, { color: colors.text }]}>Est. {estYear}</Text>
+              </View>
+            </>
+          )}
+          {badges.length > 0 && (
+            <>
+              <View style={[styles.metaDivider, { backgroundColor: colors.border }]} />
+              <View style={styles.metaItem}>
+                <Ionicons name="checkmark-circle" size={14} color={teal} />
+                <Text style={[styles.metaText, { color: colors.text }]}>
+                  {badges.length}x Verified
+                </Text>
               </View>
             </>
           )}
         </View>
 
-        {/* ─── VERIFICATION BADGES ─── */}
+        {/* ─── VERIFICATION PILLS ─── */}
         {badges.length > 0 && (
           <View style={styles.badgeRow}>
             {badges.map(badge => (
-              <View key={badge} style={[styles.badge, { backgroundColor: tealBg }]}>
-                <Text style={{ fontSize: 12, color: teal }}>✓</Text>
+              <View key={badge} style={[styles.badge, { borderColor: teal }]}>
+                <Ionicons name="checkmark-circle" size={13} color={teal} />
                 <Text style={[styles.badgeText, { color: teal }]}>{badge}</Text>
               </View>
             ))}
           </View>
         )}
 
-        {/* ─── ACTION BUTTONS ─── */}
+        {/* ─── CONTACT BUTTONS ─── */}
         <View style={[styles.sectionContainer, styles.actionSection]}>
           <View style={styles.actionRow}>
             <Pressable
               onPress={handleCall}
               style={({ pressed }) => [
                 styles.actionBtn,
-                { backgroundColor: colors.surface, borderColor: colors.border },
+                { backgroundColor: colors.surface, borderColor: teal },
                 pressed && { opacity: 0.7 },
               ]}
             >
-              <Text style={{ fontSize: 20 }}>📞</Text>
+              <Ionicons name="call-outline" size={20} color={teal} />
               <Text style={[styles.actionBtnLabel, { color: colors.text }]}>Call</Text>
             </Pressable>
 
@@ -730,11 +975,11 @@ export default function BuilderProfileScreen() {
               onPress={handleEmail}
               style={({ pressed }) => [
                 styles.actionBtn,
-                { backgroundColor: colors.surface, borderColor: colors.border },
+                { backgroundColor: colors.surface, borderColor: teal },
                 pressed && { opacity: 0.7 },
               ]}
             >
-              <Text style={{ fontSize: 20 }}>✉️</Text>
+              <Ionicons name="mail-outline" size={20} color={teal} />
               <Text style={[styles.actionBtnLabel, { color: colors.text }]}>Email</Text>
             </Pressable>
 
@@ -742,25 +987,14 @@ export default function BuilderProfileScreen() {
               onPress={handleWebsite}
               style={({ pressed }) => [
                 styles.actionBtn,
-                { backgroundColor: colors.surface, borderColor: colors.border },
+                { backgroundColor: colors.surface, borderColor: teal },
                 pressed && { opacity: 0.7 },
               ]}
             >
-              <Text style={{ fontSize: 20 }}>🌐</Text>
+              <Ionicons name="globe-outline" size={20} color={teal} />
               <Text style={[styles.actionBtnLabel, { color: colors.text }]}>Website</Text>
             </Pressable>
           </View>
-
-          {/* REQUEST QUOTE - Primary CTA */}
-          <Pressable
-            style={({ pressed }) => [
-              styles.quoteCta,
-              { backgroundColor: teal },
-              pressed && { backgroundColor: tealDark },
-            ]}
-          >
-            <Text style={styles.quoteCtaText}>Request a Quote</Text>
-          </Pressable>
         </View>
 
         {/* ─── ABOUT ─── */}
@@ -783,15 +1017,16 @@ export default function BuilderProfileScreen() {
 
           {/* Business details */}
           <View style={[styles.detailsGrid, { borderTopColor: colors.border }]}>
-            {builder.abn && <DetailRow icon="📄" label="ABN" value={builder.abn} colors={colors} />}
-            {builder.license_key && <DetailRow icon="🪪" label="Licence" value={builder.license_key} colors={colors} />}
-            {yearsInBusiness && <DetailRow icon="⏱️" label="Experience" value={`${yearsInBusiness} years`} colors={colors} />}
-            {builder.team_size && <DetailRow icon="👷" label="Team" value={builder.team_size} colors={colors} />}
+            {builder.abn && <DetailRow iconName="document-text-outline" label="ABN" value={builder.abn} colors={colors} teal={teal} />}
+            {builder.license_key && <DetailRow iconName="shield-checkmark-outline" label="Licence" value={builder.license_key} colors={colors} teal={teal} />}
+            {yearsInBusiness && <DetailRow iconName="time-outline" label="Experience" value={`${yearsInBusiness} years`} colors={colors} teal={teal} />}
+            {builder.team_size && <DetailRow iconName="people-outline" label="Team" value={builder.team_size} colors={colors} teal={teal} />}
             <DetailRow
-              icon="📍"
+              iconName="location-outline"
               label="Service area"
               value={builder.areas_serviced || `${builder.suburb} & surrounds within ${builder.radius_km ?? 50}km`}
               colors={colors}
+              teal={teal}
             />
           </View>
         </View>
@@ -801,92 +1036,96 @@ export default function BuilderProfileScreen() {
           <View style={[styles.sectionContainer, styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <SectionHeader title="Specialties" colors={colors} />
             <View style={styles.chipWrap}>
-              {builderSpecialties.map(spec => (
-                <View key={spec} style={[styles.chip, { borderColor: teal, backgroundColor: tealBg }]}>
-                  <Text style={[styles.chipText, { color: teal }]}>{spec}</Text>
-                </View>
-              ))}
+              {builderSpecialties.map(spec => {
+                const titleCase = spec.replace(/\b\w/g, c => c.toUpperCase());
+                return (
+                  <View key={spec} style={[styles.chip, { borderColor: teal, backgroundColor: tealBg }]}>
+                    <Text style={[styles.chipText, { color: teal }]}>{titleCase}</Text>
+                  </View>
+                );
+              })}
             </View>
           </View>
         )}
 
-        {/* ─── PROJECT GALLERY ─── */}
+        {/* ─── OUR WORK ─── */}
         <View style={styles.sectionContainer}>
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <SectionHeader title="Our Work" colors={colors} />
             {builderProjects.length > 0 ? (
               <Text style={[styles.projectStats, { color: colors.textSecondary }]}>
                 {builderProjects.length} project{builderProjects.length !== 1 ? 's' : ''} · {totalPhotos} photo{totalPhotos !== 1 ? 's' : ''}
+                {totalVideos > 0 ? ` · ${totalVideos} video${totalVideos !== 1 ? 's' : ''}` : ''}
               </Text>
             ) : (
-              <Text style={[styles.projectStats, { color: colors.textSecondary }]}>
-                No projects added yet.
-              </Text>
+              <View style={styles.emptyProject}>
+                <Ionicons name="images-outline" size={32} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                <Text style={[styles.projectStats, { color: colors.textSecondary, marginBottom: 0, marginTop: 8 }]}>
+                  No projects added yet
+                </Text>
+              </View>
             )}
 
-            {displayProjects.map((project) => (
-              <View key={project.id} style={styles.projectCard}>
-                {/* Project images grid: large left + stacked right */}
-                <View style={styles.projectGrid}>
-                  {/* Main image */}
-                  <Pressable
-                    onPress={() => openLightbox(project.media, 0)}
-                    style={({ pressed }) => [
-                      styles.projectMainImage,
-                      pressed && { opacity: 0.8 },
-                    ]}
-                  >
-                    <Image source={{ uri: project.media[0].uri }} style={styles.projectImageFill} />
-                    {project.media[0].type === 'video' && (
-                      <View style={styles.playOverlay}>
-                        <Text style={styles.playIcon}>▶</Text>
-                      </View>
+            {displayProjects.map((project) => {
+              const allMedia = [
+                ...(project.media ?? []),
+              ];
+              return (
+              <View key={project.id} style={[styles.projectCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                {/* ── Before / After ── */}
+                {project.beforeImage && project.afterImage && (
+                  <BeforeAfterCompare
+                    beforeUri={project.beforeImage}
+                    afterUri={project.afterImage}
+                    onPress={(idx) => openLightbox(
+                      [{ uri: project.beforeImage!, type: 'image' as const }, { uri: project.afterImage!, type: 'image' as const }],
+                      idx,
                     )}
-                  </Pressable>
-                  {/* Stacked thumbs on right */}
-                  {project.media.length > 1 && (
-                    <View style={styles.projectThumbColumn}>
-                      {project.media.slice(1, 3).map((m, idx) => (
-                        <Pressable
-                          key={idx}
-                          onPress={() => openLightbox(project.media, idx + 1)}
-                          style={({ pressed }) => [
-                            styles.projectThumb,
-                            pressed && { opacity: 0.8 },
-                          ]}
-                        >
-                          <Image source={{ uri: m.uri }} style={styles.projectImageFill} />
-                          {m.type === 'video' && (
-                            <View style={styles.playOverlay}>
-                              <Text style={styles.playIcon}>▶</Text>
-                            </View>
-                          )}
-                          {idx === 1 && project.media.length > 3 && (
-                            <View style={styles.moreOverlay}>
-                              <Text style={styles.moreText}>+{project.media.length - 3}</Text>
-                            </View>
-                          )}
-                        </Pressable>
-                      ))}
+                  />
+                )}
+
+                {/* ── Image carousel ── */}
+                {allMedia.length > 0 && (
+                  <ProjectCarousel media={allMedia} onPress={(idx) => openLightbox(allMedia, idx)} />
+                )}
+
+                {/* ── Body ── */}
+                <View style={styles.projectCardBody}>
+                  <Text style={[styles.projectTitle, { color: colors.text }]}>{project.title}</Text>
+                  {project.description && (
+                    <Text style={[styles.projectDesc, { color: colors.textSecondary }]} numberOfLines={3}>
+                      {project.description}
+                    </Text>
+                  )}
+                  {project.costRange && (
+                    <View style={[styles.costBadge, { backgroundColor: tealBg }]}>
+                      <Ionicons name="cash-outline" size={13} color={teal} />
+                      <Text style={[styles.costText, { color: teal }]}>{project.costRange}</Text>
                     </View>
                   )}
                 </View>
 
-                <Text style={[styles.projectTitle, { color: colors.text }]}>{project.title}</Text>
-                {project.description && (
-                  <Text style={[styles.projectDesc, { color: colors.textSecondary }]} numberOfLines={2}>
-                    {project.description}
-                  </Text>
-                )}
-                {project.costRange && (
-                  <View style={[styles.costBadge, { backgroundColor: tealBg }]}>
-                    <Text style={[styles.costText, { color: teal }]}>{project.costRange}</Text>
+                {/* ── Testimonial ── */}
+                {project.testimonial && (
+                  <View style={[styles.testimonialContainer, { borderTopColor: colors.border, backgroundColor: tealBg }]}>
+                    <Text style={{ fontSize: 18 }}>💬</Text>
+                    <View style={{ flex: 1 }}>
+                      {project.testimonial.text && (
+                        <Text style={[styles.testimonialText, { color: colors.text }]} numberOfLines={4}>
+                          {`"${project.testimonial.text}"`}
+                        </Text>
+                      )}
+                      <Text style={[styles.testimonialName, { color: colors.textSecondary }]}>
+                        — {project.testimonial.name}
+                      </Text>
+                    </View>
                   </View>
                 )}
               </View>
-            ))}
+              );
+            })}
 
-            {!showAllProjects && builderProjects.length > 4 && (
+            {!showAllProjects && builderProjects.length > 3 && (
               <Pressable
                 onPress={() => setShowAllProjects(true)}
                 style={({ pressed }) => [
@@ -908,91 +1147,115 @@ export default function BuilderProfileScreen() {
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <SectionHeader title="Reviews" colors={colors} />
 
-            {/* Overall rating */}
-            <View style={styles.ratingOverview}>
-              <View style={styles.ratingLeft}>
-                <Text style={[styles.ratingBig, { color: colors.text }]}>{avgRating}</Text>
-                <StarRow rating={avgRating} size={18} color="#f59e0b" />
-                <Text style={[styles.ratingCount, { color: colors.textSecondary }]}>
-                  {reviewCount} reviews
+            {reviewCount === 0 ? (
+              /* Empty state */
+              <View style={styles.reviewsEmpty}>
+                <Ionicons name="star-outline" size={32} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                <Text style={[styles.reviewsEmptyTitle, { color: colors.text }]}>
+                  No reviews yet
+                </Text>
+                <Text style={[styles.reviewsEmptySubtitle, { color: colors.textSecondary }]}>
+                  Be the first to share your experience
                 </Text>
               </View>
-
-              {/* Rating breakdown bars */}
-              <View style={styles.ratingBars}>
-                {ratingBreakdown.map(({ stars, count }) => (
-                  <View key={stars} style={styles.barRow}>
-                    <Text style={[styles.barLabel, { color: colors.textSecondary }]}>{stars}</Text>
-                    <View style={[styles.barTrack, { backgroundColor: colors.borderLight }]}>
-                      <View
-                        style={[
-                          styles.barFill,
-                          {
-                            backgroundColor: '#f59e0b',
-                            width: `${reviewCount > 0 ? (count / reviewCount) * 100 : 0}%`,
-                          },
-                        ]}
-                      />
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            {/* Individual reviews */}
-            {displayReviews.map((review) => {
-              const isExpanded = expandedReviews.has(review.id);
-              return (
-                <View key={review.id} style={[styles.reviewCard, { borderTopColor: colors.border }]}>
-                  <View style={styles.reviewHeader}>
-                    <View style={[styles.reviewerAvatar, { backgroundColor: tealBg }]}>
-                      <Text style={{ color: teal, fontWeight: '700', fontSize: 14 }}>
-                        {review.reviewer.charAt(0)}
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.reviewerName, { color: colors.text }]}>{review.reviewer}</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <StarRow rating={review.rating} size={12} color="#f59e0b" />
-                        <Text style={[styles.reviewDate, { color: colors.textSecondary }]}>{review.date}</Text>
-                      </View>
-                    </View>
-                  </View>
-                  {review.projectType && (
-                    <Text style={[styles.reviewProject, { color: colors.textSecondary }]}>
-                      Hired for: {review.projectType}
+            ) : (
+              <>
+                {/* Overall rating */}
+                <View style={styles.ratingOverview}>
+                  <View style={styles.ratingLeft}>
+                    <Text style={[styles.ratingBig, { color: colors.text }]}>{avgRating}</Text>
+                    <StarRow rating={avgRating} size={18} color="#f59e0b" />
+                    <Text style={[styles.ratingCount, { color: colors.textSecondary }]}>
+                      {reviewCount} review{reviewCount !== 1 ? 's' : ''}
                     </Text>
-                  )}
-                  <Text
-                    style={[styles.reviewText, { color: colors.text }]}
-                    numberOfLines={isExpanded ? undefined : 3}
-                  >
-                    {review.text}
-                  </Text>
-                  {review.text.length > 120 && (
-                    <Pressable onPress={() => toggleReviewExpanded(review.id)}>
-                      <Text style={[styles.readMoreText, { color: teal }]}>
-                        {isExpanded ? 'Show less' : 'Read more'}
-                      </Text>
-                    </Pressable>
-                  )}
-                </View>
-              );
-            })}
+                  </View>
 
-            {!showAllReviews && reviews.length > 3 && (
-              <Pressable
-                onPress={() => setShowAllReviews(true)}
-                style={({ pressed }) => [
-                  styles.viewAllBtn,
-                  { borderColor: teal },
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                <Text style={[styles.viewAllText, { color: teal }]}>
-                  View all {reviewCount} reviews
-                </Text>
-              </Pressable>
+                  {/* Rating breakdown bars */}
+                  <View style={styles.ratingBars}>
+                    {ratingBreakdown.map(({ stars, count }) => (
+                      <View key={stars} style={styles.barRow}>
+                        <Text style={[styles.barLabel, { color: colors.textSecondary }]}>{stars}</Text>
+                        <View style={[styles.barTrack, { backgroundColor: colors.borderLight }]}>
+                          <View
+                            style={[
+                              styles.barFill,
+                              {
+                                backgroundColor: '#f59e0b',
+                                width: `${(count / reviewCount) * 100}%`,
+                              },
+                            ]}
+                          />
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Individual reviews */}
+                {displayReviews.map((review) => {
+                  const isExpanded = expandedReviews.has(review.id);
+                  const initials = review.reviewer
+                    .split(' ')
+                    .map(w => w.charAt(0))
+                    .join('')
+                    .slice(0, 2)
+                    .toUpperCase();
+                  return (
+                    <View key={review.id} style={[styles.reviewCard, { borderTopColor: colors.border }]}>
+                      <View style={styles.reviewHeader}>
+                        <View style={[styles.reviewerAvatar, { backgroundColor: tealBg }]}>
+                          <Text style={{ color: teal, fontWeight: '700', fontSize: 13 }}>
+                            {initials}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.reviewerName, { color: colors.text }]}>{review.reviewer}</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <StarRow rating={review.rating} size={12} color="#f59e0b" />
+                            <Text style={[styles.reviewDate, { color: colors.textSecondary }]}>{review.date}</Text>
+                          </View>
+                        </View>
+                      </View>
+                      {review.projectType && (
+                        <View style={[styles.reviewProjectBadge, { backgroundColor: tealBg }]}>
+                          <Ionicons name="construct-outline" size={12} color={teal} />
+                          <Text style={[styles.reviewProjectText, { color: teal }]}>
+                            Hired for: {review.projectType}
+                          </Text>
+                        </View>
+                      )}
+                      <Text
+                        style={[styles.reviewText, { color: colors.text }]}
+                        numberOfLines={isExpanded ? undefined : 3}
+                      >
+                        {review.text}
+                      </Text>
+                      {review.text.length > 120 && (
+                        <Pressable onPress={() => toggleReviewExpanded(review.id)}>
+                          <Text style={[styles.readMoreText, { color: teal }]}>
+                            {isExpanded ? 'Show less' : 'Read more'}
+                          </Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  );
+                })}
+
+                {!showAllReviews && reviews.length > 3 && (
+                  <Pressable
+                    onPress={() => setShowAllReviews(true)}
+                    style={({ pressed }) => [
+                      styles.viewAllBtn,
+                      { borderColor: teal },
+                      pressed && { opacity: 0.7 },
+                    ]}
+                  >
+                    <Text style={[styles.viewAllText, { color: teal }]}>
+                      View all {reviewCount} reviews
+                    </Text>
+                  </Pressable>
+                )}
+              </>
             )}
 
             {/* Write a review button */}
@@ -1000,35 +1263,163 @@ export default function BuilderProfileScreen() {
               onPress={() => Alert.alert('Coming soon', 'Review submission will be available soon.')}
               style={({ pressed }) => [
                 styles.writeReviewBtn,
-                { borderColor: colors.border },
+                { borderColor: teal },
                 pressed && { opacity: 0.7 },
               ]}
             >
-              <Text style={[styles.writeReviewText, { color: colors.text }]}>✏️  Write a Review</Text>
+              <Ionicons name="create-outline" size={18} color={teal} />
+              <Text style={[styles.writeReviewText, { color: teal }]}>Write a Review</Text>
             </Pressable>
           </View>
         </View>
+
+        {/* ─── TEAM MEMBERS ─── */}
+        {(builder.team_members ?? []).length > 0 && (
+          <View style={[styles.sectionContainer, styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <SectionHeader title="Meet the Team" colors={colors} />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.teamScroll}
+            >
+              {(builder.team_members ?? []).map((member) => {
+                const initials = member.name
+                  .split(' ')
+                  .map(w => w.charAt(0))
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase();
+                return (
+                  <View key={member.id} style={styles.teamCard}>
+                    {member.photoUri ? (
+                      <Image source={{ uri: member.photoUri }} style={styles.teamPhoto} />
+                    ) : (
+                      <View style={[styles.teamPhoto, styles.teamInitials, { backgroundColor: tealBg }]}>
+                        <Text style={{ color: teal, fontSize: 18, fontWeight: '700' }}>{initials}</Text>
+                      </View>
+                    )}
+                    <Text style={[styles.teamName, { color: colors.text }]} numberOfLines={1}>
+                      {member.name.split(' ')[0]}
+                    </Text>
+                    <Text style={[styles.teamRole, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {member.role}
+                    </Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ─── FAQ ─── */}
+        {(builder.faqs ?? []).length > 0 && (
+          <View style={[styles.sectionContainer, styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <SectionHeader title="Frequently Asked Questions" colors={colors} />
+            {(builder.faqs ?? []).map((faq, idx) => {
+              const isOpen = expandedFAQs.has(faq.id);
+              return (
+                <Pressable
+                  key={faq.id}
+                  onPress={() => {
+                    setExpandedFAQs(prev => {
+                      const next = new Set(prev);
+                      if (next.has(faq.id)) next.delete(faq.id);
+                      else next.add(faq.id);
+                      return next;
+                    });
+                  }}
+                  style={[
+                    styles.faqItem,
+                    idx > 0 && { borderTopWidth: 1, borderTopColor: colors.border },
+                  ]}
+                >
+                  <View style={styles.faqQuestion}>
+                    <Text style={[styles.faqQuestionText, { color: colors.text }]}>{faq.question}</Text>
+                    <Ionicons
+                      name={isOpen ? 'chevron-up' : 'chevron-down'}
+                      size={18}
+                      color={colors.textSecondary}
+                    />
+                  </View>
+                  {isOpen && (
+                    <Text style={[styles.faqAnswer, { color: colors.textSecondary }]}>
+                      {faq.answer}
+                    </Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
 
         {/* ─── AVAILABILITY ─── */}
         <View style={[styles.sectionContainer, styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <SectionHeader title="Availability" colors={colors} />
           <View style={styles.availRow}>
             <View style={[styles.greenDot, { backgroundColor: availDotColor }]} />
-            <Text style={[styles.availText, { color: colors.text }]}>{availLabel}</Text>
+            <Text style={[styles.availTextPrimary, { color: colors.text }]}>{availLabel}</Text>
           </View>
           {builder.response_time && (
             <View style={styles.availRow}>
-              <Text style={{ fontSize: 14, color: colors.textSecondary }}>⏱️</Text>
+              <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
               <Text style={[styles.availText, { color: colors.textSecondary }]}>Usually responds {builder.response_time.toLowerCase()}</Text>
             </View>
           )}
           <View style={styles.availRow}>
-            <Text style={{ fontSize: 14, color: colors.textSecondary }}>📍</Text>
+            <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
             <Text style={[styles.availText, { color: colors.textSecondary }]}>
               {builder.areas_serviced || builder.suburb}
             </Text>
           </View>
         </View>
+
+        {/* ─── AWARDS & MEMBERSHIPS ─── */}
+        {builderCredentials.filter(c => c.type === 'membership' || c.type === 'award').length > 0 && (
+          <View style={[styles.sectionContainer, styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <SectionHeader title="Awards & Memberships" colors={colors} />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.awardsScroll}
+            >
+              {builderCredentials
+                .filter(c => c.type === 'membership' || c.type === 'award')
+                .map((cred) => (
+                  <View key={cred.id} style={[styles.awardCard, { borderColor: colors.border }]}>
+                    <View style={[styles.awardIconCircle, { backgroundColor: tealBg }]}>
+                      <Ionicons
+                        name={cred.type === 'award' ? 'trophy-outline' : 'ribbon-outline'}
+                        size={20}
+                        color={teal}
+                      />
+                    </View>
+                    <Text style={[styles.awardName, { color: colors.text }]} numberOfLines={2}>
+                      {cred.name}
+                    </Text>
+                  </View>
+                ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ─── INSURANCE ─── */}
+        {builderCredentials.filter(c => c.type === 'insurance').length > 0 && (
+          <View style={[styles.sectionContainer, styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <SectionHeader title="Insurance" colors={colors} />
+            {builderCredentials
+              .filter(c => c.type === 'insurance')
+              .map((cred) => (
+                <View key={cred.id} style={styles.insuranceRow}>
+                  <Ionicons name="shield-checkmark" size={18} color="#22c55e" />
+                  <Text style={[styles.insuranceName, { color: colors.text }]}>{cred.name}</Text>
+                  <View style={styles.insuranceVerified}>
+                    <Ionicons name="checkmark-circle" size={14} color="#22c55e" />
+                    <Text style={styles.insuranceVerifiedText}>Active</Text>
+                  </View>
+                </View>
+              ))}
+          </View>
+        )}
 
         {/* ─── CREDENTIALS ─── */}
         <View style={[styles.sectionContainer, styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -1037,32 +1428,46 @@ export default function BuilderProfileScreen() {
             style={styles.credentialsHeader}
           >
             <SectionHeader title="Credentials & Documents" colors={colors} />
-            <Text style={{ fontSize: 16, color: colors.textSecondary }}>
-              {credentialsExpanded ? '▲' : '▼'}
-            </Text>
+            <Ionicons
+              name={credentialsExpanded ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={colors.textSecondary}
+            />
           </Pressable>
 
           {credentialsExpanded && builderCredentials.length > 0 && (
             <View style={{ gap: Spacing.sm }}>
               {builderCredentials.map((cred: CredentialData) => (
                 <View key={cred.id} style={[styles.credCard, { borderColor: colors.border }]}>
-                  <Text style={{ fontSize: 22 }}>{credentialIcon(cred.type)}</Text>
-                  <Text style={[styles.credName, { color: colors.text }]}>{cred.name}</Text>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.credViewBtn,
-                      { backgroundColor: tealBg },
-                      pressed && { opacity: 0.7 },
-                    ]}
-                  >
-                    <Text style={[styles.credViewText, { color: teal }]}>View</Text>
-                  </Pressable>
+                  <View style={[styles.credIconCircle, { backgroundColor: tealBg }]}>
+                    <Ionicons
+                      name={
+                        cred.type === 'licence' ? 'shield-checkmark-outline' :
+                        cred.type === 'insurance' ? 'document-lock-outline' :
+                        cred.type === 'membership' ? 'ribbon-outline' :
+                        cred.type === 'award' ? 'trophy-outline' :
+                        'document-text-outline'
+                      }
+                      size={18}
+                      color={teal}
+                    />
+                  </View>
+                  <View style={styles.credInfo}>
+                    <Text style={[styles.credName, { color: colors.text }]}>{cred.name}</Text>
+                    <View style={styles.credStatus}>
+                      <Ionicons name="checkmark-circle" size={13} color="#22c55e" />
+                      <Text style={styles.credStatusText}>Verified by BLDEASY</Text>
+                    </View>
+                  </View>
                 </View>
               ))}
             </View>
           )}
           {credentialsExpanded && builderCredentials.length === 0 && (
-            <Text style={{ color: colors.textSecondary, fontSize: 14 }}>No documents added yet.</Text>
+            <View style={{ alignItems: 'center', paddingVertical: Spacing.xl }}>
+              <Ionicons name="folder-open-outline" size={28} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+              <Text style={{ color: colors.textSecondary, fontSize: 14, marginTop: 8 }}>No documents added yet</Text>
+            </View>
           )}
         </View>
 
@@ -1132,19 +1537,21 @@ export default function BuilderProfileScreen() {
 // ─── Detail Row sub-component ────────────────────────────────────────────────
 
 function DetailRow({
-  icon,
+  iconName,
   label,
   value,
   colors,
+  teal,
 }: {
-  icon: string;
+  iconName: string;
   label: string;
   value: string;
   colors: any;
+  teal: string;
 }) {
   return (
     <View style={styles.detailRow}>
-      <Text style={{ fontSize: 15 }}>{icon}</Text>
+      <Ionicons name={iconName as any} size={18} color={teal} />
       <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{label}</Text>
       <Text style={[styles.detailValue, { color: colors.text }]}>{value}</Text>
     </View>
@@ -1192,7 +1599,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: AVATAR_SIZE / 2,
-    height: COVER_HEIGHT / 2,
+    height: COVER_HEIGHT * 0.6,
   },
   coverDotsLayer: {
     ...StyleSheet.absoluteFillObject,
@@ -1217,7 +1624,9 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
@@ -1228,7 +1637,9 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
@@ -1318,10 +1729,11 @@ const styles = StyleSheet.create({
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: Radius.full,
+    borderWidth: 1,
   },
   badgeText: {
     fontSize: 12,
@@ -1354,25 +1766,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  quoteCta: {
-    marginTop: Spacing.md,
-    height: 54,
-    borderRadius: Radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Shadows.md,
-  },
-  quoteCtaText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-
   // Card wrapper
   card: {
     borderWidth: 1,
-    borderRadius: Radius.xl,
+    borderRadius: Radius.lg,
     padding: Spacing.lg,
     ...Shadows.sm,
   },
@@ -1416,14 +1813,15 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
     borderRadius: Radius.full,
     borderWidth: 1,
   },
   chipText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
 
   // Projects
@@ -1434,56 +1832,44 @@ const styles = StyleSheet.create({
     marginTop: -4,
   },
   projectCard: {
-    marginBottom: Spacing.xl,
-  },
-  projectGrid: {
-    flexDirection: 'row',
-    gap: 3,
-    borderRadius: Radius.md,
+    marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderRadius: Radius.lg,
     overflow: 'hidden',
-    height: 180,
   },
-  projectMainImage: {
-    flex: 2,
-    height: '100%',
+  projectCardBody: {
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.md,
   },
-  projectThumbColumn: {
-    flex: 1,
-    gap: 3,
-  },
-  projectThumb: {
-    flex: 1,
-  },
-  projectImageFill: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#e2e8f0',
-  },
-  playOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+  emptyProject: {
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: Spacing['2xl'],
   },
-  playIcon: {
-    color: '#fff',
-    fontSize: 28,
+  testimonialContainer: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginHorizontal: Spacing.md,
+    marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.md,
+    borderTopWidth: 0,
   },
-  moreOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  testimonialText: {
+    fontSize: 13,
+    lineHeight: 20,
+    fontStyle: 'italic',
   },
-  moreText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
+  testimonialName: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
   },
+  // (carousel styles moved to carouselStyles)
   projectTitle: {
     fontSize: 16,
     fontWeight: '700',
-    marginTop: Spacing.sm,
   },
   projectDesc: {
     fontSize: 13,
@@ -1491,7 +1877,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   costBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     alignSelf: 'flex-start',
+    gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: Radius.full,
@@ -1586,27 +1975,104 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '400',
   },
-  reviewProject: {
-    fontSize: 12,
-    fontWeight: '500',
-    fontStyle: 'italic',
-    marginBottom: 6,
+  reviewProjectBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.full,
+    marginBottom: 8,
+  },
+  reviewProjectText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   reviewText: {
     fontSize: 14,
     lineHeight: 22,
   },
+  reviewsEmpty: {
+    alignItems: 'center',
+    paddingVertical: Spacing['2xl'],
+    gap: 6,
+  },
+  reviewsEmptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  reviewsEmptySubtitle: {
+    fontSize: 13,
+    fontWeight: '400',
+  },
   writeReviewBtn: {
-    borderWidth: 1,
+    flexDirection: 'row',
+    borderWidth: 1.5,
     borderRadius: Radius.lg,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
     marginTop: Spacing.lg,
   },
   writeReviewText: {
     fontSize: 14,
+    fontWeight: '700',
+  },
+
+  // Team members
+  teamScroll: {
+    gap: Spacing.lg,
+    paddingRight: Spacing.sm,
+  },
+  teamCard: {
+    alignItems: 'center',
+    width: 80,
+  },
+  teamPhoto: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+  },
+  teamInitials: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  teamName: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  teamRole: {
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+
+  // FAQ
+  faqItem: {
+    paddingVertical: Spacing.md,
+  },
+  faqQuestion: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  faqQuestionText: {
+    flex: 1,
+    fontSize: 14,
     fontWeight: '600',
+    lineHeight: 20,
+  },
+  faqAnswer: {
+    fontSize: 14,
+    lineHeight: 22,
+    marginTop: Spacing.sm,
   },
 
   // Availability
@@ -1621,10 +2087,66 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
   },
+  availTextPrimary: {
+    fontSize: 15,
+    fontWeight: '700',
+    flex: 1,
+  },
   availText: {
     fontSize: 14,
     fontWeight: '500',
     flex: 1,
+  },
+
+  // Awards & Memberships
+  awardsScroll: {
+    gap: Spacing.md,
+    paddingRight: Spacing.sm,
+  },
+  awardCard: {
+    width: 120,
+    alignItems: 'center',
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.sm,
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+  },
+  awardIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
+  },
+  awardName: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+
+  // Insurance
+  insuranceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+  },
+  insuranceName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  insuranceVerified: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  insuranceVerifiedText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#22c55e',
   },
 
   // Credentials
@@ -1639,21 +2161,32 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: Spacing.md,
     borderWidth: 1,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
+  },
+  credIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  credInfo: {
+    flex: 1,
+    gap: 3,
   },
   credName: {
-    flex: 1,
     fontSize: 14,
     fontWeight: '600',
   },
-  credViewBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: Radius.full,
+  credStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  credViewText: {
-    fontSize: 13,
-    fontWeight: '700',
+  credStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#22c55e',
   },
 
   // Similar tradies

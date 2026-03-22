@@ -4,14 +4,17 @@
  * Does not use @react-navigation/drawer to avoid nested navigator issues with Expo Router.
  */
 
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   Image,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import Animated, {
@@ -41,6 +44,7 @@ type UserInfo = {
   email: string | null;
   avatar: string | null;
   isBuilder: boolean;
+  isGuest: boolean;
 };
 
 type DrawerItem = {
@@ -70,44 +74,59 @@ export function SideDrawer({ visible, onClose }: SideDrawerProps) {
     email: null,
     avatar: null,
     isBuilder: false,
+    isGuest: true,
   });
+  const hasFetched = React.useRef(false);
 
   // Animate open/close when `visible` changes
   useEffect(() => {
     progress.value = withTiming(visible ? 1 : 0, { duration: ANIMATION_DURATION });
   }, [visible, progress]);
 
-  // Fetch user info when drawer opens
+  // Fetch user info eagerly on mount, refresh in background on subsequent opens
   useEffect(() => {
-    if (!visible) return;
-    (async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user) return;
+    fetchUserInfo();
+  }, []);
 
-      const email = userData.user.email ?? null;
+  useEffect(() => {
+    if (visible && hasFetched.current) {
+      // Silently refresh in background — UI already has cached data
+      fetchUserInfo();
+    }
+  }, [visible]);
 
-      // Fetch profile for display name
-      const { data: profile } = await supabase
+  async function fetchUserInfo() {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData?.user) {
+      setUserInfo({ name: 'Guest', email: null, avatar: null, isBuilder: false, isGuest: true });
+      hasFetched.current = true;
+      return;
+    }
+
+    const email = userData.user.email ?? null;
+
+    const [{ data: profile }, { data: builderProfile }] = await Promise.all([
+      supabase
         .from('profiles')
-        .select('full_name, avatar_url')
+        .select('name, avatar_url')
         .eq('id', userData.user.id)
-        .maybeSingle();
-
-      // Check if approved builder
-      const { data: builderProfile } = await supabase
+        .maybeSingle(),
+      supabase
         .from('builder_profiles')
         .select('approved')
         .eq('user_id', userData.user.id)
-        .maybeSingle();
+        .maybeSingle(),
+    ]);
 
-      setUserInfo({
-        name: (profile as any)?.full_name ?? email?.split('@')[0] ?? 'User',
-        email,
-        avatar: (profile as any)?.avatar_url ?? null,
-        isBuilder: !!(builderProfile as any)?.approved,
-      });
-    })();
-  }, [visible]);
+    setUserInfo({
+      name: (profile as any)?.name ?? email?.split('@')[0] ?? 'User',
+      email,
+      avatar: (profile as any)?.avatar_url ?? null,
+      isBuilder: !!(builderProfile as any)?.approved,
+      isGuest: false,
+    });
+    hasFetched.current = true;
+  }
 
   // Animated styles
   const drawerAnimatedStyle = useAnimatedStyle(() => ({
@@ -135,6 +154,47 @@ export function SideDrawer({ visible, onClose }: SideDrawerProps) {
   async function handleLogout() {
     onClose();
     await supabase.auth.signOut();
+    setTimeout(() => router.replace('/(auth)/login' as any), 120);
+  }
+
+  // ─── Builder re-auth modal state ──────────────────────────────────
+
+  const [showReauth, setShowReauth] = useState(false);
+  const [reauthEmail, setReauthEmail] = useState('');
+  const [reauthPassword, setReauthPassword] = useState('');
+  const [reauthError, setReauthError] = useState<string | null>(null);
+  const [reauthLoading, setReauthLoading] = useState(false);
+
+  function openReauthModal() {
+    setReauthEmail(userInfo.email ?? '');
+    setReauthPassword('');
+    setReauthError(null);
+    setReauthLoading(false);
+    setShowReauth(true);
+  }
+
+  async function handleReauthSubmit() {
+    if (!reauthEmail.trim() || !reauthPassword.trim()) {
+      setReauthError('Please enter your email and password.');
+      return;
+    }
+    setReauthLoading(true);
+    setReauthError(null);
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: reauthEmail.trim(),
+      password: reauthPassword,
+    });
+
+    setReauthLoading(false);
+
+    if (error) {
+      setReauthError('Incorrect email or password. Please try again.');
+      return;
+    }
+
+    setShowReauth(false);
+    navigate('/(tabs)/portal');
   }
 
   // ─── Drawer items ─────────────────────────────────────────────────
@@ -215,21 +275,27 @@ export function SideDrawer({ visible, onClose }: SideDrawerProps) {
           <Text style={styles.userName} numberOfLines={1}>
             {userInfo.name ?? 'Welcome'}
           </Text>
-          {userInfo.email ? (
+          {userInfo.isGuest ? (
+            <Text style={styles.userEmail} numberOfLines={1}>
+              Sign in to unlock all features
+            </Text>
+          ) : userInfo.email ? (
             <Text style={styles.userEmail} numberOfLines={1}>
               {userInfo.email}
             </Text>
           ) : null}
 
-          <Pressable
-            style={styles.viewProfileBtn}
-            onPress={() => navigate('/settings')}
-            accessibilityRole="button"
-            accessibilityLabel="View profile settings"
-          >
-            <Text style={styles.viewProfileText}>View profile</Text>
-            <MaterialIcons name="chevron-right" size={16} color="rgba(255,255,255,0.7)" />
-          </Pressable>
+          {!userInfo.isGuest && (
+            <Pressable
+              style={styles.viewProfileBtn}
+              onPress={() => navigate('/settings')}
+              accessibilityRole="button"
+              accessibilityLabel="View profile settings"
+            >
+              <Text style={styles.viewProfileText}>View profile</Text>
+              <MaterialIcons name="chevron-right" size={16} color="rgba(255,255,255,0.7)" />
+            </Pressable>
+          )}
         </LinearGradient>
 
         {/* ─── Main menu items ─── */}
@@ -284,7 +350,7 @@ export function SideDrawer({ visible, onClose }: SideDrawerProps) {
                     : 'transparent',
                 },
               ]}
-              onPress={() => navigate('/(tabs)/portal')}
+              onPress={openReauthModal}
               accessibilityRole="button"
               accessibilityLabel="Switch to Builder Mode"
             >
@@ -302,18 +368,144 @@ export function SideDrawer({ visible, onClose }: SideDrawerProps) {
         {/* ─── Spacer pushes logout to the bottom ─── */}
         <View style={{ flex: 1 }} />
 
-        {/* ─── Logout ─── */}
+        {/* ─── Sign In / Logout ─── */}
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
-        <Pressable
-          style={({ pressed }) => [styles.logoutRow, { opacity: pressed ? 0.7 : 1 }]}
-          onPress={handleLogout}
-          accessibilityRole="button"
-          accessibilityLabel="Log out of BLDESY!"
-        >
-          <MaterialIcons name="logout" size={20} color={colors.error} />
-          <Text style={[styles.logoutText, { color: colors.error }]}>Log Out</Text>
-        </Pressable>
+        {userInfo.isGuest ? (
+          <Pressable
+            style={({ pressed }) => [styles.logoutRow, { opacity: pressed ? 0.7 : 1 }]}
+            onPress={() => navigate('/(auth)/login')}
+            accessibilityRole="button"
+            accessibilityLabel="Sign in to BLDESY!"
+          >
+            <MaterialIcons name="login" size={20} color={colors.teal} />
+            <Text style={[styles.logoutText, { color: colors.teal }]}>Sign In</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            style={({ pressed }) => [styles.logoutRow, { opacity: pressed ? 0.7 : 1 }]}
+            onPress={handleLogout}
+            accessibilityRole="button"
+            accessibilityLabel="Log out of BLDESY!"
+          >
+            <MaterialIcons name="logout" size={20} color={colors.error} />
+            <Text style={[styles.logoutText, { color: colors.error }]}>Log Out</Text>
+          </Pressable>
+        )}
       </Animated.View>
+
+      {/* ─── Re-auth Modal ─── */}
+      <Modal
+        visible={showReauth}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowReauth(false)}
+      >
+        <View style={modalStyles.overlay}>
+          <View
+            style={[
+              modalStyles.card,
+              { backgroundColor: isDark ? colors.surface : '#ffffff' },
+            ]}
+          >
+            {/* Header */}
+            <View style={modalStyles.header}>
+              <View style={[modalStyles.iconCircle, { backgroundColor: colors.tealBg }]}>
+                <Ionicons name="shield-checkmark" size={28} color={colors.teal} />
+              </View>
+              <Text style={[modalStyles.title, { color: colors.text }]}>
+                Verify your identity
+              </Text>
+              <Text style={[modalStyles.subtitle, { color: colors.textSecondary }]}>
+                Enter your credentials to switch to Builder Mode
+              </Text>
+            </View>
+
+            {/* Form */}
+            <View style={modalStyles.form}>
+              <Text style={[modalStyles.label, { color: colors.textSecondary }]}>Email</Text>
+              <TextInput
+                style={[
+                  modalStyles.input,
+                  {
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F8FAFC',
+                    color: colors.text,
+                    borderColor: isDark ? colors.border : '#E2E8F0',
+                  },
+                ]}
+                value={reauthEmail}
+                onChangeText={setReauthEmail}
+                placeholder="you@email.com"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!reauthLoading}
+              />
+
+              <Text style={[modalStyles.label, { color: colors.textSecondary, marginTop: 12 }]}>
+                Password
+              </Text>
+              <TextInput
+                style={[
+                  modalStyles.input,
+                  {
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F8FAFC',
+                    color: colors.text,
+                    borderColor: isDark ? colors.border : '#E2E8F0',
+                  },
+                ]}
+                value={reauthPassword}
+                onChangeText={setReauthPassword}
+                placeholder="Enter your password"
+                placeholderTextColor={colors.textSecondary}
+                secureTextEntry
+                autoCapitalize="none"
+                editable={!reauthLoading}
+                onSubmitEditing={handleReauthSubmit}
+              />
+
+              {reauthError ? (
+                <Text style={[modalStyles.errorText, { color: colors.error }]}>
+                  {reauthError}
+                </Text>
+              ) : null}
+            </View>
+
+            {/* Actions */}
+            <View style={modalStyles.actions}>
+              <Pressable
+                style={[
+                  modalStyles.btn,
+                  modalStyles.cancelBtn,
+                  { borderColor: isDark ? colors.border : '#E2E8F0' },
+                ]}
+                onPress={() => setShowReauth(false)}
+                disabled={reauthLoading}
+              >
+                <Text style={[modalStyles.cancelBtnText, { color: colors.textSecondary }]}>
+                  Cancel
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  modalStyles.btn,
+                  modalStyles.confirmBtn,
+                  { backgroundColor: colors.teal, opacity: reauthLoading ? 0.7 : 1 },
+                ]}
+                onPress={handleReauthSubmit}
+                disabled={reauthLoading}
+              >
+                {reauthLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={modalStyles.confirmBtnText}>Verify & Continue</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -458,6 +650,98 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   logoutText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+});
+
+const modalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: Radius.xl,
+    padding: Spacing.xl,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 24,
+      },
+      android: { elevation: 12 },
+      default: {},
+    }),
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
+  },
+  iconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  form: {
+    marginBottom: Spacing.lg,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  input: {
+    height: 48,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    fontSize: 15,
+  },
+  errorText: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: Spacing.sm,
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  btn: {
+    flex: 1,
+    height: 48,
+    borderRadius: Radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBtn: {
+    borderWidth: 1,
+  },
+  cancelBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  confirmBtn: {},
+  confirmBtnText: {
+    color: '#ffffff',
     fontSize: 15,
     fontWeight: '700',
   },

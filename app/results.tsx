@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Dimensions,
   FlatList,
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -25,6 +27,47 @@ import { supabase } from '@/lib/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PAGE_SIZE = 10;
+const CARD_WIDTH = SCREEN_WIDTH - Spacing.lg * 2;
+const CAROUSEL_HEIGHT = 180;
+
+// ─── Trade icons for placeholders ────────────────────────────────────────────
+
+const TRADE_ICONS: Record<string, string> = {
+  builder: '🏗️', plumber: '🔧', electrician: '⚡', carpenter: '🪚',
+  painter: '🎨', landscaper: '🌿', roofer: '🏠', tiler: '🧱',
+  concreter: '🏢', fencer: '🪵', default: '🔨',
+};
+
+function getTradeIcon(trade: string): string {
+  const key = trade.toLowerCase();
+  for (const [k, v] of Object.entries(TRADE_ICONS)) {
+    if (key.includes(k)) return v;
+  }
+  return TRADE_ICONS.default;
+}
+
+// ─── Extract carousel images from builder data ──────────────────────────────
+
+function getCarouselImages(builder: { projects?: any[] | null; cover_photo_url?: string | null }): string[] {
+  const images: string[] = [];
+  if (builder.projects?.length) {
+    for (const proj of builder.projects) {
+      if (proj.media?.length) {
+        for (const m of proj.media) {
+          if (m.type === 'image' && m.uri) images.push(m.uri);
+        }
+      } else if (proj.images?.length) {
+        images.push(...proj.images);
+      } else if (proj.image_url) {
+        images.push(proj.image_url);
+      }
+    }
+  }
+  if (images.length === 0 && builder.cover_photo_url) {
+    images.push(builder.cover_photo_url);
+  }
+  return images.slice(0, 5);
+}
 
 // ─── Urgency mapping ─────────────────────────────────────────────────────────
 
@@ -131,6 +174,95 @@ function computeMatchScore(
   return { score: pct, label };
 }
 
+// ─── Photo carousel ─────────────────────────────────────────────────────────
+
+function PhotoCarousel({
+  images,
+  tradeCategory,
+  isDark,
+}: {
+  images: string[];
+  tradeCategory: string;
+  isDark: boolean;
+}) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const flatListRef = useRef<FlatList>(null);
+
+  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
+    if (viewableItems.length > 0) {
+      setActiveIndex(viewableItems[0].index ?? 0);
+    }
+  }).current;
+
+  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
+
+  if (images.length === 0) {
+    return (
+      <LinearGradient
+        colors={isDark ? ['#134E4A', '#1e293b'] : ['#e6f7f5', '#e2e8f0']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.carouselPlaceholder}
+      >
+        <View style={styles.placeholderPattern}>
+          {Array.from({ length: 24 }).map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.patternDot,
+                { backgroundColor: isDark ? 'rgba(45,212,191,0.08)' : 'rgba(13,148,136,0.06)' },
+              ]}
+            />
+          ))}
+        </View>
+        <Text style={styles.placeholderIcon}>{getTradeIcon(tradeCategory)}</Text>
+      </LinearGradient>
+    );
+  }
+
+  const imageWidth = CARD_WIDTH - 2;
+
+  return (
+    <View>
+      <FlatList
+        ref={flatListRef}
+        data={images.slice(0, 5)}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        keyExtractor={(_, i) => String(i)}
+        snapToInterval={imageWidth}
+        decelerationRate="fast"
+        renderItem={({ item }) => (
+          <Image
+            source={{ uri: item }}
+            style={[styles.carouselImage, { width: imageWidth }]}
+          />
+        )}
+      />
+      {images.length > 1 && (
+        <View style={styles.dotRow}>
+          {images.slice(0, 5).map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.dot,
+                {
+                  backgroundColor: i === activeIndex ? '#fff' : 'rgba(255,255,255,0.45)',
+                  width: i === activeIndex ? 8 : 6,
+                  height: i === activeIndex ? 8 : 6,
+                },
+              ]}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 // ─── Skeleton shimmer ────────────────────────────────────────────────────────
 
 function SkeletonCard({ colors, delay = 0 }: { colors: any; delay?: number }) {
@@ -152,6 +284,8 @@ function SkeletonCard({ colors, delay = 0 }: { colors: any; delay?: number }) {
 
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      {/* Carousel skeleton */}
+      <Animated.View style={{ height: CAROUSEL_HEIGHT, backgroundColor: colors.border, opacity }} />
       {/* Top row skeleton */}
       <View style={{ flexDirection: 'row', padding: Spacing.lg, gap: Spacing.md }}>
         <Animated.View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: colors.border, opacity }} />
@@ -181,13 +315,13 @@ function SkeletonCard({ colors, delay = 0 }: { colors: any; delay?: number }) {
 
 function AnimatedCard({ children, index }: { children: React.ReactNode; index: number }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+  const slideAnim = useRef(new Animated.Value(16)).current;
 
   useEffect(() => {
-    const delay = Math.min(index * 60, 300);
+    const delay = Math.min(index * 50, 250);
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 350, delay, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 350, delay, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 300, delay, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 300, delay, useNativeDriver: true }),
     ]).start();
   }, []);
 
@@ -567,7 +701,10 @@ export default function ResultsScreen() {
 
   async function toggleSave(builderId: string) {
     const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) return;
+    if (!userData?.user) {
+      Alert.alert('Sign in required', 'You need to be logged in to save builders.');
+      return;
+    }
 
     const newSet = new Set(savedBuilders);
     if (newSet.has(builderId)) {
@@ -609,9 +746,9 @@ export default function ResultsScreen() {
   }
 
   function getMatchColor(score: number) {
-    if (score >= 85) return { bg: isDark ? '#064e3b' : '#ecfdf5', text: colors.success, ring: colors.success };
-    if (score >= 65) return { bg: isDark ? '#78350f' : '#fffbeb', text: colors.warning, ring: colors.warning };
-    return { bg: colors.surface, text: colors.textSecondary, ring: colors.border };
+    if (score >= 85) return { bg: teal, text: '#fff', pillBg: teal };
+    if (score >= 70) return { bg: '#F59E0B', text: '#fff', pillBg: '#F59E0B' };
+    return { bg: colors.textSecondary, text: '#fff', pillBg: 'rgba(0,0,0,0.5)' };
   }
 
   // ─── Bookmark button ──────────────────────────────────────────────
@@ -622,19 +759,20 @@ export default function ResultsScreen() {
 
     function handlePress() {
       Animated.sequence([
-        Animated.timing(scale, { toValue: 1.3, duration: 120, useNativeDriver: true }),
-        Animated.timing(scale, { toValue: 1, duration: 120, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1.4, duration: 100, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 0.85, duration: 80, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1, duration: 100, useNativeDriver: true }),
       ]).start();
       toggleSave(builderId);
     }
 
     return (
-      <Pressable onPress={handlePress} hitSlop={8} style={styles.saveBtn}>
+      <Pressable onPress={handlePress} hitSlop={8} style={styles.bookmarkBtn}>
         <Animated.View style={{ transform: [{ scale }] }}>
           <MaterialIcons
-            name={isSaved ? 'favorite' : 'favorite-border'}
-            size={20}
-            color={isSaved ? '#f87171' : colors.icon}
+            name={isSaved ? 'bookmark' : 'bookmark-border'}
+            size={22}
+            color={isSaved ? teal : '#fff'}
           />
         </Animated.View>
       </Pressable>
@@ -652,8 +790,11 @@ export default function ResultsScreen() {
       item.profile_photo_url ??
       `https://ui-avatars.com/api/?name=${encodeURIComponent(item.business_name)}&background=0d9488&color=fff&size=120`;
 
-    // Top specialties
-    const topSpecs = (item.specialties ?? []).slice(0, 2);
+    // Top specialties (show 3, title case)
+    const topSpecs = (item.specialties ?? []).slice(0, 3).map(
+      (s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(),
+    );
+    const images = getCarouselImages(item);
 
     return (
       <AnimatedCard index={index}>
@@ -661,78 +802,90 @@ export default function ResultsScreen() {
           onPress={() => router.push({ pathname: '/builder-profile', params: { id: item.id } })}
           style={({ pressed }) => [
             styles.card,
-            Shadows.sm,
+            Shadows.md,
             { backgroundColor: colors.surface, borderColor: colors.border },
-            pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] },
+            pressed && { opacity: 0.95, transform: [{ scale: 0.98 }] },
           ]}
         >
-          {/* ─── Top section: Avatar + info + match ring ─── */}
-          <View style={styles.cardTop}>
-            {/* Match score accent stripe */}
-            <View style={[styles.matchStripe, { backgroundColor: matchColor.ring }]} />
+          {/* ─── Photo carousel ─── */}
+          <View style={styles.carouselWrapper}>
+            <PhotoCarousel images={images} tradeCategory={item.trade_category} isDark={isDark} />
 
-            <View style={styles.cardTopInner}>
-              {/* Avatar */}
-              <View style={[styles.avatarRing, { borderColor: matchColor.ring }]}>
-                <Image source={{ uri: avatarUri }} style={styles.avatar} />
+            {/* Bottom gradient overlay */}
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.3)']}
+              style={styles.carouselGradient}
+              pointerEvents="none"
+            />
+
+            {/* Match score pill — top left */}
+            <View style={[styles.matchPill, { backgroundColor: matchColor.pillBg }]}>
+              <Text style={styles.matchPillText}>{item._matchScore}% match</Text>
+            </View>
+
+            {/* Bookmark button — frosted glass */}
+            <BookmarkButton builderId={item.id} />
+
+            {/* Photo count badge */}
+            {images.length > 0 && (
+              <View style={styles.imageCountPill}>
+                <MaterialIcons name="photo-library" size={12} color="#fff" />
+                <Text style={styles.imageCountText}>{images.length}</Text>
               </View>
+            )}
+          </View>
 
-              {/* Name + trade + location */}
-              <View style={styles.infoCol}>
-                <Text style={[styles.businessName, { color: colors.text }]} numberOfLines={1}>
-                  {item.business_name}
-                </Text>
-                <View style={styles.tradeRow}>
-                  <View style={[styles.tradePill, { backgroundColor: colors.tealBg }]}>
-                    <Text style={[styles.tradePillText, { color: teal }]}>{tradeLabel}</Text>
-                  </View>
-                  {verifyCount > 0 && (
-                    <View style={[styles.verifiedPill, { backgroundColor: isDark ? '#064e3b' : '#ecfdf5' }]}>
-                      <MaterialIcons name="verified" size={12} color={colors.success} />
-                      <Text style={[styles.verifiedText, { color: colors.success }]}>
-                        {verifyCount === 1 ? 'Verified' : `${verifyCount}x Verified`}
-                      </Text>
-                    </View>
-                  )}
+          {/* ─── Profile info section ─── */}
+          <View style={styles.profileSection}>
+            {/* Avatar */}
+            <View style={styles.avatarRing}>
+              <Image source={{ uri: avatarUri }} style={styles.avatar} />
+            </View>
+
+            {/* Name + trade + verified + location */}
+            <View style={styles.infoCol}>
+              <Text style={[styles.businessName, { color: colors.text }]} numberOfLines={1}>
+                {item.business_name}
+              </Text>
+              <View style={styles.tradeRow}>
+                <View style={[styles.tradePill, { backgroundColor: colors.tealBg }]}>
+                  <Text style={[styles.tradePillText, { color: teal }]}>{tradeLabel}</Text>
                 </View>
+                {verifyCount > 0 && (
+                  <View style={[styles.verifiedPill, { backgroundColor: isDark ? '#064e3b' : '#ecfdf5' }]}>
+                    <MaterialIcons name="verified" size={11} color={colors.success} />
+                    <Text style={[styles.verifiedText, { color: colors.success }]}>
+                      {verifyCount === 1 ? 'Verified' : `${verifyCount}x Verified`}
+                    </Text>
+                  </View>
+                )}
                 <View style={styles.locationRow}>
-                  <MaterialIcons name="location-on" size={14} color={colors.textSecondary} />
+                  <MaterialIcons name="location-on" size={12} color={colors.textSecondary} />
                   <Text style={[styles.locationText, { color: colors.textSecondary }]} numberOfLines={1}>
                     {item.suburb}, {item.postcode}
-                    {item._distance != null ? `  ·  ${item._distance} km` : ''}
+                    {item._distance != null ? ` · ${item._distance} km` : ''}
                   </Text>
                 </View>
-              </View>
-
-              {/* Match score ring */}
-              <View style={styles.matchScoreWrap}>
-                <View style={[styles.matchScoreRing, { borderColor: matchColor.ring, backgroundColor: matchColor.bg }]}>
-                  <Text style={[styles.matchScoreNum, { color: matchColor.text }]}>{item._matchScore}</Text>
-                  <Text style={[styles.matchScoreLabel, { color: matchColor.text }]}>%</Text>
-                </View>
-                <Text style={[styles.matchScoreCaption, { color: matchColor.text }]}>
-                  {item._matchLabel}
-                </Text>
               </View>
             </View>
           </View>
 
           {/* ─── Quick stats row ─── */}
-          <View style={[styles.statsRow, { borderTopColor: colors.border, borderBottomColor: colors.border }]}>
+          <View style={[styles.statsRow, { borderTopColor: colors.border }]}>
             <View style={styles.statItem}>
-              <MaterialIcons name={availInfo.icon as any} size={16} color={availInfo.color} />
+              <View style={[styles.availDot, { backgroundColor: availInfo.color }]} />
               <Text style={[styles.statText, { color: colors.text }]}>{availInfo.text}</Text>
             </View>
-            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+            <View style={[styles.statDot, { backgroundColor: colors.textSecondary }]} />
             <View style={styles.statItem}>
-              <MaterialIcons name="speed" size={16} color={colors.tintMuted} />
+              <MaterialIcons name="schedule" size={13} color={colors.textSecondary} />
               <Text style={[styles.statText, { color: colors.text }]}>
                 {item.response_time ?? 'N/A'}
               </Text>
             </View>
-            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+            <View style={[styles.statDot, { backgroundColor: colors.textSecondary }]} />
             <View style={styles.statItem}>
-              <MaterialIcons name="star" size={16} color="#FBBF24" />
+              <MaterialIcons name="star" size={13} color="#FBBF24" />
               <Text style={[styles.statText, { color: colors.text }]}>
                 {(item.specialties ?? []).length} specialties
               </Text>
@@ -750,13 +903,13 @@ export default function ResultsScreen() {
             {topSpecs.length > 0 && (
               <View style={styles.specRow}>
                 {topSpecs.map((spec) => (
-                  <View key={spec} style={[styles.specChip, { backgroundColor: colors.tintLight }]}>
-                    <Text style={[styles.specChipText, { color: colors.tint }]}>{spec}</Text>
+                  <View key={spec} style={[styles.specChip, { borderColor: colors.border }]}>
+                    <Text style={[styles.specChipText, { color: colors.textSecondary }]}>{spec}</Text>
                   </View>
                 ))}
-                {(item.specialties ?? []).length > 2 && (
+                {(item.specialties ?? []).length > 3 && (
                   <Text style={[styles.specMore, { color: colors.textSecondary }]}>
-                    +{(item.specialties ?? []).length - 2} more
+                    +{(item.specialties ?? []).length - 3} more
                   </Text>
                 )}
               </View>
@@ -764,18 +917,6 @@ export default function ResultsScreen() {
 
             {/* ─── Action row ─── */}
             <View style={styles.actionRow}>
-              <BookmarkButton builderId={item.id} />
-              <Pressable
-                style={({ pressed }) => [
-                  styles.btnOutline,
-                  { borderColor: colors.border },
-                  pressed && { opacity: 0.7 },
-                ]}
-                onPress={() => router.push({ pathname: '/builder-profile', params: { id: item.id } })}
-              >
-                <MaterialIcons name="person" size={16} color={colors.text} />
-                <Text style={[styles.btnOutlineText, { color: colors.text }]}>Profile</Text>
-              </Pressable>
               <Pressable
                 style={({ pressed }) => [
                   styles.btnPrimary,
@@ -784,8 +925,19 @@ export default function ResultsScreen() {
                 ]}
                 onPress={() => router.push({ pathname: '/builder-profile', params: { id: item.id } })}
               >
-                <MaterialIcons name="chat-bubble-outline" size={15} color="#fff" />
-                <Text style={styles.btnPrimaryText}>Request Quote</Text>
+                <MaterialIcons name="person" size={16} color="#fff" />
+                <Text style={styles.btnPrimaryText}>View Profile</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.btnOutline,
+                  { borderColor: colors.border },
+                  pressed && { opacity: 0.7 },
+                ]}
+                onPress={() => router.push({ pathname: '/builder-profile', params: { id: item.id } })}
+              >
+                <MaterialIcons name="chat-bubble-outline" size={15} color={teal} />
+                <Text style={[styles.btnOutlineText, { color: teal }]}>Request Quote</Text>
               </Pressable>
             </View>
           </View>
@@ -1035,17 +1187,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: Spacing.sm,
     paddingLeft: Spacing.lg,
-    paddingRight: Spacing.sm,
+    paddingRight: Spacing.md,
     borderBottomWidth: 1,
-    gap: 8,
+    gap: 10,
   },
   sortScroll: {
     gap: 8,
-    paddingRight: 4,
+    paddingRight: 8,
   },
   sortPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
     gap: 5,
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -1083,7 +1236,7 @@ const styles = StyleSheet.create({
   // ─── List ──────────────────────────────────────
   listContent: {
     padding: Spacing.lg,
-    gap: Spacing.md,
+    gap: Spacing.lg,
     paddingBottom: 40,
   },
   resultCountRow: {
@@ -1111,117 +1264,175 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
+  // ─── Carousel ────────────────────────────────────
+  carouselWrapper: {
+    height: CAROUSEL_HEIGHT,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  carouselImage: {
+    height: CAROUSEL_HEIGHT,
+    resizeMode: 'cover',
+  },
+  carouselPlaceholder: {
+    width: '100%',
+    height: CAROUSEL_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  placeholderPattern: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignContent: 'center',
+    gap: 22,
+    opacity: 0.8,
+  },
+  patternDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  placeholderIcon: {
+    fontSize: 48,
+  },
+  carouselGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 60,
+  },
+  dotRow: {
+    position: 'absolute',
+    bottom: 10,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dot: {
+    borderRadius: 4,
+  },
+  imageCountPill: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.full,
+  },
+  imageCountText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
   // ─── Card ──────────────────────────────────────
   card: {
     borderRadius: Radius.xl,
     borderWidth: 1,
     overflow: 'hidden',
   },
-  cardTop: {
-    position: 'relative',
-  },
-  matchStripe: {
+  // ─── Match pill ──────────────────────────────────
+  matchPill: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
+    top: 10,
+    left: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+    zIndex: 2,
   },
-  cardTopInner: {
+  matchPillText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  // ─── Profile info ───────────────────────────────
+  profileSection: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    padding: Spacing.lg,
-    paddingTop: Spacing.lg + 3,
-    gap: Spacing.md,
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm + 2,
+    gap: Spacing.sm + 2,
   },
   avatarRing: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 2.5,
+    borderColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 2,
+    padding: 1.5,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      default: { elevation: 2 },
+    }),
   },
   avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
   },
   infoCol: {
     flex: 1,
-    gap: 4,
+    gap: 2,
   },
   businessName: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.3,
   },
   tradeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     flexWrap: 'wrap',
   },
   tradePill: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 1.5,
     borderRadius: Radius.full,
   },
   tradePillText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   verifiedPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    gap: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
     borderRadius: Radius.full,
   },
   verifiedText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
   },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 2,
   },
   locationText: {
-    fontSize: 13,
-    flex: 1,
-  },
-
-  // ─── Match score ───────────────────────────────
-  matchScoreWrap: {
-    alignItems: 'center',
-    gap: 3,
-  },
-  matchScoreRing: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    borderWidth: 3,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  matchScoreNum: {
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  matchScoreLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    marginTop: -2,
-  },
-  matchScoreCaption: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 12,
   },
 
   // ─── Stats row ─────────────────────────────────
@@ -1229,24 +1440,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderBottomWidth: 1,
-    paddingVertical: Spacing.sm + 2,
+    paddingVertical: Spacing.sm,
     marginHorizontal: Spacing.lg,
+    gap: 10,
   },
   statItem: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
+    gap: 4,
   },
   statText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
   },
-  statDivider: {
-    width: 1,
-    height: 20,
+  availDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  statDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    opacity: 0.4,
   },
 
   // ─── Card bottom ───────────────────────────────
@@ -1265,13 +1481,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   specChip: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 9,
     paddingVertical: 3,
     borderRadius: Radius.full,
+    borderWidth: 1,
   },
   specChipText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   specMore: {
     fontSize: 11,
@@ -1285,40 +1502,54 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     marginTop: 4,
   },
-  saveBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  bookmarkBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.8)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  btnOutline: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    paddingVertical: 10,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-  },
-  btnOutlineText: {
-    fontSize: 13,
-    fontWeight: '600',
+    zIndex: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.12,
+        shadowRadius: 4,
+      },
+      default: { elevation: 4 },
+    }),
   },
   btnPrimary: {
     flex: 1.4,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-    paddingVertical: 10,
+    gap: 6,
+    height: 44,
     borderRadius: Radius.md,
   },
   btnPrimaryText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     color: '#fff',
+  },
+  btnOutline: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 44,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  btnOutlineText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 
   // ─── States ────────────────────────────────────

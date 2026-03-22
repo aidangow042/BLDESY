@@ -40,10 +40,10 @@ export default function SettingsScreen() {
           setUserEmail(user.email ?? null);
           const { data: profile } = await supabase
             .from('profiles')
-            .select('full_name')
+            .select('name')
             .eq('id', user.id)
             .single();
-          setFullName(profile?.full_name ?? null);
+          setFullName(profile?.name ?? null);
         }
       })();
     }, []),
@@ -139,10 +139,10 @@ export default function SettingsScreen() {
       rows: [
         {
           key: 'profile',
-          label: fullName || 'Edit Profile',
-          subtitle: 'Name, phone, avatar',
+          label: fullName || 'My Profile',
+          subtitle: 'Name, phone, and avatar',
           icon: 'person-outline',
-          onPress: () => router.push('/builder-edit-profile'),
+          onPress: () => router.push('/edit-profile'),
         },
         {
           key: 'email',

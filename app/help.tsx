@@ -47,8 +47,8 @@ const FAQ_ITEMS = [
   },
   {
     q: 'How do I save a tradie?',
-    a: 'Tap the heart icon on any builder profile or search result card. All your saved tradies appear in the Saved tab for easy access later.',
-    icon: 'favorite-border' as const,
+    a: 'Tap the bookmark icon on any builder profile or search result card. All your saved tradies appear in the Saved tab for easy access later.',
+    icon: 'bookmark-border' as const,
   },
   {
     q: 'How do I become a listed builder?',

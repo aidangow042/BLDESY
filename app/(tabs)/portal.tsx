@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
@@ -219,9 +220,9 @@ export default function PortalScreen() {
       accent: false,
     },
     {
-      icon: '📬',
-      title: 'My Applications',
-      description: 'Track the status of your job applications',
+      icon: '📊',
+      title: 'Analytics',
+      description: 'Track views, applications & profile performance',
       onPress: () => router.push('/builder-applications'),
       accent: false,
     },
@@ -306,11 +307,23 @@ export default function PortalScreen() {
           )}
 
           {percent === 100 && (
-            <View style={[styles.completeBadge, { backgroundColor: tealBg }]}>
-              <Text style={{ color: teal, fontWeight: '700', fontSize: 14 }}>
-                ✓ Profile complete — you look great!
-              </Text>
-            </View>
+            <>
+              <View style={[styles.completeBadge, { backgroundColor: tealBg }]}>
+                <Text style={{ color: teal, fontWeight: '700', fontSize: 14 }}>
+                  ✓ Profile is done
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => router.push({ pathname: '/builder-profile', params: { fromDashboard: '1' } } as any)}
+                style={({ pressed }) => [
+                  styles.completeProfileBtn,
+                  { backgroundColor: teal },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={styles.completeProfileBtnText}>View Profile</Text>
+              </Pressable>
+            </>
           )}
         </View>
 
@@ -369,6 +382,22 @@ export default function PortalScreen() {
             </View>
           </View>
         )}
+
+        {/* Back to customer mode */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.backToCustomer,
+            { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+          ]}
+          onPress={() => router.navigate('/(tabs)' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Switch back to customer mode"
+        >
+          <Ionicons name="swap-horizontal" size={18} color={colors.textSecondary} />
+          <Text style={[styles.backToCustomerText, { color: colors.textSecondary }]}>
+            Back to Customer Mode
+          </Text>
+        </Pressable>
       </ScrollView>
     </View>
   );
@@ -633,5 +662,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     marginTop: 2,
+  },
+  backToCustomer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    marginHorizontal: Spacing.xl,
+    marginTop: Spacing['2xl'],
+    paddingVertical: Spacing.md,
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+  },
+  backToCustomerText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

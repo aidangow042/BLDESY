@@ -22,6 +22,33 @@ function BottomTabBar({ state, descriptors, navigation }: MaterialTopTabBarProps
   const colors = Colors[theme];
   const insets = useSafeAreaInsets();
 
+  // Check if the current screen is the portal (builder dashboard)
+  const currentRoute = state.routes[state.index];
+  const isPortal = currentRoute?.name === 'portal';
+
+  // Portal gets a single centered dashboard icon instead of the full tab bar
+  if (isPortal) {
+    return (
+      <View
+        style={[
+          styles.tabBar,
+          {
+            backgroundColor: colors.canvas,
+            borderTopColor: colors.border,
+            paddingBottom: insets.bottom,
+            height: 48 + insets.bottom,
+            justifyContent: 'center',
+            alignItems: 'center',
+          },
+        ]}
+      >
+        <View style={[styles.portalTabIcon, { backgroundColor: colors.teal }]}>
+          <IconSymbol size={22} name="building.2" color="#fff" />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View
       style={[
@@ -129,6 +156,7 @@ export default function TabLayout() {
         name="saved"
         options={{
           title: 'Saved',
+          swipeEnabled: false,
           tabBarIcon: ({ color }: { color: string }) => (
             <IconSymbol size={26} name="bookmark" color={color} />
           ),
@@ -136,8 +164,8 @@ export default function TabLayout() {
       />
 
       {/* Hidden screens — keep in route tree but not in tab bar */}
-      <TopTabs.Screen name="portal" options={{ href: null }} />
-      <TopTabs.Screen name="explore" options={{ href: null }} />
+      <TopTabs.Screen name="portal" options={{ href: null, swipeEnabled: false }} />
+      <TopTabs.Screen name="explore" options={{ href: null, swipeEnabled: false }} />
     </TopTabs>
   );
 }
@@ -150,6 +178,13 @@ const styles = StyleSheet.create({
   },
   tabItem: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  portalTabIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -8,13 +8,16 @@ import { supabase } from './supabase';
 export async function uploadImage(
   localUri: string,
   userId: string,
-  folder: 'cover' | 'profile' | 'projects',
+  folder: 'cover' | 'profile' | 'projects' | 'team',
 ): Promise<string | null> {
   try {
     // Get file extension from URI
     const ext = localUri.split('.').pop()?.toLowerCase() ?? 'jpg';
     const fileName = `${userId}/${folder}/${Date.now()}.${ext}`;
-    const contentType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+    const videoExts = ['mp4', 'mov', 'avi', 'webm', 'mkv'];
+    const contentType = videoExts.includes(ext)
+      ? `video/${ext === 'mov' ? 'quicktime' : ext}`
+      : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
 
     // Read local file as ArrayBuffer using expo-file-system File API
     const file = new File(localUri);
@@ -50,7 +53,7 @@ export async function uploadImage(
 export async function uploadImages(
   localUris: string[],
   userId: string,
-  folder: 'cover' | 'profile' | 'projects',
+  folder: 'cover' | 'profile' | 'projects' | 'team',
 ): Promise<string[]> {
   const results = await Promise.all(
     localUris.map(uri => uploadImage(uri, userId, folder)),

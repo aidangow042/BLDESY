@@ -179,9 +179,9 @@ function AnimatedCard({ index, children }: { index: number; children: React.Reac
   );
 }
 
-// ─── Heart button with frosted glass + pop animation ─────────────────────────
+// ─── Bookmark button with frosted glass + pop animation ──────────────────────
 
-function HeartButton({ onPress }: { onPress: () => void }) {
+function BookmarkButton({ onPress }: { onPress: () => void }) {
   const scale = useRef(new Animated.Value(1)).current;
 
   function handlePress() {
@@ -210,12 +210,12 @@ function HeartButton({ onPress }: { onPress: () => void }) {
     <Pressable
       onPress={handlePress}
       hitSlop={10}
-      style={styles.heartBtn}
+      style={styles.bookmarkBtn}
       accessibilityLabel="Remove from saved"
       accessibilityRole="button"
     >
       <Animated.View style={{ transform: [{ scale }] }}>
-        <MaterialIcons name="favorite" size={22} color="#EF4444" />
+        <MaterialIcons name="bookmark" size={22} color={Colors.light.teal} />
       </Animated.View>
     </Pressable>
   );
@@ -474,8 +474,8 @@ export default function SavedScreen() {
               pointerEvents="none"
             />
 
-            {/* Heart button — frosted glass */}
-            <HeartButton onPress={() => unsaveBuilder(item.builder_id)} />
+            {/* Bookmark button — frosted glass */}
+            <BookmarkButton onPress={() => unsaveBuilder(item.builder_id)} />
 
             {/* Image count pill */}
             {images.length > 0 && (
@@ -740,7 +740,7 @@ export default function SavedScreen() {
             No saved tradies yet
           </Text>
           <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-            Tradies you save will appear here. Tap the heart on any tradie's profile to save them.
+            Tradies you save will appear here. Tap the bookmark on any tradie's profile to save them.
           </Text>
           <Pressable
             style={({ pressed }) => [
@@ -889,7 +889,7 @@ const styles = StyleSheet.create({
   dot: {
     borderRadius: 4,
   },
-  heartBtn: {
+  bookmarkBtn: {
     position: 'absolute',
     top: 10,
     right: 10,

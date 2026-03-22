@@ -32,6 +32,26 @@ const AVATAR_SIZE = 80;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
+const MEMBERSHIP_SUGGESTIONS = [
+  'HIA (Housing Industry Association)',
+  'MBA (Master Builders Association)',
+  'Fair Trading Licensed',
+  'Master Plumbers',
+  'Master Electricians',
+  'QBCC Licensed',
+  'Registered Building Practitioner',
+  'Certified Passive House',
+];
+
+const AWARD_SUGGESTIONS = [
+  'HIA Award Winner',
+  'MBA Award Winner',
+  'Master Builder of the Year',
+  'Best Renovation',
+  'Best Custom Home',
+  'Excellence in Sustainability',
+];
+
 const AVAILABILITY_OPTIONS = [
   { label: 'Taking jobs now', value: 'available', icon: '🟢' },
   { label: 'Limited availability', value: 'limited', icon: '🟡' },
@@ -65,12 +85,32 @@ type ProjectDraft = {
   description: string;
   costRange: string;
   images: string[]; // URIs
+  beforeImage?: string | null;
+  afterImage?: string | null;
+  videoUri?: string | null;
+  testimonial?: { name: string; text: string } | null;
 };
 
 type CredentialDraft = {
   id: string;
   name: string;
   type: 'licence' | 'insurance' | 'membership' | 'award' | 'other';
+  year?: string;
+  coverType?: string;
+  coverAmount?: string;
+};
+
+type TeamMemberDraft = {
+  id: string;
+  name: string;
+  role: string;
+  photoUri?: string | null;
+};
+
+type FAQDraft = {
+  id: string;
+  question: string;
+  answer: string;
 };
 
 // ─── Section Header ──────────────────────────────────────────────────────────
@@ -107,6 +147,7 @@ export default function EditProfileScreen() {
   const tealBg = colors.tealBg;
   const bgCanvas = colors.canvas;
   const router = useRouter();
+  const scrollRef = useRef<ScrollView>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -154,6 +195,12 @@ export default function EditProfileScreen() {
   // Credentials / Documents
   const [credentials, setCredentials] = useState<CredentialDraft[]>([]);
 
+  // Team Members
+  const [teamMembers, setTeamMembers] = useState<TeamMemberDraft[]>([]);
+
+  // FAQs
+  const [faqs, setFaqs] = useState<FAQDraft[]>([]);
+
   // ─── Fetch existing profile ──────────────────────────────────────────
 
   useEffect(() => {
@@ -198,9 +245,11 @@ export default function EditProfileScreen() {
       setCoverPhoto(data.cover_photo_url ?? null);
       setProfilePhoto(data.profile_photo_url ?? null);
 
-      // Projects & credentials from jsonb
+      // Projects, credentials, team members from jsonb
       if (Array.isArray(data.projects)) setProjects(data.projects);
       if (Array.isArray(data.credentials)) setCredentials(data.credentials);
+      if (Array.isArray(data.team_members)) setTeamMembers(data.team_members);
+      if (Array.isArray(data.faqs)) setFaqs(data.faqs);
     }
     setLoading(false);
   }
@@ -246,7 +295,7 @@ export default function EditProfileScreen() {
   function addProject() {
     setProjects(prev => [
       ...prev,
-      { id: Date.now().toString(), title: '', description: '', costRange: '', images: [] },
+      { id: Date.now().toString(), title: '', description: '', costRange: '', images: [], beforeImage: null, afterImage: null, videoUri: null, testimonial: null },
     ]);
   }
 
@@ -259,6 +308,16 @@ export default function EditProfileScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: () => setProjects(prev => prev.filter(p => p.id !== id)) },
     ]);
+  }
+
+  function moveProject(index: number, direction: 'up' | 'down') {
+    setProjects(prev => {
+      const arr = [...prev];
+      const target = direction === 'up' ? index - 1 : index + 1;
+      if (target < 0 || target >= arr.length) return prev;
+      [arr[index], arr[target]] = [arr[target], arr[index]];
+      return arr;
+    });
   }
 
   async function addProjectImage(projectId: string) {
@@ -292,6 +351,49 @@ export default function EditProfileScreen() {
     updateProject(projectId, 'images', updated);
   }
 
+  async function pickBeforeAfterImage(projectId: string, field: 'beforeImage' | 'afterImage') {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please allow access to your photo library.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      updateProject(projectId, field, result.assets[0].uri);
+    }
+  }
+
+  async function pickProjectVideo(projectId: string) {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please allow access to your photo library.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['videos'],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      updateProject(projectId, 'videoUri', result.assets[0].uri);
+    }
+  }
+
+  function updateTestimonial(projectId: string, field: 'name' | 'text', value: string) {
+    setProjects(prev => prev.map(p => {
+      if (p.id !== projectId) return p;
+      const existing = p.testimonial ?? { name: '', text: '' };
+      return { ...p, testimonial: { ...existing, [field]: value } };
+    }));
+  }
+
+  function clearTestimonial(projectId: string) {
+    updateProject(projectId, 'testimonial', null);
+  }
+
   // ─── Credentials management ──────────────────────────────────────────
 
   function addCredential() {
@@ -317,7 +419,101 @@ export default function EditProfileScreen() {
     { label: '📄 Other', value: 'other' },
   ];
 
+  // ─── Team Members management ───────────────────────────────────────────
+
+  function addTeamMember() {
+    setTeamMembers(prev => [
+      ...prev,
+      { id: Date.now().toString(), name: '', role: '', photoUri: null },
+    ]);
+  }
+
+  function updateTeamMember(id: string, field: keyof TeamMemberDraft, value: any) {
+    setTeamMembers(prev => prev.map(m => (m.id === id ? { ...m, [field]: value } : m)));
+  }
+
+  function removeTeamMember(id: string) {
+    Alert.alert('Remove team member?', 'This person will be removed from your profile.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => setTeamMembers(prev => prev.filter(m => m.id !== id)) },
+    ]);
+  }
+
+  function moveTeamMember(index: number, direction: 'up' | 'down') {
+    setTeamMembers(prev => {
+      const arr = [...prev];
+      const target = direction === 'up' ? index - 1 : index + 1;
+      if (target < 0 || target >= arr.length) return prev;
+      [arr[index], arr[target]] = [arr[target], arr[index]];
+      return arr;
+    });
+  }
+
+  async function pickTeamMemberPhoto(memberId: string) {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please allow access to your photo library.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      updateTeamMember(memberId, 'photoUri', result.assets[0].uri);
+    }
+  }
+
+  // ─── FAQ management ────────────────────────────────────────────────────
+
+  function addFaq() {
+    if (faqs.length >= 8) return;
+    setFaqs(prev => [
+      ...prev,
+      { id: Date.now().toString(), question: '', answer: '' },
+    ]);
+  }
+
+  function updateFaq(id: string, field: 'question' | 'answer', value: string) {
+    setFaqs(prev => prev.map(f => (f.id === id ? { ...f, [field]: value } : f)));
+  }
+
+  function removeFaq(id: string) {
+    Alert.alert('Remove FAQ?', 'This question will be removed from your profile.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => setFaqs(prev => prev.filter(f => f.id !== id)) },
+    ]);
+  }
+
+  function moveFaq(index: number, direction: 'up' | 'down') {
+    setFaqs(prev => {
+      const arr = [...prev];
+      const target = direction === 'up' ? index - 1 : index + 1;
+      if (target < 0 || target >= arr.length) return prev;
+      [arr[index], arr[target]] = [arr[target], arr[index]];
+      return arr;
+    });
+  }
+
   // ─── Save ────────────────────────────────────────────────────────────
+
+  function confirmPublish() {
+    if (!profileId) return;
+    if (!businessName.trim() || !phone.trim() || !suburb.trim() || !postcode.trim()) {
+      Alert.alert('Missing fields', 'Business name, phone, suburb, and postcode are required.');
+      return;
+    }
+    Alert.alert(
+      'Publish Changes',
+      'Your profile changes will be visible to customers. Publish now?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Publish', onPress: handleSave },
+      ],
+    );
+  }
 
   async function handleSave() {
     if (!profileId) return;
@@ -368,22 +564,52 @@ export default function EditProfileScreen() {
         }
       }
 
-      // Project images — upload any local URIs
+      // Project images, before/after, video — upload any local URIs
       const finalProjects = await Promise.all(
         projects.map(async (project) => {
           const localImages = project.images.filter(isLocalUri);
           const remoteImages = project.images.filter(uri => !isLocalUri(uri));
+          let updated = { ...project };
 
           if (localImages.length > 0) {
             const uploadedUrls = await uploadImages(localImages, userId, 'projects');
-            return { ...project, images: [...remoteImages, ...uploadedUrls] };
+            updated.images = [...remoteImages, ...uploadedUrls];
           }
-          return project;
+
+          // Before image
+          if (updated.beforeImage && isLocalUri(updated.beforeImage)) {
+            const uploaded = await uploadImage(updated.beforeImage, userId, 'projects');
+            updated.beforeImage = uploaded || null;
+          }
+          // After image
+          if (updated.afterImage && isLocalUri(updated.afterImage)) {
+            const uploaded = await uploadImage(updated.afterImage, userId, 'projects');
+            updated.afterImage = uploaded || null;
+          }
+          // Video
+          if (updated.videoUri && isLocalUri(updated.videoUri)) {
+            const uploaded = await uploadImage(updated.videoUri, userId, 'projects');
+            updated.videoUri = uploaded || null;
+          }
+
+          return updated;
         }),
       );
 
       // Update local state with uploaded URLs
       setProjects(finalProjects);
+
+      // Team member photos — upload any local URIs
+      const finalTeamMembers = await Promise.all(
+        teamMembers.map(async (member) => {
+          if (member.photoUri && isLocalUri(member.photoUri)) {
+            const uploaded = await uploadImage(member.photoUri, userId, 'team');
+            return { ...member, photoUri: uploaded || null };
+          }
+          return member;
+        }),
+      );
+      setTeamMembers(finalTeamMembers);
 
       // ─── Re-geocode if location changed ──────────────────────────
       const geo = await geocode(`${suburb.trim()} ${postcode.trim()}`);
@@ -416,6 +642,8 @@ export default function EditProfileScreen() {
           profile_photo_url: finalProfileUrl,
           projects: finalProjects.length > 0 ? finalProjects : null,
           credentials: credentials.length > 0 ? credentials : null,
+          team_members: finalTeamMembers.length > 0 ? finalTeamMembers : null,
+          faqs: faqs.length > 0 ? faqs : null,
         })
         .eq('id', profileId);
 
@@ -463,23 +691,68 @@ export default function EditProfileScreen() {
           </Pressable>
           <Text style={[styles.topBarTitle, { color: colors.text }]}>Edit Profile</Text>
           <Pressable
-            onPress={handleSave}
+            onPress={confirmPublish}
             disabled={saving}
             style={({ pressed }) => [pressed && { opacity: 0.7 }]}
           >
             {saving ? (
               <ActivityIndicator size="small" color={teal} />
             ) : (
-              <Text style={[styles.topBarBtn, { color: teal, fontWeight: '700' }]}>Save</Text>
+              <Text style={[styles.topBarBtn, { color: teal, fontWeight: '700' }]}>Publish</Text>
             )}
           </Pressable>
         </View>
 
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* ═══════════════════════════════════════════════════════════════
+              PROFILE COMPLETENESS BAR
+              ═══════════════════════════════════════════════════════════════ */}
+          {(() => {
+            const checks = [
+              { label: 'Cover photo', done: !!coverPhoto },
+              { label: 'Profile photo', done: !!profilePhoto },
+              { label: 'Bio', done: bio.trim().length > 0 },
+              { label: 'Phone', done: phone.trim().length > 0 },
+              { label: 'Specialty', done: specialties.length > 0 },
+              { label: 'Project', done: projects.length > 0 },
+              { label: 'ABN', done: abn.trim().length > 0 },
+              { label: 'Credential', done: credentials.length > 0 },
+            ];
+            const completed = checks.filter(c => c.done).length;
+            const pct = Math.round((completed / checks.length) * 100);
+            const missing = checks.filter(c => !c.done);
+            if (pct >= 100) return null;
+            return (
+              <View style={[styles.completenessCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={[styles.completenessTitle, { color: colors.text }]}>
+                    Profile {pct}% complete
+                  </Text>
+                  <Text style={[{ fontSize: 12, color: colors.textSecondary }]}>
+                    {completed}/{checks.length}
+                  </Text>
+                </View>
+                <View style={[styles.completenessBarBg, { backgroundColor: colors.border }]}>
+                  <View style={[styles.completenessBarFill, { width: `${pct}%`, backgroundColor: teal }]} />
+                </View>
+                {missing.length > 0 && (
+                  <View style={[styles.chipRow, { flexWrap: 'wrap', marginTop: 8 }]}>
+                    {missing.map(m => (
+                      <View key={m.label} style={[styles.missingChip, { backgroundColor: tealBg }]}>
+                        <Text style={{ fontSize: 11, color: teal, fontWeight: '600' }}>+ {m.label}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          })()}
+
           {/* ═══════════════════════════════════════════════════════════════
               SECTION 1: COVER PHOTO & PROFILE PHOTO
               ═══════════════════════════════════════════════════════════════ */}
@@ -578,10 +851,19 @@ export default function EditProfileScreen() {
               multiline
               numberOfLines={5}
               textAlignVertical="top"
+              maxLength={500}
             />
-            <Text style={[styles.fieldHint, { color: colors.icon }]}>
-              This appears in your "About" section. Be descriptive — it helps customers trust you.
-            </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+              <Text style={[styles.fieldHint, { color: colors.icon, flex: 1 }]}>
+                This appears in your "About" section. Be descriptive — it helps customers trust you.
+              </Text>
+              <Text style={[styles.fieldHint, {
+                color: bio.length >= 500 ? colors.error : bio.length >= 450 ? '#e67e22' : colors.icon,
+                fontWeight: bio.length >= 450 ? '600' : '400',
+              }]}>
+                {bio.length}/500
+              </Text>
+            </View>
 
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
@@ -775,6 +1057,111 @@ export default function EditProfileScreen() {
                     </Pressable>
                   ))}
                 </View>
+
+                {/* Predefined picker for memberships */}
+                {cred.type === 'membership' && (
+                  <>
+                    <FieldLabel label="Select or type a name" colors={colors} />
+                    <View style={[styles.chipRow, { flexWrap: 'wrap' }]}>
+                      {MEMBERSHIP_SUGGESTIONS.map(s => (
+                        <Pressable
+                          key={s}
+                          onPress={() => updateCredential(cred.id, 'name', s)}
+                          style={({ pressed }) => [
+                            styles.miniChip,
+                            {
+                              backgroundColor: cred.name === s ? tealBg : colors.background,
+                              borderColor: cred.name === s ? teal : colors.border,
+                            },
+                            pressed && { opacity: 0.7 },
+                          ]}
+                        >
+                          <Text style={[styles.miniChipText, { color: cred.name === s ? teal : colors.textSecondary }]}>
+                            {s}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </>
+                )}
+
+                {/* Predefined picker for awards */}
+                {cred.type === 'award' && (
+                  <>
+                    <FieldLabel label="Select or type a name" colors={colors} />
+                    <View style={[styles.chipRow, { flexWrap: 'wrap' }]}>
+                      {AWARD_SUGGESTIONS.map(s => (
+                        <Pressable
+                          key={s}
+                          onPress={() => updateCredential(cred.id, 'name', s)}
+                          style={({ pressed }) => [
+                            styles.miniChip,
+                            {
+                              backgroundColor: cred.name === s ? tealBg : colors.background,
+                              borderColor: cred.name === s ? teal : colors.border,
+                            },
+                            pressed && { opacity: 0.7 },
+                          ]}
+                        >
+                          <Text style={[styles.miniChipText, { color: cred.name === s ? teal : colors.textSecondary }]}>
+                            {s}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </>
+                )}
+
+                {/* Year field for memberships and awards */}
+                {(cred.type === 'membership' || cred.type === 'award') && (
+                  <View style={{ marginTop: 4 }}>
+                    <FieldLabel label="Year" colors={colors} />
+                    <TextInput
+                      style={[styles.input, inputStyle(colors), { width: 100 }]}
+                      value={cred.year ?? ''}
+                      onChangeText={v => updateCredential(cred.id, 'year', v)}
+                      placeholder="e.g. 2024"
+                      placeholderTextColor={colors.icon}
+                      keyboardType="number-pad"
+                      maxLength={4}
+                    />
+                  </View>
+                )}
+
+                {/* Insurance detail fields */}
+                {cred.type === 'insurance' && (
+                  <>
+                    <FieldLabel label="Cover Type" colors={colors} />
+                    <View style={[styles.chipRow, { flexWrap: 'wrap' }]}>
+                      {['Public Liability', 'Home Warranty', 'Workers Comp', 'Professional Indemnity'].map(ct => (
+                        <Pressable
+                          key={ct}
+                          onPress={() => updateCredential(cred.id, 'coverType', ct)}
+                          style={({ pressed }) => [
+                            styles.miniChip,
+                            {
+                              backgroundColor: cred.coverType === ct ? tealBg : colors.background,
+                              borderColor: cred.coverType === ct ? teal : colors.border,
+                            },
+                            pressed && { opacity: 0.7 },
+                          ]}
+                        >
+                          <Text style={[styles.miniChipText, { color: cred.coverType === ct ? teal : colors.textSecondary }]}>
+                            {ct}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                    <FieldLabel label="Cover Amount" colors={colors} />
+                    <TextInput
+                      style={[styles.input, inputStyle(colors), { width: 140 }]}
+                      value={cred.coverAmount ?? ''}
+                      onChangeText={v => updateCredential(cred.id, 'coverAmount', v)}
+                      placeholder="e.g. $20M"
+                      placeholderTextColor={colors.icon}
+                    />
+                  </>
+                )}
               </View>
             ))}
 
@@ -787,6 +1174,182 @@ export default function EditProfileScreen() {
               ]}
             >
               <Text style={{ color: teal, fontWeight: '700', fontSize: 14 }}>+ Add Document</Text>
+            </Pressable>
+          </View>
+
+          {/* ═══════════════════════════════════════════════════════════════
+              SECTION 4B: TEAM MEMBERS
+              ═══════════════════════════════════════════════════════════════ */}
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <SectionHeader
+              title="Team Members"
+              colors={colors}
+              subtitle="Introduce your team — helps customers feel connected"
+            />
+
+            {teamMembers.length === 0 && (
+              <View style={[styles.emptyState, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <Text style={{ fontSize: 32 }}>👥</Text>
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>No team members yet</Text>
+                <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                  Add your team to show customers who they'll be working with.
+                </Text>
+              </View>
+            )}
+
+            {teamMembers.map((member, idx) => (
+              <View key={member.id} style={[styles.credCard, { borderColor: colors.border }]}>
+                <View style={styles.credCardHeader}>
+                  <Text style={[styles.credCardNum, { color: colors.textSecondary }]}>
+                    Member {idx + 1}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                    {idx > 0 && (
+                      <Pressable onPress={() => moveTeamMember(idx, 'up')}>
+                        <Text style={{ color: teal, fontSize: 18 }}>↑</Text>
+                      </Pressable>
+                    )}
+                    {idx < teamMembers.length - 1 && (
+                      <Pressable onPress={() => moveTeamMember(idx, 'down')}>
+                        <Text style={{ color: teal, fontSize: 18 }}>↓</Text>
+                      </Pressable>
+                    )}
+                    <Pressable onPress={() => removeTeamMember(member.id)}>
+                      <Text style={{ color: colors.error, fontSize: 13, fontWeight: '600' }}>Remove</Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                  {/* Photo */}
+                  <Pressable
+                    onPress={() => pickTeamMemberPhoto(member.id)}
+                    style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+                  >
+                    {member.photoUri ? (
+                      <Image
+                        source={{ uri: member.photoUri }}
+                        style={[styles.teamMemberPhoto, { backgroundColor: colors.border }]}
+                      />
+                    ) : (
+                      <View style={[styles.teamMemberPhotoPlaceholder, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                        <Text style={{ fontSize: 20, color: colors.icon }}>+</Text>
+                        <Text style={{ fontSize: 9, color: colors.icon, fontWeight: '600' }}>Photo</Text>
+                      </View>
+                    )}
+                  </Pressable>
+
+                  {/* Name + Role */}
+                  <View style={{ flex: 1 }}>
+                    <TextInput
+                      style={[styles.input, inputStyle(colors)]}
+                      value={member.name}
+                      onChangeText={v => updateTeamMember(member.id, 'name', v)}
+                      placeholder="Name"
+                      placeholderTextColor={colors.icon}
+                    />
+                    <TextInput
+                      style={[styles.input, inputStyle(colors), { marginTop: 8 }]}
+                      value={member.role}
+                      onChangeText={v => updateTeamMember(member.id, 'role', v)}
+                      placeholder="Role (e.g. Lead Carpenter)"
+                      placeholderTextColor={colors.icon}
+                    />
+                  </View>
+                </View>
+              </View>
+            ))}
+
+            <Pressable
+              onPress={addTeamMember}
+              style={({ pressed }) => [
+                styles.addCardBtn,
+                { borderColor: teal },
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={{ color: teal, fontWeight: '700', fontSize: 14 }}>+ Add Team Member</Text>
+            </Pressable>
+          </View>
+
+          {/* ═══════════════════════════════════════════════════════════════
+              SECTION 4C: FAQ
+              ═══════════════════════════════════════════════════════════════ */}
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <SectionHeader
+              title="Frequently Asked Questions"
+              colors={colors}
+              subtitle="Answer common questions upfront — saves you time later"
+            />
+
+            {faqs.length === 0 && (
+              <View style={[styles.emptyState, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <Text style={{ fontSize: 32 }}>❓</Text>
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>No FAQs yet</Text>
+                <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                  Add answers to questions customers commonly ask you.
+                </Text>
+              </View>
+            )}
+
+            {faqs.map((faq, idx) => (
+              <View key={faq.id} style={[styles.credCard, { borderColor: colors.border }]}>
+                <View style={styles.credCardHeader}>
+                  <Text style={[styles.credCardNum, { color: colors.textSecondary }]}>
+                    FAQ {idx + 1}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                    {idx > 0 && (
+                      <Pressable onPress={() => moveFaq(idx, 'up')}>
+                        <Text style={{ color: teal, fontSize: 18 }}>↑</Text>
+                      </Pressable>
+                    )}
+                    {idx < faqs.length - 1 && (
+                      <Pressable onPress={() => moveFaq(idx, 'down')}>
+                        <Text style={{ color: teal, fontSize: 18 }}>↓</Text>
+                      </Pressable>
+                    )}
+                    <Pressable onPress={() => removeFaq(faq.id)}>
+                      <Text style={{ color: colors.error, fontSize: 13, fontWeight: '600' }}>Remove</Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                <FieldLabel label="Question" colors={colors} />
+                <TextInput
+                  style={[styles.input, inputStyle(colors)]}
+                  value={faq.question}
+                  onChangeText={v => updateFaq(faq.id, 'question', v)}
+                  placeholder="e.g. How long does a typical renovation take?"
+                  placeholderTextColor={colors.icon}
+                />
+
+                <FieldLabel label="Answer" colors={colors} />
+                <TextInput
+                  style={[styles.input, styles.multilineSmall, inputStyle(colors)]}
+                  value={faq.answer}
+                  onChangeText={v => updateFaq(faq.id, 'answer', v)}
+                  placeholder="Your answer..."
+                  placeholderTextColor={colors.icon}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+              </View>
+            ))}
+
+            <Pressable
+              onPress={addFaq}
+              disabled={faqs.length >= 8}
+              style={({ pressed }) => [
+                styles.addCardBtn,
+                { borderColor: faqs.length >= 8 ? colors.border : teal },
+                (pressed || faqs.length >= 8) && { opacity: 0.5 },
+              ]}
+            >
+              <Text style={{ color: faqs.length >= 8 ? colors.textSecondary : teal, fontWeight: '700', fontSize: 14 }}>
+                {faqs.length >= 8 ? 'Maximum 8 FAQs reached' : '+ Add FAQ'}
+              </Text>
             </Pressable>
           </View>
 
@@ -818,9 +1381,21 @@ export default function EditProfileScreen() {
                   <Text style={[styles.projectNum, { color: teal }]}>
                     Project {idx + 1}
                   </Text>
-                  <Pressable onPress={() => removeProject(project.id)}>
-                    <Text style={{ color: colors.error, fontSize: 13, fontWeight: '600' }}>Remove</Text>
-                  </Pressable>
+                  <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                    {idx > 0 && (
+                      <Pressable onPress={() => moveProject(idx, 'up')}>
+                        <Text style={{ color: teal, fontSize: 18 }}>↑</Text>
+                      </Pressable>
+                    )}
+                    {idx < projects.length - 1 && (
+                      <Pressable onPress={() => moveProject(idx, 'down')}>
+                        <Text style={{ color: teal, fontSize: 18 }}>↓</Text>
+                      </Pressable>
+                    )}
+                    <Pressable onPress={() => removeProject(project.id)}>
+                      <Text style={{ color: colors.error, fontSize: 13, fontWeight: '600' }}>Remove</Text>
+                    </Pressable>
+                  </View>
                 </View>
 
                 <FieldLabel label="Project Title *" colors={colors} />
@@ -879,6 +1454,128 @@ export default function EditProfileScreen() {
                     <Text style={[styles.addImageText, { color: colors.icon }]}>Add photos</Text>
                   </Pressable>
                 </ScrollView>
+
+                {/* Before / After images */}
+                <FieldLabel label="Before & After (optional)" colors={colors} />
+                <Text style={[styles.fieldHint, { color: colors.icon, marginTop: -2, marginBottom: 8 }]}>
+                  Add a before and after photo to show the transformation
+                </Text>
+                <View style={styles.beforeAfterRow}>
+                  <Pressable
+                    onPress={() => pickBeforeAfterImage(project.id, 'beforeImage')}
+                    style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+                  >
+                    {project.beforeImage ? (
+                      <View style={styles.baThumb}>
+                        <Image source={{ uri: project.beforeImage }} style={[styles.projectImageFill, { backgroundColor: colors.border }]} />
+                        <View style={[styles.baLabel, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+                          <Text style={styles.baLabelText}>BEFORE</Text>
+                        </View>
+                        <Pressable
+                          onPress={() => updateProject(project.id, 'beforeImage', null)}
+                          style={styles.removeImageBtn}
+                        >
+                          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>✕</Text>
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <View style={[styles.baPlaceholder, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                        <Text style={{ fontSize: 20, color: colors.icon }}>+</Text>
+                        <Text style={[styles.addImageText, { color: colors.icon }]}>Before</Text>
+                      </View>
+                    )}
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => pickBeforeAfterImage(project.id, 'afterImage')}
+                    style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+                  >
+                    {project.afterImage ? (
+                      <View style={styles.baThumb}>
+                        <Image source={{ uri: project.afterImage }} style={[styles.projectImageFill, { backgroundColor: colors.border }]} />
+                        <View style={[styles.baLabel, { backgroundColor: teal }]}>
+                          <Text style={styles.baLabelText}>AFTER</Text>
+                        </View>
+                        <Pressable
+                          onPress={() => updateProject(project.id, 'afterImage', null)}
+                          style={styles.removeImageBtn}
+                        >
+                          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>✕</Text>
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <View style={[styles.baPlaceholder, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                        <Text style={{ fontSize: 20, color: colors.icon }}>+</Text>
+                        <Text style={[styles.addImageText, { color: colors.icon }]}>After</Text>
+                      </View>
+                    )}
+                  </Pressable>
+                </View>
+
+                {/* Video */}
+                <FieldLabel label="Video (optional)" colors={colors} />
+                {project.videoUri ? (
+                  <View style={[styles.videoRow, { borderColor: colors.border }]}>
+                    <Text style={[{ flex: 1, fontSize: 13, color: colors.text }]} numberOfLines={1}>
+                      Video attached
+                    </Text>
+                    <Pressable onPress={() => updateProject(project.id, 'videoUri', null)}>
+                      <Text style={{ color: colors.error, fontSize: 13, fontWeight: '600' }}>Remove</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => pickProjectVideo(project.id)}
+                    style={({ pressed }) => [
+                      styles.addCardBtn,
+                      { borderColor: colors.border },
+                      pressed && { opacity: 0.7 },
+                    ]}
+                  >
+                    <Text style={{ color: colors.textSecondary, fontWeight: '600', fontSize: 13 }}>+ Add Video</Text>
+                  </Pressable>
+                )}
+
+                {/* Testimonial */}
+                <FieldLabel label="Client Testimonial (optional)" colors={colors} />
+                {project.testimonial ? (
+                  <View style={[styles.testimonialBox, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                    <View style={styles.credCardHeader}>
+                      <Text style={[styles.credCardNum, { color: colors.textSecondary }]}>Testimonial</Text>
+                      <Pressable onPress={() => clearTestimonial(project.id)}>
+                        <Text style={{ color: colors.error, fontSize: 13, fontWeight: '600' }}>Remove</Text>
+                      </Pressable>
+                    </View>
+                    <TextInput
+                      style={[styles.input, inputStyle(colors), { marginTop: 6 }]}
+                      value={project.testimonial.name}
+                      onChangeText={v => updateTestimonial(project.id, 'name', v)}
+                      placeholder="Client first name"
+                      placeholderTextColor={colors.icon}
+                    />
+                    <TextInput
+                      style={[styles.input, styles.multilineSmall, inputStyle(colors), { marginTop: 8 }]}
+                      value={project.testimonial.text}
+                      onChangeText={v => updateTestimonial(project.id, 'text', v)}
+                      placeholder="What did the client say about this project?"
+                      placeholderTextColor={colors.icon}
+                      multiline
+                      numberOfLines={3}
+                      textAlignVertical="top"
+                    />
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => updateProject(project.id, 'testimonial', { name: '', text: '' })}
+                    style={({ pressed }) => [
+                      styles.addCardBtn,
+                      { borderColor: colors.border },
+                      pressed && { opacity: 0.7 },
+                    ]}
+                  >
+                    <Text style={{ color: colors.textSecondary, fontWeight: '600', fontSize: 13 }}>+ Add Testimonial</Text>
+                  </Pressable>
+                )}
               </View>
             ))}
 
@@ -1070,7 +1767,7 @@ export default function EditProfileScreen() {
 
           {/* ─── Save button (bottom) ─── */}
           <Pressable
-            onPress={handleSave}
+            onPress={confirmPublish}
             disabled={saving}
             style={({ pressed }) => [
               styles.saveBtn,
@@ -1081,7 +1778,7 @@ export default function EditProfileScreen() {
             {saving ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.saveBtnText}>Save Changes</Text>
+              <Text style={styles.saveBtnText}>Publish Changes</Text>
             )}
           </Pressable>
 
@@ -1428,6 +2125,78 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
+  // Team members
+  teamMemberPhoto: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+  },
+  teamMemberPhotoPlaceholder: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
+  },
+
+  // Before/After
+  beforeAfterRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  baThumb: {
+    width: 130,
+    height: 100,
+    borderRadius: Radius.md,
+    overflow: 'hidden',
+  },
+  baPlaceholder: {
+    width: 130,
+    height: 100,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  baLabel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingVertical: 3,
+    alignItems: 'center',
+  },
+  baLabelText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+
+  // Video
+  videoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
+    gap: 10,
+  },
+
+  // Testimonial
+  testimonialBox: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    marginTop: 4,
+  },
+
   // Availability
   availOption: {
     flexDirection: 'row',
@@ -1453,6 +2222,35 @@ const styles = StyleSheet.create({
   radiusHint: {
     fontSize: 14,
     fontWeight: '500',
+  },
+
+  // Completeness
+  completenessCard: {
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+  },
+  completenessTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  completenessBarBg: {
+    height: 6,
+    borderRadius: 3,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  completenessBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  missingChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Radius.full,
   },
 
   // Save button

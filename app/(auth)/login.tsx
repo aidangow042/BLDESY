@@ -71,6 +71,16 @@ export default function LoginScreen() {
           end={{ x: 1, y: 1 }}
           style={[styles.hero, { paddingTop: insets.top + Spacing.xl }]}
         >
+          {/* Skip for now */}
+          <Pressable
+            onPress={() => router.replace('/(tabs)' as any)}
+            style={({ pressed }) => [styles.skipBtn, { top: insets.top + Spacing.sm }, pressed && { opacity: 0.6 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Skip login and browse as guest"
+          >
+            <Text style={styles.skipText}>Skip for now</Text>
+            <MaterialIcons name="chevron-right" size={16} color="rgba(255,255,255,0.7)" />
+          </Pressable>
           {/* Decorative dots */}
           <View style={styles.dotsLayer} pointerEvents="none">
             {Array.from({ length: 6 }).map((_, row) => (
@@ -240,6 +250,24 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+  },
+
+  // Skip button
+  skipBtn: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    zIndex: 10,
+  },
+  skipText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.7)',
   },
 
   // Hero
