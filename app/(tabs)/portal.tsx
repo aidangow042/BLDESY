@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -7,10 +7,19 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ThemedText } from '@/components/themed-text';
+import { SideDrawer } from '@/components/side-drawer';
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
+import { DashboardColors, DashboardShadows } from '@/constants/dashboard-theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
-import { PageHeader, HeaderAvatar, HeaderIcon } from '@/components/page-header';
+import { PageHeader, HeaderIcon } from '@/components/page-header';
+import { DashboardHeader } from '@/components/dashboard/dashboard-header';
+import { MetricsGrid } from '@/components/dashboard/metrics-grid';
+import { HealthGauge } from '@/components/dashboard/health-gauge';
+import { AICoachCard } from '@/components/dashboard/ai-coach-card';
+import { ActivityFeed } from '@/components/dashboard/activity-feed';
+import { NotificationsPanel } from '@/components/dashboard/notifications-panel';
+import type BottomSheet from '@gorhom/bottom-sheet';
 
 type BuilderStatus = 'loading' | 'none' | 'pending' | 'approved';
 
@@ -64,6 +73,8 @@ export default function PortalScreen() {
 
   const [status, setStatus] = useState<BuilderStatus>('loading');
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const notificationsRef = useRef<BottomSheet>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -211,121 +222,69 @@ export default function PortalScreen() {
 
   const { percent, missing } = getProfileCompleteness(profile);
 
-  const dashboardCards = [
+  const dashboardCards: { icon: React.ComponentProps<typeof Ionicons>['name']; title: string; description: string; onPress: () => void }[] = [
     {
-      icon: '📋',
+      icon: 'briefcase-outline',
       title: 'Browse Jobs',
       description: 'Find open jobs matching your trade and apply',
       onPress: () => router.push('/builder-jobs'),
-      accent: false,
     },
     {
-      icon: '📊',
+      icon: 'bar-chart-outline',
       title: 'Analytics',
       description: 'Track views, applications & profile performance',
-      onPress: () => router.push('/builder-applications'),
-      accent: false,
+      onPress: () => router.push('/builder-analytics'),
     },
     {
-      icon: '✏️',
+      icon: 'create-outline',
       title: 'Edit Profile',
       description: 'Photos, projects, specialties, credentials & contact info',
       onPress: () => router.push('/builder-edit-profile'),
-      accent: true,
     },
   ];
 
+
   return (
-    <View style={[styles.safeArea, { backgroundColor: bgCanvas }]}>
+    <View style={[styles.safeArea, { backgroundColor: '#D4DCCE' }]}>
+      {/* Subtle grain texture */}
+      <View style={styles.grainOverlay} pointerEvents="none">
+        {Array.from({ length: 12 }).map((_, row) => (
+          <View key={row} style={styles.grainRow}>
+            {Array.from({ length: 14 }).map((_, col) => (
+              <View key={col} style={styles.grainDot} />
+            ))}
+          </View>
+        ))}
+      </View>
       <ScrollView contentContainerStyle={styles.dashboardScroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <PageHeader
-          title="Dashboard"
-          subtitle={`Welcome back${profile?.business_name ? `, ${profile.business_name}` : ''}!`}
-          variant="professional"
-          watermark="🏗️"
-          rightElement={
-            <HeaderAvatar
-              uri={profile?.profile_photo_url}
-              fallback={<Text style={{ fontSize: 22 }}>👤</Text>}
-            />
-          }
+        <DashboardHeader
+          businessName={profile?.business_name || 'Builder'}
+          profilePhotoUrl={profile?.profile_photo_url ?? null}
+          notificationCount={3}
+          isAvailable={profile?.availability === 'available'}
+          onBellPress={() => notificationsRef.current?.expand()}
+          onHamburgerPress={() => setDrawerOpen(true)}
         />
 
-        {/* Profile completeness card */}
-        <View style={[styles.completenessCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.completenessHeader}>
-            <Text style={[styles.completenessTitle, { color: colors.text }]}>Profile Completeness</Text>
-            <Text style={[styles.completenessPercent, { color: percent === 100 ? teal : colors.warning }]}>
-              {percent}%
-            </Text>
-          </View>
+        {/* Key metrics hero */}
+        <MetricsGrid
+          onViewAnalytics={() => router.push('/builder-analytics')}
+          onCardPress={() => router.push('/builder-analytics')}
+        />
 
-          {/* Progress bar */}
-          <View style={[styles.progressTrack, { backgroundColor: colors.borderLight }]}>
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  backgroundColor: percent === 100 ? teal : colors.warning,
-                  width: `${percent}%`,
-                },
-              ]}
-            />
-          </View>
+        {/* Profile health gauge */}
+        <HealthGauge
+          score={percent}
+          tips={missing.slice(0, 3).map(item => ({
+            text: item,
+            points: 10,
+            onPress: () => router.push('/builder-edit-profile'),
+          }))}
+        />
 
-          {percent < 100 && missing.length > 0 && (
-            <View style={styles.missingList}>
-              <Text style={[styles.missingLabel, { color: colors.textSecondary }]}>
-                Still needed:
-              </Text>
-              {missing.slice(0, 3).map(item => (
-                <View key={item} style={styles.missingRow}>
-                  <Text style={{ color: colors.warning, fontSize: 12 }}>○</Text>
-                  <Text style={[styles.missingItem, { color: colors.textSecondary }]}>{item}</Text>
-                </View>
-              ))}
-              {missing.length > 3 && (
-                <Text style={[styles.missingMore, { color: colors.textSecondary }]}>
-                  +{missing.length - 3} more
-                </Text>
-              )}
-            </View>
-          )}
-
-          {percent < 100 && (
-            <Pressable
-              onPress={() => router.push('/builder-edit-profile')}
-              style={({ pressed }) => [
-                styles.completeProfileBtn,
-                { backgroundColor: teal },
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Text style={styles.completeProfileBtnText}>Complete Your Profile</Text>
-            </Pressable>
-          )}
-
-          {percent === 100 && (
-            <>
-              <View style={[styles.completeBadge, { backgroundColor: tealBg }]}>
-                <Text style={{ color: teal, fontWeight: '700', fontSize: 14 }}>
-                  ✓ Profile is done
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => router.push({ pathname: '/builder-profile', params: { fromDashboard: '1' } } as any)}
-                style={({ pressed }) => [
-                  styles.completeProfileBtn,
-                  { backgroundColor: teal },
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                <Text style={styles.completeProfileBtnText}>View Profile</Text>
-              </Pressable>
-            </>
-          )}
-        </View>
+        {/* AI Coach */}
+        <AICoachCard onGetCoaching={() => router.navigate('/(tabs)/ai' as any)} />
 
         {/* Dashboard cards */}
         <View style={styles.dashboardCards}>
@@ -334,71 +293,65 @@ export default function PortalScreen() {
               key={item.title}
               style={({ pressed }) => [
                 styles.dashboardCard,
-                {
-                  backgroundColor: item.accent ? tealBg : colors.surface,
-                  borderColor: item.accent ? teal : colors.border,
-                  opacity: pressed ? 0.85 : 1,
-                },
-                Shadows.sm,
+                { opacity: pressed ? 0.8 : 1 },
+                DashboardShadows.subtle,
               ]}
               onPress={item.onPress}
             >
               <View style={styles.cardIconRow}>
-                <Text style={{ fontSize: 24 }}>{item.icon}</Text>
-                <View style={{ flex: 1 }}>
-                  <ThemedText type="defaultSemiBold" style={[styles.dashboardCardTitle, { color: colors.text }]}>
-                    {item.title}
-                  </ThemedText>
-                  <ThemedText style={[styles.dashboardCardDesc, { color: colors.textSecondary }]}>
-                    {item.description}
-                  </ThemedText>
+                <View style={styles.cardIconCircle}>
+                  <Ionicons name={item.icon} size={20} color={DashboardColors.accent} />
                 </View>
-                <Text style={{ color: colors.icon, fontSize: 18 }}>›</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.dashboardCardTitle}>{item.title}</Text>
+                  <Text style={styles.dashboardCardDesc}>{item.description}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={DashboardColors.textMuted} />
               </View>
             </Pressable>
           ))}
         </View>
 
-        {/* Quick stats (if profile has data) */}
+        {/* Activity feed */}
+        <ActivityFeed onViewAll={() => {}} />
+
+        {/* Bottom stats bar */}
         {profile && (
           <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.statNumber, { color: teal }]}>
+            <View style={styles.statCard}>
+              <Ionicons name="hammer-outline" size={16} color={DashboardColors.accent} />
+              <Text style={styles.statNumber}>
                 {Array.isArray(profile.projects) ? profile.projects.length : 0}
               </Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Projects</Text>
+              <Text style={styles.statLabel}>Projects</Text>
             </View>
-            <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.statNumber, { color: teal }]}>
-                {Array.isArray(profile.specialties) ? profile.specialties.length : 0}
+            <View style={styles.statCard}>
+              <Ionicons name="camera-outline" size={16} color={DashboardColors.accent} />
+              <Text style={styles.statNumber}>
+                {(Array.isArray(profile.projects) ? profile.projects.reduce((sum: number, p: any) => sum + (Array.isArray(p?.images) ? p.images.length : 0), 0) : 0)}
               </Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Specialties</Text>
+              <Text style={styles.statLabel}>Photos</Text>
             </View>
-            <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.statNumber, { color: teal }]}>
-                {Array.isArray(profile.credentials) ? profile.credentials.length : 0}
-              </Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Docs</Text>
+            <View style={styles.statCard}>
+              <Ionicons name="star-outline" size={16} color={DashboardColors.accent} />
+              <Text style={styles.statNumber}>0</Text>
+              <Text style={styles.statLabel}>Reviews</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Ionicons name="heart-outline" size={16} color={DashboardColors.accent} />
+              <Text style={styles.statNumber}>0</Text>
+              <Text style={styles.statLabel}>Saves</Text>
             </View>
           </View>
         )}
 
-        {/* Back to customer mode */}
-        <Pressable
-          style={({ pressed }) => [
-            styles.backToCustomer,
-            { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
-          ]}
-          onPress={() => router.navigate('/(tabs)' as any)}
-          accessibilityRole="button"
-          accessibilityLabel="Switch back to customer mode"
-        >
-          <Ionicons name="swap-horizontal" size={18} color={colors.textSecondary} />
-          <Text style={[styles.backToCustomerText, { color: colors.textSecondary }]}>
-            Back to Customer Mode
-          </Text>
-        </Pressable>
       </ScrollView>
+
+      {/* Notifications bottom sheet */}
+      <NotificationsPanel ref={notificationsRef} />
+
+      {/* Side drawer (Settings, Help, Legal, etc.) */}
+      <SideDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} builderMode />
     </View>
   );
 }
@@ -533,94 +486,35 @@ const styles = StyleSheet.create({
   },
 
   // Dashboard
+  grainOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'space-evenly',
+    zIndex: 0,
+    opacity: 0.4,
+  },
+  grainRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+  },
+  grainDot: {
+    width: 1.5,
+    height: 1.5,
+    borderRadius: 0.75,
+    backgroundColor: 'rgba(255,255,255,0.02)',
+  },
   dashboardScroll: {
-    paddingBottom: Spacing['5xl'],
+    paddingBottom: 100,
   },
-  // Completeness card
-  completenessCard: {
-    marginHorizontal: Spacing.xl,
-    marginTop: Spacing.xl,
-    borderWidth: 1,
-    borderRadius: Radius.xl,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-    ...Shadows.sm,
-  },
-  completenessHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-  },
-  completenessTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  completenessPercent: {
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  progressTrack: {
-    height: 8,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  missingList: {
-    marginTop: Spacing.md,
-    gap: 4,
-  },
-  missingLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  missingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  missingItem: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  missingMore: {
-    fontSize: 12,
-    fontStyle: 'italic',
-    marginTop: 2,
-  },
-  completeProfileBtn: {
-    height: 44,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: Spacing.md,
-  },
-  completeProfileBtnText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  completeBadge: {
-    marginTop: Spacing.md,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-  },
-
   // Dashboard cards
   dashboardCards: {
     gap: Spacing.md,
     paddingHorizontal: Spacing.xl,
+    marginTop: Spacing.xl,
   },
   dashboardCard: {
+    backgroundColor: DashboardColors.surface,
     borderWidth: 1,
+    borderColor: DashboardColors.border,
     borderRadius: Radius.lg,
     padding: Spacing.lg,
   },
@@ -629,14 +523,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.md,
   },
+  cardIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: DashboardColors.accentDim,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   dashboardCardTitle: {
     fontSize: 16,
+    fontWeight: '600' as const,
     letterSpacing: -0.2,
+    color: DashboardColors.textPrimary,
   },
   dashboardCardDesc: {
     fontSize: 13,
     lineHeight: 18,
     marginTop: 2,
+    color: DashboardColors.textSecondary,
   },
 
   // Stats
@@ -648,34 +553,22 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
+    backgroundColor: DashboardColors.surface,
     borderWidth: 1,
+    borderColor: DashboardColors.border,
     borderRadius: Radius.lg,
     padding: Spacing.md,
     alignItems: 'center',
-    ...Shadows.sm,
   },
   statNumber: {
-    fontSize: 28,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '800' as const,
+    color: DashboardColors.textPrimary,
   },
   statLabel: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     marginTop: 2,
-  },
-  backToCustomer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-    marginHorizontal: Spacing.xl,
-    marginTop: Spacing['2xl'],
-    paddingVertical: Spacing.md,
-    borderWidth: 1,
-    borderRadius: Radius.lg,
-  },
-  backToCustomerText: {
-    fontSize: 15,
-    fontWeight: '600',
+    color: DashboardColors.textSecondary,
   },
 });

@@ -1,8 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts, RussoOne_400Regular } from '@expo-google-fonts/russo-one';
+import {
+  DMSans_400Regular,
+  DMSans_500Medium,
+  DMSans_600SemiBold,
+  DMSans_700Bold,
+} from '@expo-google-fonts/dm-sans';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
@@ -18,7 +24,14 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const segments = useSegments();
   const [session, setSession] = useState<Session | null | undefined>(undefined);
-  const [fontsLoaded] = useFonts({ RussoOne_400Regular });
+  const routingInProgress = useRef(false);
+  const [fontsLoaded] = useFonts({
+    RussoOne_400Regular,
+    DMSans_400Regular,
+    DMSans_500Medium,
+    DMSans_600SemiBold,
+    DMSans_700Bold,
+  });
 
   useEffect(() => {
     // Get initial session
@@ -41,8 +54,36 @@ export default function RootLayout() {
     const inAuthGroup = segments[0] === '(auth)';
 
     if (session && inAuthGroup) {
-      // Signed in but still on auth screen — send to app
-      router.replace('/(tabs)');
+      // Signed in but still on auth screen — route based on role
+      (async () => {
+        if (routingInProgress.current) return;
+        routingInProgress.current = true;
+
+        try {
+          const role = session.user.user_metadata?.role;
+
+          if (role === 'builder') {
+            const { data } = await supabase
+              .from('builder_profiles')
+              .select('approved')
+              .eq('user_id', session.user.id)
+              .maybeSingle();
+
+            if ((data as any)?.approved) {
+              router.replace('/(tabs)/portal' as any);
+            } else if (data) {
+              router.replace('/pending-approval' as any);
+            } else {
+              router.replace('/builder-signup' as any);
+            }
+          } else {
+            // Customer or no role set — default to home
+            router.replace('/(tabs)');
+          }
+        } finally {
+          routingInProgress.current = false;
+        }
+      })();
     }
     // Guests are allowed to browse — no forced redirect to login
   }, [session, segments]);
@@ -66,9 +107,11 @@ export default function RootLayout() {
           <Stack.Screen name="builder-jobs" />
           <Stack.Screen name="job-detail" />
           <Stack.Screen name="builder-applications" />
+          <Stack.Screen name="builder-analytics" />
           <Stack.Screen name="builder-edit-profile" options={{ fullScreenGestureEnabled: false }} />
           <Stack.Screen name="my-jobs" />
           <Stack.Screen name="all-trades" />
+          <Stack.Screen name="billing" />
           <Stack.Screen name="settings" />
           <Stack.Screen name="help" />
           <Stack.Screen name="legal" />

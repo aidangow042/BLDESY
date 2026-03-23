@@ -44,6 +44,9 @@ type Tradie = {
   profile_photo_url: string | null;
   abn: string | null;
   license_key: string | null;
+  specialties: string[] | null;
+  established_year: number | null;
+  projects: { id: string; title: string; images: string[] }[] | null;
 };
 
 // ─── Filter pills ─────────────────────────────────────────────────────────────
@@ -252,10 +255,16 @@ export default function MapScreen() {
   const [showListView, setShowListView] = useState(false);
   const [showSearchArea, setShowSearchArea] = useState(false);
   const [currentRegion, setCurrentRegion] = useState<Region>(NEWCASTLE_REGION);
+  const [sheetReviews, setSheetReviews] = useState<{
+    avg: number;
+    count: number;
+    latest: { reviewer: string; rating: number; text: string } | null;
+  }>({ avg: 0, count: 0, latest: null });
+  const [reviewsLoading, setReviewsLoading] = useState(false);
 
   const bottomSheetRef = useRef<BottomSheet>(null);
   const mapRef = useRef<MapView>(null);
-  const snapPoints = useMemo(() => ['40%', '70%'], []);
+  const snapPoints = useMemo(() => ['45%', '85%'], []);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialFetchDone = useRef(false);
   const emptyHintOpacity = useRef(new Animated.Value(0)).current;
@@ -301,7 +310,7 @@ export default function MapScreen() {
     const { data, error } = await supabase
       .from('builder_profiles')
       .select(
-        'id, business_name, trade_category, suburb, bio, phone, latitude, longitude, radius_km, availability, availability_note, profile_photo_url, abn, license_key',
+        'id, business_name, trade_category, suburb, bio, phone, latitude, longitude, radius_km, availability, availability_note, profile_photo_url, abn, license_key, specialties, established_year, projects',
       )
       .eq('approved', true)
       .not('latitude', 'is', null)
@@ -368,6 +377,34 @@ export default function MapScreen() {
     };
   }, [showEmpty]);
 
+  // ── Fetch reviews for a tradie (on marker press) ──
+  async function fetchTradieReviews(builderId: string) {
+    setReviewsLoading(true);
+    setSheetReviews({ avg: 0, count: 0, latest: null });
+    const { data } = await supabase
+      .from('reviews')
+      .select('rating, reviewer_name, comment')
+      .eq('builder_id', builderId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (data && data.length > 0) {
+      const sum = data.reduce((acc: number, r: any) => acc + (r.rating ?? 0), 0);
+      const avg = Math.round((sum / data.length) * 10) / 10;
+      const first = data[0];
+      setSheetReviews({
+        avg,
+        count: data.length,
+        latest: {
+          reviewer: first.reviewer_name ?? 'Anonymous',
+          rating: first.rating ?? 5,
+          text: first.comment ?? '',
+        },
+      });
+    }
+    setReviewsLoading(false);
+  }
+
   // ── Marker press → animate to tradie + open bottom sheet ──
   const handleMarkerPress = useCallback(
     (tradie: Tradie) => {
@@ -382,6 +419,7 @@ export default function MapScreen() {
         },
         400,
       );
+      fetchTradieReviews(tradie.id);
     },
     [],
   );
@@ -807,7 +845,7 @@ export default function MapScreen() {
           onClose={handleSheetClose}
           enablePanDownToClose
           backgroundStyle={{
-            backgroundColor: isDark ? colors.surface : '#FFFFFF',
+            backgroundColor: isDark ? colors.surface : '#F5F2EC',
             borderRadius: 20,
           }}
           handleIndicatorStyle={{ backgroundColor: colors.border, width: 40 }}
@@ -975,12 +1013,174 @@ export default function MapScreen() {
               </View>
             )}
 
+            {/* ─── Experience + Stats row enhancement ─── */}
+            {selectedTradie.established_year && (
+              <View style={styles.experienceRow}>
+                <MaterialIcons name="workspace-premium" size={14} color={tradeColor} />
+                <Text style={[styles.experienceText, { color: colors.text }]}>
+                  {new Date().getFullYear() - selectedTradie.established_year}+ years experience
+                </Text>
+                <Text style={[styles.experienceSince, { color: colors.textSecondary }]}>
+                  Est. {selectedTradie.established_year}
+                </Text>
+              </View>
+            )}
+
             {/* ─── Bio ─── */}
             {selectedTradie.bio ? (
               <Text style={[styles.bio, { color: colors.textSecondary }]}>
                 {selectedTradie.bio}
               </Text>
             ) : null}
+
+            {/* ─── Specialties ─── */}
+            {selectedTradie.specialties && selectedTradie.specialties.length > 0 && (
+              <View style={styles.specialtiesSection}>
+                <Text style={[styles.sectionLabel, { color: colors.text }]}>Specialties</Text>
+                <View style={styles.chipRow}>
+                  {selectedTradie.specialties.map((s, i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.chip,
+                        {
+                          backgroundColor: `${tradeColor}10`,
+                          borderColor: `${tradeColor}30`,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.chipText, { color: tradeColor }]}>{s}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* ─── Recent work (per-project cards) ─── */}
+            {selectedTradie.projects && selectedTradie.projects.length > 0 && (
+              <View style={styles.projectsSection}>
+                <Text style={[styles.sectionLabel, { color: colors.text }]}>
+                  Recent work
+                </Text>
+                {selectedTradie.projects.slice(0, 2).map((project) => {
+                  const thumb = (project.images ?? [])[0];
+                  const imageCount = (project.images ?? []).length;
+                  return (
+                    <Pressable
+                      key={project.id}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/builder-profile',
+                          params: { id: selectedTradie.id },
+                        })
+                      }
+                      style={({ pressed }) => [
+                        styles.projectCard,
+                        {
+                          backgroundColor: isDark ? colors.canvas : '#FFFFFF',
+                          borderColor: colors.borderLight,
+                        },
+                        pressed && { opacity: 0.7 },
+                      ]}
+                    >
+                      {thumb && (
+                        <Image
+                          source={{ uri: thumb }}
+                          style={styles.projectThumb}
+                        />
+                      )}
+                      <View style={styles.projectInfo}>
+                        <Text
+                          style={[styles.projectTitle, { color: colors.text }]}
+                          numberOfLines={1}
+                        >
+                          {project.title}
+                        </Text>
+                        {imageCount > 1 && (
+                          <Text style={[styles.projectMeta, { color: colors.textSecondary }]}>
+                            {imageCount} photos
+                          </Text>
+                        )}
+                      </View>
+                      <MaterialIcons name="chevron-right" size={18} color={colors.teal} />
+                    </Pressable>
+                  );
+                })}
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/builder-profile',
+                      params: { id: selectedTradie.id },
+                    })
+                  }
+                  style={({ pressed }) => [
+                    styles.viewMoreBtn,
+                    { borderColor: colors.borderLight },
+                    pressed && { opacity: 0.6 },
+                  ]}
+                >
+                  <Text style={[styles.viewMoreText, { color: colors.teal }]}>
+                    View all work
+                  </Text>
+                  <MaterialIcons name="arrow-forward" size={14} color={colors.teal} />
+                </Pressable>
+              </View>
+            )}
+
+            {/* ─── Reviews ─── */}
+            {sheetReviews.count > 0 && (
+              <View style={styles.reviewsSection}>
+                <View style={styles.reviewsHeader}>
+                  <Text style={[styles.sectionLabel, { color: colors.text }]}>Reviews</Text>
+                  <View style={styles.ratingPill}>
+                    <MaterialIcons name="star" size={14} color="#F59E0B" />
+                    <Text style={[styles.ratingText, { color: colors.text }]}>
+                      {sheetReviews.avg.toFixed(1)}
+                    </Text>
+                    <Text style={[styles.ratingCount, { color: colors.textSecondary }]}>
+                      ({sheetReviews.count})
+                    </Text>
+                  </View>
+                </View>
+                {sheetReviews.latest && sheetReviews.latest.text ? (
+                  <View
+                    style={[
+                      styles.reviewCard,
+                      {
+                        backgroundColor: isDark ? colors.canvas : '#F8FAFC',
+                        borderColor: colors.borderLight,
+                      },
+                    ]}
+                  >
+                    <View style={styles.reviewCardHeader}>
+                      <Text style={[styles.reviewerName, { color: colors.text }]}>
+                        {sheetReviews.latest.reviewer}
+                      </Text>
+                      <View style={styles.miniStars}>
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <MaterialIcons
+                            key={i}
+                            name={i < sheetReviews.latest!.rating ? 'star' : 'star-border'}
+                            size={12}
+                            color="#F59E0B"
+                          />
+                        ))}
+                      </View>
+                    </View>
+                    <Text
+                      style={[styles.reviewText, { color: colors.textSecondary }]}
+                      numberOfLines={3}
+                    >
+                      "{sheetReviews.latest.text}"
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            )}
+
+            {reviewsLoading && sheetReviews.count === 0 && (
+              <ActivityIndicator size="small" color={colors.teal} style={{ alignSelf: 'center' }} />
+            )}
 
             {/* ─── Action buttons ─── */}
             <View style={styles.actionRow}>
@@ -1356,6 +1556,139 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
     letterSpacing: -0.1,
+  },
+
+  // ── Experience row ──
+  experienceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  experienceText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  experienceSince: {
+    fontSize: 12,
+    marginLeft: 'auto',
+  },
+
+  // ── Section labels ──
+  sectionLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+
+  // ── Specialties ──
+  specialtiesSection: {
+    gap: Spacing.sm,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+  },
+  chipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // ── Project cards ──
+  projectsSection: {
+    gap: Spacing.sm,
+  },
+  projectCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    padding: Spacing.sm,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  projectThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: Radius.sm,
+    backgroundColor: '#e2e8f0',
+  },
+  projectInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  projectTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+  projectMeta: {
+    fontSize: 12,
+  },
+  viewMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: Spacing.sm + 2,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  viewMoreText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // ── Reviews ──
+  reviewsSection: {
+    gap: Spacing.sm,
+  },
+  reviewsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  ratingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  ratingText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  ratingCount: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  reviewCard: {
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    padding: Spacing.md,
+    gap: 6,
+  },
+  reviewCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  reviewerName: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  miniStars: {
+    flexDirection: 'row',
+    gap: 1,
+  },
+  reviewText: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontStyle: 'italic',
   },
 
   // ── Action buttons ──

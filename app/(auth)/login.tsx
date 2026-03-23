@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,20 +8,25 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
-  Dimensions,
   StatusBar,
   ScrollView,
 } from 'react-native';
 import { Link, router } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  interpolate,
+  Easing,
+} from 'react-native-reanimated';
 import { supabase } from '@/lib/supabase';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, Radius } from '@/constants/theme';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+type Role = 'customer' | 'builder';
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme();
@@ -29,29 +34,77 @@ export default function LoginScreen() {
   const colors = Colors[isDark ? 'dark' : 'light'];
   const insets = useSafeAreaInsets();
 
+  const [role, setRole] = useState<Role>('customer');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [toggleWidth, setToggleWidth] = useState(0);
+
+  // Entrance animation
+  const cardOpacity = useSharedValue(0);
+  const cardTranslateY = useSharedValue(16);
+
+  useEffect(() => {
+    cardOpacity.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.ease) });
+    cardTranslateY.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.ease) });
+  }, []);
+
+  const cardAnimStyle = useAnimatedStyle(() => ({
+    opacity: cardOpacity.value,
+    transform: [{ translateY: cardTranslateY.value }],
+  }));
+
+  // Role toggle animation
+  const toggleX = useSharedValue(0);
+
+  useEffect(() => {
+    toggleX.value = withTiming(role === 'customer' ? 0 : 1, {
+      duration: 200,
+      easing: Easing.out(Easing.ease),
+    });
+  }, [role]);
+
+  const indicatorStyle = useAnimatedStyle(() => {
+    const halfWidth = (toggleWidth - 6) / 2; // container padding = 3 each side
+    return {
+      transform: [
+        {
+          translateX: interpolate(toggleX.value, [0, 1], [0, halfWidth]),
+        },
+      ],
+    };
+  });
+
+  const onToggleLayout = useCallback((e: any) => {
+    setToggleWidth(e.nativeEvent.layout.width);
+  }, []);
+
+  // Clear error when user types
+  useEffect(() => {
+    if (error) setError(null);
+  }, [email, password]);
 
   async function handleLogin() {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter your email and password.');
+      setError('Please enter your email and password.');
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setError(null);
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
-    if (error) {
-      Alert.alert('Login failed', error.message);
+    if (authError) {
+      setError(authError.message);
     }
     // On success, root layout listener will redirect automatically
   }
 
-  const gradientColors: [string, string, string] = isDark
-    ? ['#042f2e', '#0f3d3a', '#134E4A']
-    : ['#0d9488', '#0f766e', '#115e59'];
-
-  const dotColor = 'rgba(255,255,255,0.07)';
+  function handleSocialStub(provider: string) {
+    setError(`${provider} sign-in coming soon.`);
+  }
 
   return (
     <KeyboardAvoidingView
@@ -64,77 +117,181 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Gradient hero section */}
-        <LinearGradient
-          colors={gradientColors}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.hero, { paddingTop: insets.top + Spacing.xl }]}
+        {/* Compact dark header */}
+        <View
+          style={[
+            styles.header,
+            {
+              paddingTop: insets.top + 16,
+              backgroundColor: isDark ? '#042f2e' : '#0F4F3E',
+            },
+          ]}
         >
-          {/* Skip for now */}
+          <Text style={styles.headerLogo}>BLDESY!</Text>
+          <Text style={styles.headerTagline}>Find trusted tradies, fast.</Text>
+        </View>
+
+        {/* Content area with entrance animation */}
+        <Animated.View style={[styles.contentArea, cardAnimStyle]}>
+          {/* Browse as guest */}
           <Pressable
             onPress={() => router.replace('/(tabs)' as any)}
-            style={({ pressed }) => [styles.skipBtn, { top: insets.top + Spacing.sm }, pressed && { opacity: 0.6 }]}
+            style={({ pressed }) => [
+              styles.guestButton,
+              {
+                backgroundColor: isDark ? colors.surface : '#ffffff',
+                borderColor: colors.teal,
+              },
+              pressed && { opacity: 0.7 },
+            ]}
             accessibilityRole="button"
-            accessibilityLabel="Skip login and browse as guest"
+            accessibilityLabel="Browse without an account"
           >
-            <Text style={styles.skipText}>Skip for now</Text>
-            <MaterialIcons name="chevron-right" size={16} color="rgba(255,255,255,0.7)" />
-          </Pressable>
-          {/* Decorative dots */}
-          <View style={styles.dotsLayer} pointerEvents="none">
-            {Array.from({ length: 6 }).map((_, row) => (
-              <View key={row} style={styles.dotsRow}>
-                {Array.from({ length: 9 }).map((_, col) => (
-                  <View
-                    key={col}
-                    style={[styles.dot, { backgroundColor: dotColor }]}
-                  />
-                ))}
-              </View>
-            ))}
-          </View>
-
-          {/* Hero text */}
-          <View style={styles.heroContent}>
-            <Text style={styles.logo}>BLDESY!</Text>
-            <Text style={styles.tagline}>Find trusted tradies, fast.</Text>
-            <Text style={styles.socialProof}>
-              Connecting Australians with quality tradies
+            <Text style={[styles.guestButtonText, { color: colors.teal }]}>
+              Browse without an account
             </Text>
-          </View>
-        </LinearGradient>
+            <MaterialIcons name="arrow-forward" size={18} color={colors.teal} />
+          </Pressable>
 
-        {/* Form card — overlaps gradient */}
-        <View style={styles.cardWrapper}>
+          {/* Role toggle */}
+          <View style={styles.toggleWrapper}>
+            <View
+              style={[
+                styles.toggleContainer,
+                { backgroundColor: isDark ? '#0f2a2a' : '#E1F5EE' },
+              ]}
+              onLayout={onToggleLayout}
+            >
+              {/* Animated indicator */}
+              {toggleWidth > 0 && (
+                <Animated.View
+                  style={[
+                    styles.toggleIndicator,
+                    {
+                      width: (toggleWidth - 6) / 2,
+                      backgroundColor: isDark ? colors.teal : '#0F4F3E',
+                    },
+                    indicatorStyle,
+                  ]}
+                />
+              )}
+
+              {/* Customer button */}
+              <Pressable
+                style={styles.toggleBtn}
+                onPress={() => setRole('customer')}
+                accessibilityRole="button"
+                accessibilityLabel="Customer"
+                accessibilityState={{ selected: role === 'customer' }}
+              >
+                <MaterialIcons
+                  name="person"
+                  size={16}
+                  color={
+                    role === 'customer'
+                      ? isDark ? '#0f172a' : '#ffffff'
+                      : isDark ? colors.teal : '#0F4F3E'
+                  }
+                />
+                <Text
+                  style={[
+                    styles.toggleText,
+                    {
+                      color:
+                        role === 'customer'
+                          ? isDark ? '#0f172a' : '#ffffff'
+                          : isDark ? colors.teal : '#0F4F3E',
+                      fontWeight: role === 'customer' ? '700' : '600',
+                    },
+                  ]}
+                >
+                  Customer
+                </Text>
+              </Pressable>
+
+              {/* Builder button */}
+              <Pressable
+                style={styles.toggleBtn}
+                onPress={() => setRole('builder')}
+                accessibilityRole="button"
+                accessibilityLabel="Builder"
+                accessibilityState={{ selected: role === 'builder' }}
+              >
+                <MaterialIcons
+                  name="construction"
+                  size={16}
+                  color={
+                    role === 'builder'
+                      ? isDark ? '#0f172a' : '#ffffff'
+                      : isDark ? colors.teal : '#0F4F3E'
+                  }
+                />
+                <Text
+                  style={[
+                    styles.toggleText,
+                    {
+                      color:
+                        role === 'builder'
+                          ? isDark ? '#0f172a' : '#ffffff'
+                          : isDark ? colors.teal : '#0F4F3E',
+                      fontWeight: role === 'builder' ? '700' : '600',
+                    },
+                  ]}
+                >
+                  Builder
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Login card */}
           <View
             style={[
               styles.card,
-              {
-                backgroundColor: isDark ? colors.surface : '#ffffff',
-              },
-              Shadows.lg,
+              { backgroundColor: isDark ? colors.surface : '#ffffff' },
             ]}
           >
             <Text style={[styles.cardTitle, { color: colors.text }]}>
-              Welcome back
+              {role === 'customer' ? 'Welcome back' : 'Builder login'}
             </Text>
 
-            {/* Email input */}
+            {/* Error banner */}
+            {error ? (
+              <Pressable
+                onPress={() => setError(null)}
+                style={[
+                  styles.errorBanner,
+                  {
+                    backgroundColor: colors.errorLight,
+                    borderColor: colors.error,
+                  },
+                ]}
+              >
+                <MaterialIcons name="error-outline" size={18} color={colors.error} />
+                <Text style={[styles.errorText, { color: colors.error }]} numberOfLines={2}>
+                  {error}
+                </Text>
+                <MaterialIcons name="close" size={16} color={colors.error} style={{ opacity: 0.6 }} />
+              </Pressable>
+            ) : null}
+
+            {/* Input fields */}
             <View style={styles.inputGroup}>
+              {/* Email */}
               <View
                 style={[
                   styles.inputRow,
                   {
                     backgroundColor: isDark ? colors.canvas : colors.surface,
-                    borderColor: colors.border,
+                    borderColor: focusedField === 'email' ? colors.teal : colors.border,
+                    borderWidth: focusedField === 'email' ? 1.5 : 1,
                   },
                 ]}
               >
                 <MaterialIcons
-                  name="email"
+                  name="mail"
                   size={20}
-                  color={colors.icon}
+                  color={focusedField === 'email' ? colors.teal : colors.icon}
                   style={styles.inputIcon}
                 />
                 <TextInput
@@ -146,62 +303,76 @@ export default function LoginScreen() {
                   autoComplete="email"
                   value={email}
                   onChangeText={setEmail}
+                  onFocus={() => setFocusedField('email')}
+                  onBlur={() => setFocusedField(null)}
                   accessibilityLabel="Email address"
                 />
               </View>
 
-              {/* Password input */}
+              {/* Password */}
               <View
                 style={[
                   styles.inputRow,
                   {
                     backgroundColor: isDark ? colors.canvas : colors.surface,
-                    borderColor: colors.border,
+                    borderColor: focusedField === 'password' ? colors.teal : colors.border,
+                    borderWidth: focusedField === 'password' ? 1.5 : 1,
                   },
                 ]}
               >
                 <MaterialIcons
                   name="lock"
                   size={20}
-                  color={colors.icon}
+                  color={focusedField === 'password' ? colors.teal : colors.icon}
                   style={styles.inputIcon}
                 />
                 <TextInput
                   style={[styles.input, { color: colors.text }]}
                   placeholder="Password"
                   placeholderTextColor={colors.icon}
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
                   autoComplete="password"
                   value={password}
                   onChangeText={setPassword}
+                  onFocus={() => setFocusedField('password')}
+                  onBlur={() => setFocusedField(null)}
                   accessibilityLabel="Password"
                 />
+                <Pressable
+                  onPress={() => setShowPassword((prev) => !prev)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color={colors.icon}
+                  />
+                </Pressable>
               </View>
             </View>
 
-            {/* Primary button */}
+            {/* Log in button */}
             <Pressable
               onPress={handleLogin}
               disabled={loading}
               accessibilityRole="button"
               accessibilityLabel="Log in"
               style={({ pressed }) => [
-                styles.btnWrapper,
-                pressed && { opacity: 0.85 },
+                styles.btn,
+                pressed && !loading && { opacity: 0.85, transform: [{ scale: 0.985 }] },
+                loading && { opacity: 0.7 },
               ]}
             >
-              <LinearGradient
-                colors={['#0d9488', '#0f766e']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.btn}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.btnText}>Log in</Text>
-                )}
-              </LinearGradient>
+              {loading ? (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator color="#fff" size="small" />
+                  <Text style={styles.btnText}>Logging in…</Text>
+                </View>
+              ) : (
+                <Text style={styles.btnText}>Log in</Text>
+              )}
             </Pressable>
 
             {/* Forgot password */}
@@ -219,26 +390,80 @@ export default function LoginScreen() {
                 </Text>
               </Pressable>
             </Link>
-          </View>
-        </View>
 
-        {/* Footer */}
-        <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.xl }]}>
-          <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-            Don't have an account?{' '}
-          </Text>
-          <Link href="/(auth)/signup" asChild>
-            <Pressable
-              style={({ pressed }) => [pressed && { opacity: 0.6 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Sign up"
-            >
-              <Text style={[styles.footerLink, { color: colors.teal }]}>
-                Sign up
+            {/* Divider */}
+            <View style={styles.divider}>
+              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+              <Text style={[styles.dividerText, { color: colors.icon }]}>or</Text>
+              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+            </View>
+
+            {/* Social login */}
+            <View style={styles.socialGroup}>
+              <Pressable
+                onPress={() => handleSocialStub('Google')}
+                style={({ pressed }) => [
+                  styles.socialBtn,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: isDark ? colors.canvas : '#ffffff',
+                  },
+                  pressed && { opacity: 0.7 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Google"
+              >
+                <Ionicons name="logo-google" size={20} color={isDark ? colors.text : '#4285F4'} />
+                <Text style={[styles.socialBtnText, { color: colors.text }]}>
+                  Continue with Google
+                </Text>
+              </Pressable>
+
+              {Platform.OS === 'ios' ? (
+                <Pressable
+                  onPress={() => handleSocialStub('Apple')}
+                  style={({ pressed }) => [
+                    styles.socialBtn,
+                    styles.appleSocialBtn,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Continue with Apple"
+                >
+                  <Ionicons name="logo-apple" size={20} color="#ffffff" />
+                  <Text style={[styles.socialBtnText, styles.appleSocialBtnText]}>
+                    Continue with Apple
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+
+            {/* Sign up link */}
+            <View style={styles.footerInCard}>
+              <Text style={[styles.footerText, { color: colors.textSecondary }]}>
+                Don't have an account?{' '}
               </Text>
-            </Pressable>
-          </Link>
-        </View>
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: '/(auth)/signup' as any,
+                    params: { role },
+                  })
+                }
+                style={({ pressed }) => [pressed && { opacity: 0.6 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Sign up"
+              >
+                <Text style={[styles.footerLink, { color: colors.teal }]}>
+                  Sign up
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </Animated.View>
+
+        {/* Bottom spacer */}
+        <View style={{ height: insets.bottom + Spacing['3xl'] }} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -252,86 +477,108 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
 
-  // Skip button
-  skipBtn: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    flexDirection: 'row',
+  // Compact header
+  header: {
     alignItems: 'center',
-    gap: 2,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    zIndex: 10,
+    paddingBottom: 24,
   },
-  skipText: {
+  headerLogo: {
+    fontSize: 32,
+    fontFamily: 'RussoOne_400Regular',
+    color: '#ffffff',
+    textAlign: 'center',
+    letterSpacing: -0.3,
+  },
+  headerTagline: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
     color: 'rgba(255,255,255,0.7)',
+    textAlign: 'center',
+    marginTop: 6,
   },
 
-  // Hero
-  hero: {
-    paddingBottom: Spacing['4xl'] + 30,
+  // Content area
+  contentArea: {
     paddingHorizontal: Spacing['2xl'],
-    overflow: 'hidden',
-    position: 'relative',
-    minHeight: SCREEN_HEIGHT * 0.38,
-    justifyContent: 'flex-end',
+    paddingTop: 24,
   },
-  dotsLayer: {
-    ...StyleSheet.absoluteFillObject,
-    gap: 18,
-    paddingHorizontal: 10,
-    paddingTop: 20,
-    opacity: 0.9,
-  },
-  dotsRow: {
+
+  // Guest button
+  guestButton: {
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1.5,
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 20,
   },
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-  },
-  heroContent: {
-    zIndex: 1,
-    gap: Spacing.sm,
-  },
-  logo: {
-    fontSize: 40,
-    fontWeight: '800',
-    letterSpacing: -1,
-    color: '#ffffff',
-  },
-  tagline: {
-    fontSize: 18,
+  guestButtonText: {
+    fontSize: 15,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.9)',
-    letterSpacing: -0.2,
   },
-  socialProof: {
+
+  // Role toggle
+  toggleWrapper: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  toggleContainer: {
+    width: '70%',
+    height: 40,
+    borderRadius: 20,
+    flexDirection: 'row',
+    padding: 3,
+    position: 'relative',
+  },
+  toggleIndicator: {
+    position: 'absolute',
+    top: 3,
+    left: 3,
+    height: 34,
+    borderRadius: 17,
+  },
+  toggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    zIndex: 1,
+  },
+  toggleText: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.6)',
-    letterSpacing: 0.1,
   },
 
   // Card
-  cardWrapper: {
-    paddingHorizontal: Spacing['2xl'],
-    marginTop: -30,
-    zIndex: 10,
-  },
   card: {
-    borderRadius: Radius.xl,
+    borderRadius: 16,
     padding: Spacing['2xl'],
-    gap: Spacing.xl,
+    gap: 16,
   },
   cardTitle: {
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
+    textAlign: 'center',
+  },
+
+  // Error
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
   },
 
   // Inputs
@@ -341,9 +588,8 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 52,
-    borderWidth: 1,
-    borderRadius: Radius.md,
+    height: 48,
+    borderRadius: 12,
     paddingHorizontal: Spacing.lg,
     gap: Spacing.md,
   },
@@ -357,25 +603,12 @@ const styles = StyleSheet.create({
   },
 
   // Button
-  btnWrapper: {
-    borderRadius: Radius.lg,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0d9488',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-      },
-      android: { elevation: 4 },
-      default: {},
-    }),
-  },
   btn: {
-    height: 52,
-    borderRadius: Radius.lg,
+    height: 50,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#0F4F3E',
   },
   btnText: {
     color: '#ffffff',
@@ -383,32 +616,77 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.2,
   },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
 
   // Forgot
   forgotBtn: {
     alignSelf: 'center',
     paddingVertical: Spacing.xs,
-    minHeight: 44,
+    minHeight: 36,
     justifyContent: 'center',
   },
   forgotText: {
     fontSize: 14,
     fontWeight: '600',
+    textAlign: 'center',
+  },
+
+  // Divider
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+
+  // Social
+  socialGroup: {
+    gap: Spacing.md,
+  },
+  socialBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: Spacing.md,
+  },
+  socialBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  appleSocialBtn: {
+    backgroundColor: '#000000',
+    borderWidth: 0,
+  },
+  appleSocialBtnText: {
+    color: '#ffffff',
   },
 
   // Footer
-  footer: {
+  footerInCard: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: Spacing['2xl'],
-    paddingHorizontal: Spacing['2xl'],
+    paddingTop: Spacing.xs,
   },
   footerText: {
-    fontSize: 15,
+    fontSize: 14,
   },
   footerLink: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
 });

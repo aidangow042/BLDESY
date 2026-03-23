@@ -8,6 +8,7 @@ import * as Haptics from 'expo-haptics';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing, Shadows } from '@/constants/theme';
+import { DashboardColors } from '@/constants/dashboard-theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 const { Navigator } = createMaterialTopTabNavigator();
@@ -33,8 +34,8 @@ function BottomTabBar({ state, descriptors, navigation }: MaterialTopTabBarProps
         style={[
           styles.tabBar,
           {
-            backgroundColor: colors.canvas,
-            borderTopColor: colors.border,
+            backgroundColor: DashboardColors.base,
+            borderTopColor: DashboardColors.border,
             paddingBottom: insets.bottom,
             height: 48 + insets.bottom,
             justifyContent: 'center',
@@ -156,7 +157,6 @@ export default function TabLayout() {
         name="saved"
         options={{
           title: 'Saved',
-          swipeEnabled: false,
           tabBarIcon: ({ color }: { color: string }) => (
             <IconSymbol size={26} name="bookmark" color={color} />
           ),

@@ -45,6 +45,10 @@ type UserInfo = {
   avatar: string | null;
   isBuilder: boolean;
   isGuest: boolean;
+  // Builder entity info
+  businessName: string | null;
+  tradeCategory: string | null;
+  profilePhoto: string | null;
 };
 
 type DrawerItem = {
@@ -57,11 +61,13 @@ type DrawerItem = {
 type SideDrawerProps = {
   visible: boolean;
   onClose: () => void;
+  /** When true, shows "Switch to Consumer Mode" instead of "Switch to Builder Mode" */
+  builderMode?: boolean;
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function SideDrawer({ visible, onClose }: SideDrawerProps) {
+export function SideDrawer({ visible, onClose, builderMode = false }: SideDrawerProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];
@@ -75,6 +81,9 @@ export function SideDrawer({ visible, onClose }: SideDrawerProps) {
     avatar: null,
     isBuilder: false,
     isGuest: true,
+    businessName: null,
+    tradeCategory: null,
+    profilePhoto: null,
   });
   const hasFetched = React.useRef(false);
 
@@ -98,7 +107,7 @@ export function SideDrawer({ visible, onClose }: SideDrawerProps) {
   async function fetchUserInfo() {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData?.user) {
-      setUserInfo({ name: 'Guest', email: null, avatar: null, isBuilder: false, isGuest: true });
+      setUserInfo({ name: 'Guest', email: null, avatar: null, isBuilder: false, isGuest: true, businessName: null, tradeCategory: null, profilePhoto: null });
       hasFetched.current = true;
       return;
     }
@@ -113,7 +122,7 @@ export function SideDrawer({ visible, onClose }: SideDrawerProps) {
         .maybeSingle(),
       supabase
         .from('builder_profiles')
-        .select('approved')
+        .select('approved, business_name, trade_category, profile_photo_url')
         .eq('user_id', userData.user.id)
         .maybeSingle(),
     ]);
@@ -124,6 +133,9 @@ export function SideDrawer({ visible, onClose }: SideDrawerProps) {
       avatar: (profile as any)?.avatar_url ?? null,
       isBuilder: !!(builderProfile as any)?.approved,
       isGuest: false,
+      businessName: (builderProfile as any)?.business_name ?? null,
+      tradeCategory: (builderProfile as any)?.trade_category ?? null,
+      profilePhoto: (builderProfile as any)?.profile_photo_url ?? null,
     });
     hasFetched.current = true;
   }
@@ -200,6 +212,12 @@ export function SideDrawer({ visible, onClose }: SideDrawerProps) {
   // ─── Drawer items ─────────────────────────────────────────────────
 
   const mainItems: DrawerItem[] = [
+    ...(builderMode ? [{
+      key: 'billing',
+      label: 'Billing',
+      icon: <MaterialIcons name="credit-card" size={20} color={colors.textSecondary} />,
+      onPress: () => navigate('/billing'),
+    }] : []),
     {
       key: 'settings',
       label: 'Settings',
@@ -220,9 +238,23 @@ export function SideDrawer({ visible, onClose }: SideDrawerProps) {
     },
   ];
 
+  // In builder mode, show business identity; in consumer mode, show personal
+  const displayName = builderMode && userInfo.businessName
+    ? userInfo.businessName
+    : userInfo.name ?? 'Welcome';
+  const displaySubtitle = builderMode
+    ? (userInfo.tradeCategory
+        ? userInfo.tradeCategory.charAt(0).toUpperCase() + userInfo.tradeCategory.slice(1)
+        : 'Builder')
+    : userInfo.isGuest
+      ? 'Sign in to unlock all features'
+      : userInfo.email;
+  const displayAvatar = builderMode && userInfo.profilePhoto
+    ? userInfo.profilePhoto
+    : userInfo.avatar;
   const avatarUri =
-    userInfo.avatar ??
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(userInfo.name ?? 'U')}&background=0d9488&color=fff&size=128`;
+    displayAvatar ??
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0d9488&color=fff&size=128`;
 
   // Keep component mounted (controls display via animation) so Reanimated
   // can always run the close animation even if visible goes false
@@ -273,26 +305,22 @@ export function SideDrawer({ visible, onClose }: SideDrawerProps) {
           </View>
 
           <Text style={styles.userName} numberOfLines={1}>
-            {userInfo.name ?? 'Welcome'}
+            {displayName}
           </Text>
-          {userInfo.isGuest ? (
+          {displaySubtitle ? (
             <Text style={styles.userEmail} numberOfLines={1}>
-              Sign in to unlock all features
-            </Text>
-          ) : userInfo.email ? (
-            <Text style={styles.userEmail} numberOfLines={1}>
-              {userInfo.email}
+              {displaySubtitle}
             </Text>
           ) : null}
 
           {!userInfo.isGuest && (
             <Pressable
               style={styles.viewProfileBtn}
-              onPress={() => navigate('/settings')}
+              onPress={() => navigate(builderMode ? '/builder-edit-profile' : '/settings')}
               accessibilityRole="button"
-              accessibilityLabel="View profile settings"
+              accessibilityLabel={builderMode ? 'Edit business profile' : 'View profile settings'}
             >
-              <Text style={styles.viewProfileText}>View profile</Text>
+              <Text style={styles.viewProfileText}>{builderMode ? 'Edit profile' : 'View profile'}</Text>
               <MaterialIcons name="chevron-right" size={16} color="rgba(255,255,255,0.7)" />
             </Pressable>
           )}
@@ -336,8 +364,34 @@ export function SideDrawer({ visible, onClose }: SideDrawerProps) {
         {/* ─── Divider ─── */}
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-        {/* ─── Builder mode toggle (approved builders only) ─── */}
-        {userInfo.isBuilder ? (
+        {/* ─── Mode toggle ─── */}
+        {builderMode ? (
+          <View style={styles.menuSection}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.menuItem,
+                {
+                  backgroundColor: pressed
+                    ? isDark
+                      ? 'rgba(255,255,255,0.05)'
+                      : 'rgba(0,0,0,0.03)'
+                    : 'transparent',
+                },
+              ]}
+              onPress={() => navigate('/(tabs)')}
+              accessibilityRole="button"
+              accessibilityLabel="Switch to Consumer Mode"
+            >
+              <View style={[styles.menuIconWrap, { backgroundColor: colors.tealBg }]}>
+                <Ionicons name="swap-horizontal" size={20} color={colors.teal} />
+              </View>
+              <Text style={[styles.menuLabel, { color: colors.text }]}>
+                Switch to Consumer Mode
+              </Text>
+              <MaterialIcons name="chevron-right" size={18} color={colors.icon} />
+            </Pressable>
+          </View>
+        ) : userInfo.isBuilder ? (
           <View style={styles.menuSection}>
             <Pressable
               style={({ pressed }) => [
