@@ -107,6 +107,7 @@ export default function JobDetailScreen() {
   const [alreadyApplied, setAlreadyApplied] = useState(false);
   const [applicationAccepted, setApplicationAccepted] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [contactInfo, setContactInfo] = useState<{ contact_phone?: string; contact_email?: string } | null>(null);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -126,7 +127,7 @@ export default function JobDetailScreen() {
     setLoading(true);
 
     const [jobRes, photoRes, docRes] = await Promise.all([
-      supabase.from('jobs').select('id, title, description, trade_type, suburb, postcode, urgency, budget, status, created_at, customer_id, contact_phone, contact_email').eq('id', id).single(),
+      supabase.from('jobs').select('id, title, description, trade_type, suburb, postcode, urgency, budget, status, created_at, customer_id').eq('id', id).single(),
       supabase.from('job_photos').select('id, file_path, is_cover').eq('job_id', id).order('is_cover', { ascending: false }),
       supabase.from('job_documents').select('id, file_path, file_name').eq('job_id', id),
     ]);
@@ -157,6 +158,10 @@ export default function JobDetailScreen() {
         setAlreadyApplied(true);
         if (app.status === 'accepted') setApplicationAccepted(true);
       }
+
+      // Fetch contact info via server-side RPC (only returns data for job owner or accepted applicant)
+      const { data: contact } = await supabase.rpc('get_job_contact', { p_job_id: id });
+      if (contact) setContactInfo(contact);
     }
 
     setLoading(false);
@@ -254,10 +259,8 @@ export default function JobDetailScreen() {
   const urg = URGENCY_CONFIG[job.urgency] ?? { label: job.urgency, icon: 'help-circle-outline' as const, color: '#64748b', bg: '#f1f5f9' };
   const displayName = getDisplayName(customer?.full_name);
   const initials = getInitials(customer?.full_name);
-  // Only show contact info if builder's application is accepted, or viewer is the job owner
-  const isJobOwner = currentUserId === job.customer_id;
-  const canSeeContact = isJobOwner || applicationAccepted;
-  const hasContact = canSeeContact && (job.contact_phone || job.contact_email);
+  // Contact info is server-gated via get_job_contact() RPC — only returned for job owner or accepted applicant
+  const hasContact = contactInfo?.contact_phone || contactInfo?.contact_email;
 
   /* ─── Render ─────────────────────────────────────────────── */
 
@@ -290,29 +293,29 @@ export default function JobDetailScreen() {
         {/* ── 1. Contact buttons — copy to clipboard ── */}
         {hasContact && (
           <View style={styles.contactBtnRow}>
-            {job.contact_phone && (
+            {contactInfo?.contact_phone && (
               <Pressable
                 style={({ pressed }) => [styles.contactBtn, styles.contactBtnCall, pressed && { opacity: 0.8 }]}
                 onPress={async () => {
-                  await Clipboard.setStringAsync(job.contact_phone!);
-                  Alert.alert('Copied', `${job.contact_phone} copied to clipboard`);
+                  await Clipboard.setStringAsync(contactInfo!.contact_phone!);
+                  Alert.alert('Copied', `${contactInfo?.contact_phone} copied to clipboard`);
                 }}
               >
                 <Ionicons name="call" size={18} color="#059669" />
-                <Text style={styles.contactBtnLabel}>{job.contact_phone}</Text>
+                <Text style={styles.contactBtnLabel}>{contactInfo?.contact_phone}</Text>
                 <Ionicons name="copy-outline" size={16} color="#94A3B8" />
               </Pressable>
             )}
-            {job.contact_email && (
+            {contactInfo?.contact_email && (
               <Pressable
                 style={({ pressed }) => [styles.contactBtn, styles.contactBtnEmail, pressed && { opacity: 0.8 }]}
                 onPress={async () => {
-                  await Clipboard.setStringAsync(job.contact_email!);
-                  Alert.alert('Copied', `${job.contact_email} copied to clipboard`);
+                  await Clipboard.setStringAsync(contactInfo!.contact_email!);
+                  Alert.alert('Copied', `${contactInfo?.contact_email} copied to clipboard`);
                 }}
               >
                 <Ionicons name="mail" size={18} color="#2563EB" />
-                <Text style={styles.contactBtnLabel} numberOfLines={1}>{job.contact_email}</Text>
+                <Text style={styles.contactBtnLabel} numberOfLines={1}>{contactInfo?.contact_email}</Text>
                 <Ionicons name="copy-outline" size={16} color="#94A3B8" />
               </Pressable>
             )}
@@ -458,12 +461,12 @@ export default function JobDetailScreen() {
         <View style={[styles.stickyFooter, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.footerRow}>
             {/* Copy contact icons */}
-            {job.contact_phone && (
+            {contactInfo?.contact_phone && (
               <Pressable
                 style={({ pressed }) => [styles.footerIconBtn, styles.footerCallBtn, pressed && { opacity: 0.8 }]}
                 onPress={async () => {
-                  await Clipboard.setStringAsync(job.contact_phone!);
-                  Alert.alert('Copied', `${job.contact_phone} copied to clipboard`);
+                  await Clipboard.setStringAsync(contactInfo!.contact_phone!);
+                  Alert.alert('Copied', `${contactInfo?.contact_phone} copied to clipboard`);
                 }}
                 accessibilityRole="button"
                 accessibilityLabel="Copy phone number"
@@ -471,12 +474,12 @@ export default function JobDetailScreen() {
                 <Ionicons name="call" size={20} color="#059669" />
               </Pressable>
             )}
-            {job.contact_email && (
+            {contactInfo?.contact_email && (
               <Pressable
                 style={({ pressed }) => [styles.footerIconBtn, styles.footerEmailBtn, pressed && { opacity: 0.8 }]}
                 onPress={async () => {
-                  await Clipboard.setStringAsync(job.contact_email!);
-                  Alert.alert('Copied', `${job.contact_email} copied to clipboard`);
+                  await Clipboard.setStringAsync(contactInfo!.contact_email!);
+                  Alert.alert('Copied', `${contactInfo?.contact_email} copied to clipboard`);
                 }}
                 accessibilityRole="button"
                 accessibilityLabel="Copy email address"
@@ -574,12 +577,12 @@ export default function JobDetailScreen() {
 
               <View style={styles.sheetDivider} />
 
-              {job.contact_phone && (
+              {contactInfo?.contact_phone && (
                 <Pressable
                   style={({ pressed }) => [styles.contactRow, pressed && { opacity: 0.7 }]}
                   onPress={async () => {
-                    await Clipboard.setStringAsync(job.contact_phone!);
-                    Alert.alert('Copied', `${job.contact_phone} copied to clipboard`);
+                    await Clipboard.setStringAsync(contactInfo!.contact_phone!);
+                    Alert.alert('Copied', `${contactInfo?.contact_phone} copied to clipboard`);
                   }}
                 >
                   <View style={[styles.contactIcon, { backgroundColor: '#ECFDF5' }]}>
@@ -587,18 +590,18 @@ export default function JobDetailScreen() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.contactLabel}>Phone</Text>
-                    <Text style={styles.contactValue}>{job.contact_phone}</Text>
+                    <Text style={styles.contactValue}>{contactInfo?.contact_phone}</Text>
                   </View>
                   <Ionicons name="copy-outline" size={18} color="#94A3B8" />
                 </Pressable>
               )}
 
-              {job.contact_email && (
+              {contactInfo?.contact_email && (
                 <Pressable
                   style={({ pressed }) => [styles.contactRow, pressed && { opacity: 0.7 }]}
                   onPress={async () => {
-                    await Clipboard.setStringAsync(job.contact_email!);
-                    Alert.alert('Copied', `${job.contact_email} copied to clipboard`);
+                    await Clipboard.setStringAsync(contactInfo!.contact_email!);
+                    Alert.alert('Copied', `${contactInfo?.contact_email} copied to clipboard`);
                   }}
                 >
                   <View style={[styles.contactIcon, { backgroundColor: '#EFF6FF' }]}>
@@ -606,7 +609,7 @@ export default function JobDetailScreen() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.contactLabel}>Email</Text>
-                    <Text style={styles.contactValue}>{job.contact_email}</Text>
+                    <Text style={styles.contactValue}>{contactInfo?.contact_email}</Text>
                   </View>
                   <Ionicons name="copy-outline" size={18} color="#94A3B8" />
                 </Pressable>

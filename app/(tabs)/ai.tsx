@@ -385,8 +385,8 @@ export default function AIAssistScreen() {
 
     try {
       // Require sign-in — Edge Function verifies the JWT
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) {
         Alert.alert('Sign in required', 'Please sign in to use AI Assist.', [
           { text: 'OK' },
         ]);
