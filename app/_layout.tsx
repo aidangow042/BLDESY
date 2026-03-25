@@ -60,7 +60,13 @@ export default function RootLayout() {
         routingInProgress.current = true;
 
         try {
-          const role = session.user.user_metadata?.role;
+          // Read role from profiles table (server-side, RLS-protected) — not user_metadata which is client-writable
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .maybeSingle();
+          const role = profile?.role ?? 'customer';
 
           if (role === 'builder') {
             const { data } = await supabase

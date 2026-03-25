@@ -435,7 +435,7 @@ export default function BuilderJobsFeed() {
 
       let query = supabase
         .from('jobs')
-        .select('*')
+        .select('id, title, description, trade_type, suburb, postcode, urgency, budget, status, created_at, customer_id')
         .eq('status', 'open')
         .order('created_at', { ascending: false });
 

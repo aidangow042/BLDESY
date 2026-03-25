@@ -25,6 +25,8 @@ import { Video, ResizeMode } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialIcons } from '@expo/vector-icons';
 
+import * as Clipboard from 'expo-clipboard';
+
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -587,7 +589,7 @@ export default function BuilderProfileScreen() {
   async function fetchReviews() {
     const { data } = await supabase
       .from('reviews')
-      .select('*')
+      .select('id, rating, comment, reviewer_name, project_type, created_at')
       .eq('builder_id', id)
       .order('created_at', { ascending: false });
 
@@ -646,7 +648,7 @@ export default function BuilderProfileScreen() {
 
     const { data, error: fetchError } = await supabase
       .from('builder_profiles')
-      .select('*')
+      .select('id, user_id, business_name, trade_category, suburb, postcode, bio, phone, email, website, profile_photo_url, cover_photo_url, projects, specialties, credentials, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km')
       .eq('id', id)
       .single();
 
@@ -710,15 +712,17 @@ export default function BuilderProfileScreen() {
     setSavingToggle(false);
   }
 
-  function handleCall() {
+  async function handleCall() {
     if (builder?.phone) {
-      Linking.openURL(`tel:${builder.phone}`);
+      await Clipboard.setStringAsync(builder.phone);
+      Alert.alert('Copied', `${builder.phone} copied to clipboard`);
     }
   }
 
-  function handleEmail() {
+  async function handleEmail() {
     if (builder?.email) {
-      Linking.openURL(`mailto:${builder.email}`);
+      await Clipboard.setStringAsync(builder.email);
+      Alert.alert('Copied', `${builder.email} copied to clipboard`);
     }
   }
 

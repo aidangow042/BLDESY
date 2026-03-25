@@ -125,51 +125,68 @@ function computeMatchScore(
   urgencyOrder: string[] | null,
   maxDistance: number,
 ): { score: number; label: string } {
-  let score = 0;
-  const maxScore = 100;
+  // Optimistic scoring: builders that match trade + are in radius start high.
+  // Base score: 78 (same trade category is already filtered by query).
+  // Bonuses push toward 95-99. Penalties pull down for weak fits.
+  let score = 78;
 
-  if (searchKeywords.length > 0 && builder.specialties?.length) {
-    const specLower = builder.specialties.map((s: string) => s.toLowerCase());
+  // ── Distance bonus/penalty (±12) ──
+  if (builder._distance != null && builder.radius_km) {
+    const ratio = builder._distance / builder.radius_km;
+    if (ratio <= 0.3) score += 12;        // very close
+    else if (ratio <= 0.6) score += 8;    // comfortably in range
+    else if (ratio <= 1.0) score += 4;    // at edge of radius
+    else score -= 10;                      // outside their radius
+  } else if (builder._distance != null && maxDistance > 0) {
+    const distRatio = 1 - Math.min(builder._distance / maxDistance, 1);
+    score += Math.round(distRatio * 10);
+  }
+
+  // ── Keyword match bonus (up to +10) ──
+  if (searchKeywords.length > 0) {
+    const specLower = (builder.specialties ?? []).map((s: string) => s.toLowerCase());
     const bioLower = (builder.bio ?? '').toLowerCase();
+    const nameLower = (builder.business_name ?? '').toLowerCase();
     let keywordHits = 0;
     for (const kw of searchKeywords) {
       const kwLower = kw.toLowerCase();
-      if (specLower.some((s: string) => s.includes(kwLower)) || bioLower.includes(kwLower)) {
+      if (
+        specLower.some((s: string) => s.includes(kwLower)) ||
+        bioLower.includes(kwLower) ||
+        nameLower.includes(kwLower)
+      ) {
         keywordHits++;
       }
     }
-    score += Math.min(40, (keywordHits / searchKeywords.length) * 40);
-  } else if (searchKeywords.length === 0) {
-    score += 20;
+    const hitRatio = keywordHits / searchKeywords.length;
+    score += Math.round(hitRatio * 10);
+    // Penalty if no keywords match at all
+    if (keywordHits === 0) score -= 8;
   }
 
-  if (builder._distance != null && maxDistance > 0) {
-    const distRatio = 1 - Math.min(builder._distance / maxDistance, 1);
-    score += distRatio * 30;
-  } else {
-    score += 15;
-  }
+  // ── Availability bonus (+3 to +5) / penalty ──
+  if (builder.availability === 'available') score += 5;
+  else if (builder.availability === 'limited') score += 2;
+  else if (builder.availability === 'unavailable') score -= 12;
 
-  if (builder.availability === 'available') score += 15;
-  else if (builder.availability === 'limited') score += 8;
-
+  // ── Urgency capacity match (+3) ──
   if (urgencyOrder && builder.urgency_capacity?.length) {
     const uScore = getUrgencyScore(builder.urgency_capacity, urgencyOrder);
-    if (uScore === 0) score += 10;
-    else if (uScore === 1) score += 6;
-    else if (uScore === 2) score += 3;
-  } else {
-    score += 5;
+    if (uScore === 0) score += 3;
+    else if (uScore === 1) score += 1;
   }
 
-  if (builder.license_key) score += 2;
-  if (builder.abn) score += 2;
+  // ── Credibility bonuses (up to +4) ──
+  if (builder.license_key) score += 1;
+  if (builder.abn) score += 1;
   if (builder.credentials?.some((c: any) => c.type === 'insurance')) score += 1;
+  if (builder.projects?.length > 0) score += 1;
 
-  const pct = Math.round(Math.min(score, maxScore));
+  // Clamp between 45 and 99
+  const pct = Math.max(45, Math.min(99, score));
   let label = 'Partial match';
-  if (pct >= 85) label = 'Strong match';
-  else if (pct >= 65) label = 'Good match';
+  if (pct >= 90) label = 'Strong match';
+  else if (pct >= 75) label = 'Good match';
 
   return { score: pct, label };
 }
@@ -746,8 +763,8 @@ export default function ResultsScreen() {
   }
 
   function getMatchColor(score: number) {
-    if (score >= 85) return { bg: teal, text: '#fff', pillBg: teal };
-    if (score >= 70) return { bg: '#F59E0B', text: '#fff', pillBg: '#F59E0B' };
+    if (score >= 88) return { bg: teal, text: '#fff', pillBg: teal };
+    if (score >= 75) return { bg: '#F59E0B', text: '#fff', pillBg: '#F59E0B' };
     return { bg: colors.textSecondary, text: '#fff', pillBg: 'rgba(0,0,0,0.5)' };
   }
 

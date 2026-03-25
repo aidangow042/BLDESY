@@ -34,6 +34,16 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // ── Admin-only: require service_role key ──
+    const authHeader = req.headers.get('Authorization');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    if (!authHeader || authHeader !== `Bearer ${serviceRoleKey}`) {
+      return new Response(JSON.stringify({ error: 'Forbidden — admin access only' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Use service role key to bypass RLS
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,

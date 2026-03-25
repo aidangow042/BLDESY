@@ -105,6 +105,8 @@ export default function JobDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [alreadyApplied, setAlreadyApplied] = useState(false);
+  const [applicationAccepted, setApplicationAccepted] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -124,7 +126,7 @@ export default function JobDetailScreen() {
     setLoading(true);
 
     const [jobRes, photoRes, docRes] = await Promise.all([
-      supabase.from('jobs').select('*').eq('id', id).single(),
+      supabase.from('jobs').select('id, title, description, trade_type, suburb, postcode, urgency, budget, status, created_at, customer_id, contact_phone, contact_email').eq('id', id).single(),
       supabase.from('job_photos').select('id, file_path, is_cover').eq('job_id', id).order('is_cover', { ascending: false }),
       supabase.from('job_documents').select('id, file_path, file_name').eq('job_id', id),
     ]);
@@ -144,13 +146,17 @@ export default function JobDetailScreen() {
 
     const { data: userData } = await supabase.auth.getUser();
     if (userData?.user) {
+      setCurrentUserId(userData.user.id);
       const { data: app } = await supabase
         .from('applications')
-        .select('id')
+        .select('id, status')
         .eq('job_id', id)
         .eq('builder_id', userData.user.id)
         .maybeSingle();
-      if (app) setAlreadyApplied(true);
+      if (app) {
+        setAlreadyApplied(true);
+        if (app.status === 'accepted') setApplicationAccepted(true);
+      }
     }
 
     setLoading(false);
@@ -248,7 +254,10 @@ export default function JobDetailScreen() {
   const urg = URGENCY_CONFIG[job.urgency] ?? { label: job.urgency, icon: 'help-circle-outline' as const, color: '#64748b', bg: '#f1f5f9' };
   const displayName = getDisplayName(customer?.full_name);
   const initials = getInitials(customer?.full_name);
-  const hasContact = job.contact_phone || job.contact_email;
+  // Only show contact info if builder's application is accepted, or viewer is the job owner
+  const isJobOwner = currentUserId === job.customer_id;
+  const canSeeContact = isJobOwner || applicationAccepted;
+  const hasContact = canSeeContact && (job.contact_phone || job.contact_email);
 
   /* ─── Render ─────────────────────────────────────────────── */
 

@@ -24,6 +24,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getSearchHistory, addSearchEntry, type SearchEntry } from '@/lib/search-history';
+import { supabase } from '@/lib/supabase';
 import auLocations from '@/lib/au-locations.json';
 
 /* ───────────────────────── Constants ───────────────────────── */
@@ -383,22 +384,53 @@ export default function AIAssistScreen() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-chat`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messages: updated.map((m) => ({ role: m.role, content: m.content })),
-          }),
-        },
-      );
+      // Require sign-in — Edge Function verifies the JWT
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        Alert.alert('Sign in required', 'Please sign in to use AI Assist.', [
+          { text: 'OK' },
+        ]);
+        setMessages((prev) => prev.slice(0, -1)); // remove the user message we just added
+        setLoading(false);
+        return;
+      }
 
-      if (!response.ok) throw new Error(`Server responded with ${response.status}`);
-      const data = await response.json();
+      const { data, error: fnError } = await supabase.functions.invoke('ai-chat', {
+        body: { messages: updated.map((m) => ({ role: m.role, content: m.content })) },
+      });
+
+      if (fnError) {
+        // Debug: surface the real error from the edge function
+        let errorBody = '';
+        try {
+          // FunctionsHttpError.context is the raw Response object
+          const resp = (fnError as any).context;
+          if (resp && typeof resp.text === 'function') {
+            const text = await resp.text();
+            try {
+              const parsed = JSON.parse(text);
+              errorBody = parsed.error ?? text;
+            } catch {
+              errorBody = text;
+            }
+          }
+        } catch {}
+        if (!errorBody) errorBody = fnError.message ?? '';
+
+        if (errorBody.includes('Too many requests') || errorBody.includes('rate')) {
+          Alert.alert('Slow down', "You're sending messages too fast. Please wait a moment and try again.");
+          setMessages((prev) => prev.slice(0, -1));
+          setLoading(false);
+          return;
+        }
+        if (errorBody.includes('Unauthorized') || errorBody.includes('sign in') || errorBody.includes('authorization')) {
+          Alert.alert('Session expired', 'Please sign in again to use AI Assist.');
+          setMessages((prev) => prev.slice(0, -1));
+          setLoading(false);
+          return;
+        }
+        if (!data?.reply) throw new Error(errorBody || 'Something went wrong');
+      }
 
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
