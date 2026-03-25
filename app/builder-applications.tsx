@@ -25,7 +25,7 @@ type Application = {
   jobs: {
     id: string;
     title: string;
-    trade_type: string;
+    trade_category: string;
     urgency: string;
     suburb: string;
     postcode: string;
@@ -67,7 +67,7 @@ export default function MyApplicationsScreen() {
 
     const { data, error } = await supabase
       .from('applications')
-      .select('id, message, status, created_at, jobs(id, title, trade_type, urgency, suburb, postcode, status)')
+      .select('id, message, status, created_at, jobs(id, title, trade_category, urgency, suburb, postcode, status)')
       .eq('builder_id', userData.user.id)
       .order('created_at', { ascending: false });
 
@@ -109,7 +109,7 @@ export default function MyApplicationsScreen() {
 
         <View style={styles.metaRow}>
           <View style={[styles.tradeBadge, { backgroundColor: colors.tintLight }]}>
-            <ThemedText style={[styles.tradeBadgeText, { color: colors.tint }]}>{item.jobs.trade_type}</ThemedText>
+            <ThemedText style={[styles.tradeBadgeText, { color: colors.tint }]}>{item.jobs.trade_category}</ThemedText>
           </View>
           <ThemedText style={[styles.locationText, { color: colors.textSecondary }]}>
             {item.jobs.suburb}, {item.jobs.postcode}

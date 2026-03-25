@@ -2,21 +2,55 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
+  Image,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 import { ThemedText } from '@/components/themed-text';
-import { PageHeader } from '@/components/page-header';
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const PHOTO_WIDTH = SCREEN_WIDTH - 68;
+const PHOTO_HEIGHT = 180;
+
+/* ─── Helpers (matching job-detail) ───────────────────────── */
+
+function getRelativeTime(dateStr: string): string {
+  const now = Date.now();
+  const posted = new Date(dateStr).getTime();
+  const diffMs = now - posted;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  return new Date(dateStr).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+}
+
+const URGENCY_CONFIG: Record<string, { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; color: string; bg: string }> = {
+  asap: { label: 'ASAP', icon: 'alarm', color: '#DC2626', bg: '#FEF2F2' },
+  this_week: { label: 'This Week', icon: 'time-outline', color: '#D97706', bg: '#FFFBEB' },
+  flexible: { label: 'Flexible', icon: 'calendar-outline', color: '#059669', bg: '#ECFDF5' },
+};
+
+/* ─── Types ────────────────────────────────────────────────── */
 
 type Applicant = {
   id: string;
@@ -32,35 +66,24 @@ type Applicant = {
   } | null;
 };
 
+type JobPhoto = { id: string; file_path: string; is_cover: boolean };
+
 type Job = {
   id: string;
   title: string;
-  trade_type: string;
+  trade_category: string;
+  description: string;
   urgency: string;
   status: string;
   suburb: string;
   postcode: string;
+  budget: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
   created_at: string;
 };
 
-function getStatusStyle(status: string, colors: typeof Colors.light) {
-  switch (status) {
-    case 'open':
-      return { bg: colors.successLight, text: colors.success };
-    case 'assigned':
-      return { bg: colors.warningLight, text: colors.warning };
-    case 'closed':
-      return { bg: colors.surface, text: colors.textSecondary };
-    case 'accepted':
-      return { bg: colors.successLight, text: colors.success };
-    case 'rejected':
-      return { bg: colors.errorLight, text: colors.error };
-    case 'pending':
-      return { bg: colors.warningLight, text: colors.warning };
-    default:
-      return { bg: colors.surface, text: colors.textSecondary };
-  }
-}
+/* ─── Component ────────────────────────────────────────────── */
 
 export default function MyJobsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -75,6 +98,8 @@ export default function MyJobsScreen() {
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [loadingApplicants, setLoadingApplicants] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [jobPhotos, setJobPhotos] = useState<Record<string, JobPhoto[]>>({});
+  const [activePhotoIndices, setActivePhotoIndices] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetchJobs();
@@ -90,14 +115,34 @@ export default function MyJobsScreen() {
 
     const { data, error } = await supabase
       .from('jobs')
-      .select('id, title, trade_type, urgency, status, suburb, postcode, created_at')
+      .select('id, title, trade_category, description, urgency, status, suburb, postcode, budget, contact_phone, contact_email, created_at')
       .eq('customer_id', userData.user.id)
       .order('created_at', { ascending: false });
 
     if (!error && data) {
       setJobs(data);
+      fetchPhotosForJobs(data.map((j) => j.id));
     }
     setLoading(false);
+  }
+
+  async function fetchPhotosForJobs(jobIds: string[]) {
+    if (jobIds.length === 0) return;
+    const { data } = await supabase
+      .from('job_photos')
+      .select('id, file_path, is_cover, job_id')
+      .in('job_id', jobIds)
+      .order('is_cover', { ascending: false });
+
+    if (data) {
+      const grouped: Record<string, JobPhoto[]> = {};
+      for (const photo of data) {
+        const jid = (photo as any).job_id;
+        if (!grouped[jid]) grouped[jid] = [];
+        grouped[jid].push({ id: photo.id, file_path: photo.file_path, is_cover: photo.is_cover });
+      }
+      setJobPhotos(grouped);
+    }
   }
 
   async function handleRefresh() {
@@ -140,26 +185,19 @@ export default function MyJobsScreen() {
           text: 'Accept',
           onPress: async () => {
             setUpdatingId(application.id);
-
-            // Accept this applicant
             await supabase
               .from('applications')
               .update({ status: 'accepted' })
               .eq('id', application.id);
-
-            // Reject all others for this job
             await supabase
               .from('applications')
               .update({ status: 'rejected' })
               .eq('job_id', jobId)
               .neq('id', application.id);
-
-            // Set job to assigned
             await supabase
               .from('jobs')
               .update({ status: 'assigned' })
               .eq('id', jobId);
-
             setUpdatingId(null);
             fetchApplicants(jobId);
             fetchJobs();
@@ -179,114 +217,252 @@ export default function MyJobsScreen() {
     fetchApplicants(jobId);
   }
 
+  function handleEdit(job: Job) {
+    router.push({
+      pathname: '/post-job',
+      params: {
+        editId: job.id,
+        editTitle: job.title,
+        editTrade: job.trade_category,
+        editUrgency: job.urgency,
+        editDescription: job.description,
+        editSuburb: job.suburb,
+        editPostcode: job.postcode,
+        editContactPhone: job.contact_phone ?? '',
+        editContactEmail: job.contact_email ?? '',
+      },
+    } as any);
+  }
+
+  function handleDelete(job: Job) {
+    Alert.alert(
+      'Delete Job',
+      `Are you sure you want to delete "${job.title}"? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await supabase
+              .from('jobs')
+              .delete()
+              .eq('id', job.id);
+            if (error) {
+              Alert.alert('Error', error.message);
+            } else {
+              setJobs((prev) => prev.filter((j) => j.id !== job.id));
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  /* ─── Applicant status helpers ──────────────────────────── */
+
+  function getAppStatusStyle(status: string) {
+    switch (status) {
+      case 'accepted':
+        return { bg: '#ECFDF5', color: '#059669' };
+      case 'rejected':
+        return { bg: '#FEF2F2', color: '#DC2626' };
+      case 'pending':
+      default:
+        return { bg: '#FFFBEB', color: '#D97706' };
+    }
+  }
+
+  /* ─── Render job card ───────────────────────────────────── */
+
   const renderJob = useCallback(
     ({ item }: { item: Job }) => {
       const isExpanded = expandedJobId === item.id;
-      const statusStyle = getStatusStyle(item.status, colors);
+      const urg = URGENCY_CONFIG[item.urgency] ?? { label: item.urgency, icon: 'help-circle-outline' as const, color: '#64748b', bg: '#f1f5f9' };
+      const photos = jobPhotos[item.id] ?? [];
+      const activeIdx = activePhotoIndices[item.id] ?? 0;
 
       return (
-        <View
-          style={[
-            styles.jobCard,
-            { backgroundColor: colors.surface, borderColor: colors.border },
-            Shadows.sm,
-          ]}
-        >
-          <Pressable
-            onPress={() => toggleExpand(item.id)}
-            style={({ pressed }) => [styles.jobPressable, pressed && { opacity: 0.7 }]}
-            accessibilityRole="button"
-            accessibilityLabel={isExpanded ? `Hide applicants for ${item.title}` : `View applicants for ${item.title}`}
-            accessibilityState={{ expanded: isExpanded }}
-          >
-            <View style={styles.jobHeader}>
-              <ThemedText type="defaultSemiBold" style={styles.jobTitle} numberOfLines={1}>
-                {item.title}
-              </ThemedText>
-              <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                <ThemedText style={[styles.statusText, { color: statusStyle.text }]}>
-                  {item.status}
-                </ThemedText>
-              </View>
+        <View style={[styles.card, Shadows.sm]}>
+          {/* ── Photo carousel ── */}
+          {photos.length > 0 && (
+            <View style={styles.photoSection}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={PHOTO_WIDTH}
+                decelerationRate="fast"
+                onMomentumScrollEnd={(e) => {
+                  const idx = Math.round(e.nativeEvent.contentOffset.x / PHOTO_WIDTH);
+                  setActivePhotoIndices((prev) => ({ ...prev, [item.id]: idx }));
+                }}
+                style={[styles.photoCarousel, { width: PHOTO_WIDTH }]}
+              >
+                {photos.map((photo) => (
+                  <Image
+                    key={photo.id}
+                    source={{ uri: photo.file_path }}
+                    style={styles.photoImage}
+                    resizeMode="cover"
+                  />
+                ))}
+              </ScrollView>
+              {photos.length > 1 && (
+                <View style={styles.photoDots}>
+                  {photos.map((_, i) => (
+                    <View
+                      key={i}
+                      style={[styles.photoDot, { backgroundColor: i === activeIdx ? '#0F6E56' : '#CBD5E1' }]}
+                    />
+                  ))}
+                </View>
+              )}
             </View>
-            <ThemedText style={[styles.metaText, { color: colors.textSecondary }]}>
-              {item.trade_type} — {item.suburb}, {item.postcode}
-            </ThemedText>
-            <View style={styles.expandRow}>
-              <Ionicons
-                name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                size={16}
-                color={colors.tint}
-              />
-              <ThemedText style={[styles.tapHint, { color: colors.tint }]}>
-                {isExpanded ? 'Hide applicants' : 'See applicants'}
-              </ThemedText>
-            </View>
-          </Pressable>
+          )}
 
+          {/* ── Card header — trade + urgency + time pills ── */}
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.tradePill}>
+              <Text style={styles.tradePillText}>{item.trade_category}</Text>
+            </View>
+            <View style={[styles.urgencyPill, { backgroundColor: urg.bg }]}>
+              <Ionicons name={urg.icon} size={12} color={urg.color} />
+              <Text style={[styles.urgencyPillText, { color: urg.color }]}>{urg.label}</Text>
+            </View>
+            <Text style={styles.timeText}>{getRelativeTime(item.created_at)}</Text>
+          </View>
+
+          {/* ── Title ── */}
+          <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+
+          {/* ── Fact chips (matching job-detail) ── */}
+          <View style={styles.factsRow}>
+            <View style={styles.factChip}>
+              <Ionicons name="location" size={14} color="#0369A1" />
+              <Text style={styles.factChipText}>{item.suburb}, {item.postcode}</Text>
+            </View>
+            {item.budget && (
+              <View style={styles.factChip}>
+                <Ionicons name="cash" size={14} color="#16A34A" />
+                <Text style={styles.factChipText}>{item.budget}</Text>
+              </View>
+            )}
+            <View style={[styles.factChip, { backgroundColor: item.status === 'open' ? '#ECFDF5' : item.status === 'assigned' ? '#FFFBEB' : '#FEF2F2' }]}>
+              <Ionicons
+                name={item.status === 'open' ? 'checkmark-circle' : item.status === 'assigned' ? 'time' : 'close-circle'}
+                size={14}
+                color={item.status === 'open' ? '#059669' : item.status === 'assigned' ? '#D97706' : '#DC2626'}
+              />
+              <Text style={[styles.factChipText, { color: item.status === 'open' ? '#059669' : item.status === 'assigned' ? '#D97706' : '#DC2626' }]}>
+                {item.status === 'open' ? 'Open' : item.status === 'assigned' ? 'Assigned' : 'Closed'}
+              </Text>
+            </View>
+          </View>
+
+          {/* ── Description ── */}
+          {item.description ? (
+            <>
+              <View style={styles.divider} />
+              <Text style={styles.descriptionText} numberOfLines={3}>{item.description}</Text>
+            </>
+          ) : null}
+
+          {/* ── Action buttons row — Edit / Delete / Applicants ── */}
+          <View style={styles.divider} />
+          <View style={styles.actionsRow}>
+            <Pressable
+              style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.6 }]}
+              onPress={() => handleEdit(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit ${item.title}`}
+            >
+              <MaterialIcons name="edit" size={16} color="#0F6E56" />
+              <Text style={styles.actionBtnText}>Edit</Text>
+            </Pressable>
+            <View style={styles.actionDivider} />
+            <Pressable
+              style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.6 }]}
+              onPress={() => handleDelete(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`Delete ${item.title}`}
+            >
+              <MaterialIcons name="delete-outline" size={16} color="#DC2626" />
+              <Text style={[styles.actionBtnText, { color: '#DC2626' }]}>Delete</Text>
+            </Pressable>
+            <View style={styles.actionDivider} />
+            <Pressable
+              style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.6 }]}
+              onPress={() => toggleExpand(item.id)}
+              accessibilityRole="button"
+              accessibilityLabel={isExpanded ? `Hide applicants for ${item.title}` : `View applicants for ${item.title}`}
+              accessibilityState={{ expanded: isExpanded }}
+            >
+              <Ionicons name={isExpanded ? 'chevron-up' : 'people'} size={16} color="#0F6E56" />
+              <Text style={styles.actionBtnText}>{isExpanded ? 'Hide' : 'Applicants'}</Text>
+            </Pressable>
+          </View>
+
+          {/* ── Expanded applicants ── */}
           {isExpanded && (
-            <View style={[styles.applicantsSection, { borderTopColor: colors.border }]}>
+            <View style={styles.applicantsSection}>
               {loadingApplicants ? (
-                <ActivityIndicator color={colors.tint} style={{ marginVertical: Spacing.lg }} />
+                <ActivityIndicator color="#0F6E56" style={{ marginVertical: 16 }} />
               ) : applicants.length === 0 ? (
-                <ThemedText style={[styles.noApplicants, { color: colors.textSecondary }]}>
-                  No applications yet
-                </ThemedText>
+                <View style={styles.noApplicantsWrap}>
+                  <Ionicons name="people-outline" size={28} color="#94A3B8" />
+                  <Text style={styles.noApplicantsText}>No applications yet</Text>
+                </View>
               ) : (
                 applicants.map((app) => {
-                  const appStatusStyle = getStatusStyle(app.status, colors);
+                  const appStyle = getAppStatusStyle(app.status);
                   return (
-                    <View
-                      key={app.id}
-                      style={[
-                        styles.applicantCard,
-                        { backgroundColor: colors.background, borderColor: colors.border },
-                      ]}
-                    >
-                      <ThemedText type="defaultSemiBold" style={{ fontSize: 15 }}>
-                        {app.builder_profiles?.business_name ?? 'Unknown Builder'}
-                      </ThemedText>
-                      <ThemedText style={[styles.applicantMeta, { color: colors.textSecondary }]}>
-                        {app.builder_profiles?.trade_category} — {app.builder_profiles?.suburb}
-                      </ThemedText>
+                    <View key={app.id} style={styles.applicantCard}>
+                      {/* Applicant header */}
+                      <View style={styles.applicantHeader}>
+                        <View style={styles.applicantInitials}>
+                          <Text style={styles.applicantInitialsText}>
+                            {(app.builder_profiles?.business_name ?? 'U')[0].toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.applicantName}>
+                            {app.builder_profiles?.business_name ?? 'Unknown Builder'}
+                          </Text>
+                          <Text style={styles.applicantMeta}>
+                            {app.builder_profiles?.trade_category} — {app.builder_profiles?.suburb}
+                          </Text>
+                        </View>
+                        <View style={[styles.applicantStatusBadge, { backgroundColor: appStyle.bg }]}>
+                          <Text style={[styles.applicantStatusText, { color: appStyle.color }]}>
+                            {app.status}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Message */}
                       {app.message ? (
-                        <ThemedText style={[styles.applicantMessage, { color: colors.text }]}>
-                          "{app.message}"
-                        </ThemedText>
+                        <Text style={styles.applicantMessage}>"{app.message}"</Text>
                       ) : null}
 
-                      {app.status === 'pending' && item.status === 'open' ? (
-                        <View style={styles.actionRow}>
+                      {/* Accept / Reject */}
+                      {app.status === 'pending' && item.status === 'open' && (
+                        <View style={styles.applicantActions}>
                           <Pressable
-                            style={({ pressed }) => [
-                              styles.acceptButton,
-                              { backgroundColor: colors.success },
-                              (updatingId === app.id || pressed) && { opacity: 0.7 },
-                            ]}
+                            style={({ pressed }) => [styles.acceptBtn, (updatingId === app.id || pressed) && { opacity: 0.7 }]}
                             onPress={() => handleAccept(app, item.id)}
                             disabled={updatingId === app.id}
                           >
-                            <ThemedText style={styles.actionButtonText}>Accept</ThemedText>
+                            <Ionicons name="checkmark" size={16} color="#fff" />
+                            <Text style={styles.acceptBtnText}>Accept</Text>
                           </Pressable>
                           <Pressable
-                            style={({ pressed }) => [
-                              styles.rejectButton,
-                              { borderColor: colors.error },
-                              (updatingId === app.id || pressed) && { opacity: 0.7 },
-                            ]}
+                            style={({ pressed }) => [styles.rejectBtn, (updatingId === app.id || pressed) && { opacity: 0.7 }]}
                             onPress={() => handleReject(app.id, item.id)}
                             disabled={updatingId === app.id}
                           >
-                            <ThemedText style={[styles.rejectButtonText, { color: colors.error }]}>
-                              Reject
-                            </ThemedText>
+                            <Ionicons name="close" size={16} color="#DC2626" />
+                            <Text style={styles.rejectBtnText}>Reject</Text>
                           </Pressable>
-                        </View>
-                      ) : (
-                        <View style={[styles.applicantStatusBadge, { backgroundColor: appStatusStyle.bg }]}>
-                          <ThemedText style={{ color: appStatusStyle.text, fontSize: 13, fontWeight: '600', textTransform: 'capitalize' }}>
-                            {app.status}
-                          </ThemedText>
                         </View>
                       )}
                     </View>
@@ -298,41 +474,38 @@ export default function MyJobsScreen() {
         </View>
       );
     },
-    [expandedJobId, applicants, loadingApplicants, updatingId, colors],
+    [expandedJobId, applicants, loadingApplicants, updatingId, colors, jobPhotos, activePhotoIndices],
   );
 
+  /* ─── Main render ───────────────────────────────────────── */
+
   return (
-    <View style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
-      <PageHeader
-        title="My Jobs"
-        subtitle="Manage your posted jobs"
-        variant="professional"
-      />
-      <Pressable
-        onPress={() => router.back()}
-        style={[styles.backButton, { top: insets.top + 12 }]}
-        accessibilityRole="button"
-        accessibilityLabel="Go back"
-      >
-        <Ionicons name="arrow-back" size={22} color="#ffffff" />
-      </Pressable>
+    <View style={styles.container}>
+      {/* ── Slim green header (matching job-detail) ── */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <View style={styles.headerRow}>
+          <Pressable onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Go back">
+            <Ionicons name="arrow-back" size={20} color="#fff" />
+          </Pressable>
+          <Text style={styles.headerTitle}>My Jobs</Text>
+        </View>
+        <View style={styles.headerSubRow}>
+          <Text style={styles.headerSubText}>Manage your posted jobs</Text>
+        </View>
+      </View>
 
       {loading ? (
-        <ActivityIndicator color={colors.tint} style={{ marginTop: Spacing['5xl'] }} />
+        <ActivityIndicator color="#0F6E56" style={{ marginTop: 60 }} />
       ) : jobs.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <ThemedText style={[styles.emptyText, { color: colors.textSecondary }]}>
-            You haven't posted any jobs yet.
-          </ThemedText>
+          <Ionicons name="document-text-outline" size={48} color="#94A3B8" />
+          <Text style={styles.emptyTitle}>No jobs yet</Text>
+          <Text style={styles.emptySubtitle}>Post your first job to get started</Text>
           <Pressable
             onPress={() => router.push('/post-job')}
-            style={({ pressed }) => [
-              styles.emptyButton,
-              { backgroundColor: colors.tint },
-              pressed && { opacity: 0.7 },
-            ]}
+            style={({ pressed }) => [styles.emptyBtn, pressed && { opacity: 0.8 }]}
           >
-            <ThemedText style={styles.emptyButtonText}>Post a Job</ThemedText>
+            <Text style={styles.emptyBtnText}>Post a Job</Text>
           </Pressable>
         </View>
       ) : (
@@ -343,7 +516,7 @@ export default function MyJobsScreen() {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.tint} />
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#0F6E56" />
           }
         />
       )}
@@ -351,152 +524,340 @@ export default function MyJobsScreen() {
   );
 }
 
+/* ─── Styles ───────────────────────────────────────────────── */
+
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
+    backgroundColor: '#F5F2EC',
   },
-  backButton: {
-    position: 'absolute',
-    left: 16,
-    zIndex: 10,
+
+  /* Header — slim green bar (matching job-detail) */
+  header: {
+    backgroundColor: '#0F6E56',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
+  backBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: -0.3,
+  },
+  headerSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    paddingLeft: 42,
+  },
+  headerSubText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+
+  /* List */
+  listContent: {
+    padding: 16,
+    gap: 14,
+    paddingBottom: 60,
+  },
+
+  /* Card (matching job-detail) */
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 18,
+  },
+
+  /* Photo carousel */
+  photoSection: {
+    marginBottom: 14,
+  },
+  photoCarousel: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  photoImage: {
+    width: PHOTO_WIDTH,
+    height: PHOTO_HEIGHT,
+    borderRadius: 12,
+  },
+  photoDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 8,
+  },
+  photoDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+
+  /* Card header pills */
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginBottom: 10,
+  },
+  tradePill: {
+    backgroundColor: '#0F6E56',
+    borderRadius: 100,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  tradePillText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  urgencyPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 100,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  urgencyPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  timeText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+
+  /* Title */
+  cardTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#0f172a',
+    letterSpacing: -0.3,
+    marginBottom: 10,
+  },
+
+  /* Fact chips (matching job-detail) */
+  factsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  factChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  factChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+  },
+
+  /* Divider */
+  divider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginVertical: 14,
+  },
+
+  /* Description */
+  descriptionText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#334155',
+  },
+
+  /* Action buttons row */
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 4,
+  },
+  actionBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0F6E56',
+  },
+  actionDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: '#E2E8F0',
+  },
+
+  /* Applicants section */
+  applicantsSection: {
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    gap: 10,
+  },
+  noApplicantsWrap: {
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 12,
+  },
+  noApplicantsText: {
+    fontSize: 14,
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
+
+  /* Applicant card */
+  applicantCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 14,
+    gap: 10,
+  },
+  applicantHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  applicantInitials: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.15)',
+    backgroundColor: '#0F6E56',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  listContent: {
-    padding: Spacing['2xl'],
-    gap: Spacing.lg,
-    paddingBottom: Spacing['5xl'],
-  },
-  jobCard: {
-    borderWidth: 1,
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
-    gap: Spacing.sm,
-  },
-  jobHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  jobTitle: {
-    fontSize: 16,
-    flex: 1,
-  },
-  statusBadge: {
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-  },
-  statusText: {
-    fontSize: 12,
+  applicantInitialsText: {
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '700',
-    textTransform: 'capitalize',
   },
-  metaText: {
-    fontSize: 13,
-    textTransform: 'capitalize',
-  },
-  jobPressable: {
-    // wrapper so the whole header area is tappable
-  },
-  expandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    marginTop: Spacing.xs,
-  },
-  tapHint: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  applicantsSection: {
-    marginTop: Spacing.lg,
-    paddingTop: Spacing.lg,
-    borderTopWidth: 1,
-    gap: Spacing.md,
-  },
-  noApplicants: {
-    fontSize: 14,
-    textAlign: 'center',
-    paddingVertical: Spacing.sm,
-  },
-  applicantCard: {
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    padding: Spacing.lg,
-    gap: Spacing.sm,
+  applicantName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0f172a',
   },
   applicantMeta: {
-    fontSize: 13,
+    fontSize: 12,
+    color: '#64748b',
+    textTransform: 'capitalize',
+    marginTop: 1,
+  },
+  applicantStatusBadge: {
+    borderRadius: 100,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  applicantStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
     textTransform: 'capitalize',
   },
   applicantMessage: {
-    fontSize: 14,
+    fontSize: 13,
     fontStyle: 'italic',
-    lineHeight: 20,
+    color: '#334155',
+    lineHeight: 19,
+    paddingLeft: 46,
   },
-  actionRow: {
+
+  /* Accept / Reject buttons */
+  applicantActions: {
     flexDirection: 'row',
-    gap: Spacing.md,
-    marginTop: Spacing.sm,
+    gap: 10,
+    paddingLeft: 46,
   },
-  acceptButton: {
+  acceptBtn: {
     flex: 1,
-    borderRadius: Radius.lg,
-    height: 44,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#059669',
   },
-  actionButtonText: {
+  acceptBtnText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
-  rejectButton: {
+  rejectBtn: {
     flex: 1,
-    borderRadius: Radius.lg,
-    height: 44,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    height: 40,
+    borderRadius: 10,
     borderWidth: 1.5,
+    borderColor: '#DC2626',
+    backgroundColor: '#FEF2F2',
   },
-  rejectButtonText: {
-    fontSize: 15,
+  rejectBtnText: {
+    color: '#DC2626',
+    fontSize: 14,
     fontWeight: '700',
   },
-  applicantStatusBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    marginTop: Spacing.xs,
-  },
+
+  /* Empty state */
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: Spacing['5xl'],
-    gap: Spacing.lg,
+    padding: 32,
+    gap: 8,
   },
-  emptyText: {
-    textAlign: 'center',
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginTop: 8,
+  },
+  emptySubtitle: {
     fontSize: 15,
-    lineHeight: 22,
+    color: '#64748b',
+    textAlign: 'center',
   },
-  emptyButton: {
-    borderRadius: Radius.lg,
-    height: 52,
-    paddingHorizontal: Spacing['3xl'],
+  emptyBtn: {
+    marginTop: 16,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#0F4F3E',
     alignItems: 'center',
     justifyContent: 'center',
-    ...Shadows.sm,
+    paddingHorizontal: 32,
   },
-  emptyButtonText: {
+  emptyBtnText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',

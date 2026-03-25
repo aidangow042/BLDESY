@@ -236,6 +236,12 @@ export function SideDrawer({ visible, onClose, builderMode = false }: SideDrawer
       icon: <MaterialIcons name="gavel" size={20} color={colors.textSecondary} />,
       onPress: () => navigate('/legal'),
     },
+    ...(!builderMode && !userInfo.isGuest ? [{
+      key: 'my-jobs',
+      label: 'My Jobs',
+      icon: <MaterialIcons name="work-outline" size={20} color={colors.textSecondary} />,
+      onPress: () => navigate('/my-jobs'),
+    }] : []),
   ];
 
   // In builder mode, show business identity; in consumer mode, show personal

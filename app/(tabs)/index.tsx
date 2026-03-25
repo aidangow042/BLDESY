@@ -20,7 +20,7 @@ import { SideDrawer } from '@/components/side-drawer';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-import auLocations from '@/lib/au-locations.json';
+import { getSuburbSuggestions } from '@/lib/geo';
 
 /* ───────────────────────── Data ───────────────────────── */
 
@@ -40,24 +40,6 @@ const COMMON_JOBS = [
 ];
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-/* ───────────────────────── Location suggestions ───────────────────────── */
-
-const localities: Record<string, [number, number]> = (auLocations as any).l;
-const allSuburbs = Object.keys(localities).map((s) => s.replace(/\b\w/g, (c) => c.toUpperCase()));
-
-function getLocationSuggestions(query: string): string[] {
-  if (!query || query.length < 2) return [];
-  const lower = query.toLowerCase();
-  const results: string[] = [];
-  for (const suburb of allSuburbs) {
-    if (suburb.toLowerCase().startsWith(lower)) {
-      results.push(suburb);
-      if (results.length >= 6) break;
-    }
-  }
-  return results;
-}
 
 /* ───────────────────────── Trade Category Config ───────────────────────── */
 
@@ -192,7 +174,7 @@ export default function HomeScreen() {
 
   function handleLocationChange(text: string) {
     setLocationText(text);
-    setLocationSuggestions(getLocationSuggestions(text));
+    setLocationSuggestions(getSuburbSuggestions(text));
   }
 
   function selectLocationSuggestion(suggestion: string) {

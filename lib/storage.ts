@@ -67,3 +67,71 @@ export async function uploadImages(
 export function isLocalUri(uri: string): boolean {
   return uri.startsWith('file://') || uri.startsWith('ph://') || uri.startsWith('/');
 }
+
+/**
+ * Upload a job photo to the job-photos bucket. Returns the public URL or null.
+ */
+export async function uploadJobPhoto(
+  localUri: string,
+  userId: string,
+  jobId: string,
+): Promise<string | null> {
+  try {
+    const ext = localUri.split('.').pop()?.toLowerCase() ?? 'jpg';
+    const fileName = `${userId}/${jobId}/${Date.now()}.${ext}`;
+    const contentType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+
+    const file = new File(localUri);
+    const arrayBuffer = await file.arrayBuffer();
+
+    const { error } = await supabase.storage
+      .from('job-photos')
+      .upload(fileName, arrayBuffer, { contentType, upsert: true });
+
+    if (error) {
+      console.error('Job photo upload error:', error.message);
+      return null;
+    }
+
+    const { data } = supabase.storage.from('job-photos').getPublicUrl(fileName);
+    return data.publicUrl;
+  } catch (err) {
+    console.error('Job photo upload failed:', err);
+    return null;
+  }
+}
+
+/**
+ * Upload a job document (PDF) to the job-documents bucket. Returns the public URL or null.
+ */
+export async function uploadJobDocument(
+  localUri: string,
+  userId: string,
+  jobId: string,
+  originalName: string,
+): Promise<string | null> {
+  try {
+    const ext = localUri.split('.').pop()?.toLowerCase() ?? 'pdf';
+    const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const fileName = `${userId}/${jobId}/${Date.now()}_${safeName}`;
+    const contentType = ext === 'pdf' ? 'application/pdf' : 'application/octet-stream';
+
+    const file = new File(localUri);
+    const arrayBuffer = await file.arrayBuffer();
+
+    const { error } = await supabase.storage
+      .from('job-documents')
+      .upload(fileName, arrayBuffer, { contentType, upsert: true });
+
+    if (error) {
+      console.error('Job document upload error:', error.message);
+      return null;
+    }
+
+    const { data } = supabase.storage.from('job-documents').getPublicUrl(fileName);
+    return data.publicUrl;
+  } catch (err) {
+    console.error('Job document upload failed:', err);
+    return null;
+  }
+}

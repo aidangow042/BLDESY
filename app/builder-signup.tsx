@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -8,17 +8,24 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Text,
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import * as Location from 'expo-location';
 
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
+import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { geocode } from '@/lib/geo';
+import { geocode, getSuburbSuggestions, getPostcodeForSuburb } from '@/lib/geo';
 import { supabase } from '@/lib/supabase';
+
+/* ───────────────────────── Constants ───────────────────────── */
 
 const TRADE_CATEGORIES = [
   'Builder',
@@ -39,43 +46,25 @@ const TRADE_CATEGORIES = [
 
 const URGENCY_OPTIONS = ['Emergency', 'Soon', 'Planned'];
 
+const STEP_LABELS = ['Your Trade', 'Credentials', 'Details'];
+
+/* ───────────────────────── Component ───────────────────────── */
+
 export default function BuilderSignupScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
 
-  // Step transition animation
+  // Animations
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const dotWidths = useRef([1, 2, 3].map((i) => new Animated.Value(i === 1 ? 24 : 8))).current;
 
-  // Dot width animations
-  const dotWidths = useRef([1, 2, 3].map((s) => new Animated.Value(s === 1 ? 24 : 8))).current;
-
-  function animateToStep(from: number, to: number) {
-    const direction = to > from ? -1 : 1; // slide left for forward, right for back
-    // Animate dots
-    Animated.parallel([
-      Animated.spring(dotWidths[from - 1], { toValue: 8, useNativeDriver: false, friction: 8 }),
-      Animated.spring(dotWidths[to - 1], { toValue: 24, useNativeDriver: false, friction: 8 }),
-    ]).start();
-    // Slide out current
-    Animated.parallel([
-      Animated.timing(slideAnim, { toValue: direction * 300, duration: 150, useNativeDriver: true }),
-      Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
-    ]).start(() => {
-      setStep(to);
-      // Position new content on opposite side
-      slideAnim.setValue(-direction * 300);
-      // Slide in new
-      Animated.parallel([
-        Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, friction: 8, tension: 60 }),
-        Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
-      ]).start();
-    });
-  }
+  const scrollRef = useRef<ScrollView>(null);
 
   // Step 1 fields
   const [tradeCategory, setTradeCategory] = useState('');
@@ -85,6 +74,7 @@ export default function BuilderSignupScreen() {
   const [postcode, setPostcode] = useState('');
   const [radiusKm, setRadiusKm] = useState('25');
   const [urgencyCapacity, setUrgencyCapacity] = useState<string[]>([]);
+  const [locSuggestions, setLocSuggestions] = useState<string[]>([]);
 
   // Step 2 fields
   const [abn, setAbn] = useState('');
@@ -96,6 +86,30 @@ export default function BuilderSignupScreen() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [website, setWebsite] = useState('');
+
+  /* ───────────── Step transitions ───────────── */
+
+  function animateToStep(from: number, to: number) {
+    const direction = to > from ? -1 : 1;
+    Animated.parallel([
+      Animated.spring(dotWidths[from - 1], { toValue: 8, useNativeDriver: false, friction: 8 }),
+      Animated.spring(dotWidths[to - 1], { toValue: 24, useNativeDriver: false, friction: 8 }),
+    ]).start();
+    Animated.parallel([
+      Animated.timing(slideAnim, { toValue: direction * 300, duration: 150, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+    ]).start(() => {
+      setStep(to);
+      slideAnim.setValue(-direction * 300);
+      Animated.parallel([
+        Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, friction: 8, tension: 60 }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]).start();
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    });
+  }
+
+  /* ───────────── Specialty helpers ───────────── */
 
   function addSpecialty() {
     const trimmed = specialtyInput.trim();
@@ -117,15 +131,50 @@ export default function BuilderSignupScreen() {
     );
   }
 
+  /* ───────────── Location ───────────── */
+
+  function handleSuburbChange(text: string) {
+    setSuburb(text);
+    setLocSuggestions(getSuburbSuggestions(text));
+    if (text.length < 2) setPostcode('');
+  }
+
+  function selectSuburb(sub: string) {
+    setSuburb(sub);
+    setLocSuggestions([]);
+    const pc = getPostcodeForSuburb(sub);
+    if (pc) setPostcode(pc);
+  }
+
+  async function handleUseCurrentLocation() {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Please allow location access.');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({});
+      const [result] = await Location.reverseGeocodeAsync({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+      });
+      if (result) {
+        const sub = result.city || result.subregion || result.district || '';
+        const pc = result.postalCode || '';
+        setSuburb(sub);
+        setPostcode(pc);
+      }
+    } catch {
+      Alert.alert('Error', 'Could not get your location. Please enter it manually.');
+    }
+  }
+
+  /* ───────────── Validation ───────────── */
+
   function validateStep1() {
     if (!tradeCategory) return 'Please select a trade category.';
     if (!suburb.trim()) return 'Please enter your suburb.';
     if (!postcode.trim() || postcode.trim().length !== 4) return 'Please enter a valid 4-digit postcode.';
-    return null;
-  }
-
-  function validateStep2() {
-    // ABN and license are optional for MVP but we encourage them
     return null;
   }
 
@@ -135,17 +184,22 @@ export default function BuilderSignupScreen() {
     return null;
   }
 
-  function handleNext() {
+  const step1Valid = !!tradeCategory && suburb.trim().length > 0 && postcode.trim().length === 4;
+  const step3Valid = businessName.trim().length > 0 && phone.trim().length > 0;
+
+  /* ───────────── Navigation ───────────── */
+
+  function handleContinue() {
     if (step === 1) {
       const err = validateStep1();
       if (err) { Alert.alert('Missing info', err); return; }
       animateToStep(1, 2);
     } else if (step === 2) {
-      const err = validateStep2();
-      if (err) { Alert.alert('Missing info', err); return; }
       animateToStep(2, 3);
     }
   }
+
+  /* ───────────── Submit ───────────── */
 
   async function handleSubmit() {
     const err = validateStep3();
@@ -162,7 +216,6 @@ export default function BuilderSignupScreen() {
 
     const specialtiesArray = specialties.filter(Boolean);
 
-    // Geocode the builder's location
     const geo = await geocode(`${suburb.trim()} ${postcode.trim()}`);
 
     const { error: insertError } = await supabase.from('builder_profiles').insert({
@@ -199,449 +252,724 @@ export default function BuilderSignupScreen() {
     router.replace('/pending-approval');
   }
 
-  return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          {/* Header */}
-          <View style={styles.headerRow}>
-            <Pressable
-              onPress={() => (step > 1 ? animateToStep(step, step - 1) : router.back())}
-              style={({ pressed }) => [pressed && { opacity: 0.7 }]}
-            >
-              <ThemedText style={[styles.backText, { color: colors.tint }]}>
-                {step > 1 ? 'Back' : 'Cancel'}
-              </ThemedText>
-            </Pressable>
-            <ThemedText type="defaultSemiBold" style={{ color: colors.textSecondary, fontSize: 14 }}>
-              Step {step} of 3
-            </ThemedText>
-          </View>
+  /* ───────────── Progress indicator ───────────── */
 
-          {/* Step indicator dots */}
-          <View style={styles.stepIndicator}>
-            {[1, 2, 3].map((s, i) => (
-              <Animated.View
-                key={s}
+  function renderProgressBar() {
+    return (
+      <View style={styles.progressContainer}>
+        {STEP_LABELS.map((label, i) => {
+          const stepNum = i + 1;
+          const isCompleted = step > stepNum;
+          const isCurrent = step === stepNum;
+          return (
+            <View key={label} style={styles.progressStep}>
+              <View style={styles.progressDotRow}>
+                {i > 0 && (
+                  <View
+                    style={[
+                      styles.progressLine,
+                      { backgroundColor: isCompleted || isCurrent ? '#0F6E56' : colors.border },
+                    ]}
+                  />
+                )}
+                <Animated.View
+                  style={[
+                    styles.progressDot,
+                    {
+                      width: dotWidths[i],
+                      backgroundColor: isCompleted
+                        ? '#0F6E56'
+                        : isCurrent
+                          ? '#1D9E75'
+                          : 'transparent',
+                      borderColor: isCompleted || isCurrent ? '#0F6E56' : colors.border,
+                    },
+                  ]}
+                >
+                  {isCompleted && (
+                    <MaterialIcons name="check" size={12} color="#fff" />
+                  )}
+                </Animated.View>
+                {i < 2 && (
+                  <View
+                    style={[
+                      styles.progressLine,
+                      { backgroundColor: isCompleted ? '#0F6E56' : colors.border },
+                    ]}
+                  />
+                )}
+              </View>
+              <Text
                 style={[
-                  styles.stepDot,
+                  styles.progressLabel,
                   {
-                    backgroundColor: s <= step ? colors.tint : colors.border,
-                    width: dotWidths[i],
+                    color: isCurrent ? '#0F6E56' : isCompleted ? colors.text : colors.textSecondary,
+                    fontWeight: isCurrent ? '700' : '500',
                   },
                 ]}
-              />
-            ))}
-          </View>
+              >
+                {label}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
 
-          <Animated.View style={{ transform: [{ translateX: slideAnim }], opacity: fadeAnim }}>
-          <ThemedText type="title" style={styles.title}>
-            {step === 1 && 'Your Trade'}
-            {step === 2 && 'Credentials'}
-            {step === 3 && 'Your Details'}
-          </ThemedText>
+  /* ───────────── Step 1: Your Trade ───────────── */
 
-          <ThemedText style={[styles.subtitle, { color: colors.textSecondary }]}>
-            {step === 1 && 'Tell us what trade you do and where you work.'}
-            {step === 2 && 'Add your ABN and licence info (optional for now).'}
-            {step === 3 && 'How should customers find and contact you?'}
-          </ThemedText>
+  function renderStep1() {
+    return (
+      <View style={styles.stepContent}>
+        <ThemedText type="subtitle" style={{ marginBottom: 4 }}>
+          What trade do you do?
+        </ThemedText>
+        <ThemedText style={[styles.stepHint, { color: colors.textSecondary }]}>
+          Tell us what trade you do and where you work.
+        </ThemedText>
 
-          {/* === STEP 1 === */}
-          {step === 1 && (
-            <View style={styles.formSection}>
-              <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>Trade category *</ThemedText>
-              <View style={styles.chipGrid}>
-                {TRADE_CATEGORIES.map((cat) => {
-                  const selected = tradeCategory === cat;
-                  return (
-                    <Pressable
-                      key={cat}
-                      onPress={() => setTradeCategory(cat)}
-                      style={({ pressed }) => [
-                        styles.chip,
-                        {
-                          backgroundColor: selected ? colors.tintLight : colors.surface,
-                          borderColor: selected ? colors.tint : colors.border,
-                        },
-                        pressed && { opacity: 0.7 },
-                      ]}
-                    >
-                      <ThemedText
-                        style={[styles.chipText, { color: selected ? colors.tint : colors.text }]}
-                      >
-                        {cat}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>
-                Specialties
-              </ThemedText>
-              <View style={[styles.specialtyInputRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <TextInput
-                  style={[styles.specialtyInput, { color: colors.text }]}
-                  placeholder="e.g. heritage homes, bathrooms…"
-                  placeholderTextColor={colors.icon}
-                  value={specialtyInput}
-                  onChangeText={setSpecialtyInput}
-                  onSubmitEditing={addSpecialty}
-                  returnKeyType="done"
-                  blurOnSubmit={false}
-                />
+        {/* Trade category */}
+        <View style={styles.fieldGroup}>
+          <ThemedText style={[styles.label, { color: colors.textSecondary }]}>TRADE CATEGORY *</ThemedText>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}
+          >
+            {TRADE_CATEGORIES.map((cat) => {
+              const selected = tradeCategory === cat;
+              return (
                 <Pressable
-                  onPress={addSpecialty}
-                  style={({ pressed }) => [styles.specialtyAddBtn, { backgroundColor: colors.tint }, pressed && { opacity: 0.7 }]}
-                  accessibilityLabel="Add specialty"
+                  key={cat}
+                  onPress={() => setTradeCategory(cat)}
+                  style={({ pressed }) => [
+                    styles.chip,
+                    {
+                      backgroundColor: selected ? '#0F6E56' : '#fff',
+                      borderColor: selected ? '#0F6E56' : colors.border,
+                    },
+                    pressed && { opacity: 0.7 },
+                  ]}
                   accessibilityRole="button"
+                  accessibilityLabel={cat}
+                  accessibilityState={{ selected }}
                 >
-                  <ThemedText style={styles.specialtyAddBtnText}>Add</ThemedText>
+                  <Text style={[styles.chipText, { color: selected ? '#fff' : colors.text }]}>
+                    {cat}
+                  </Text>
                 </Pressable>
-              </View>
-              {specialties.length > 0 && (
-                <View style={styles.chipGrid}>
-                  {specialties.map((s) => (
-                    <Pressable
-                      key={s}
-                      onPress={() => removeSpecialty(s)}
-                      style={[styles.chip, { backgroundColor: colors.tintLight, borderColor: colors.tint }]}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Remove ${s}`}
-                    >
-                      <ThemedText style={[styles.chipText, { color: colors.tint }]}>{s}</ThemedText>
-                      <ThemedText style={[styles.chipText, { color: colors.tint, marginLeft: 4 }]}>×</ThemedText>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
+              );
+            })}
+          </ScrollView>
+        </View>
 
-              <View style={styles.row}>
-                <View style={{ flex: 1 }}>
-                  <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>
-                    Suburb *
-                  </ThemedText>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-                    placeholder="Surry Hills"
-                    placeholderTextColor={colors.icon}
-                    value={suburb}
-                    onChangeText={setSuburb}
-                  />
-                </View>
-                <View style={{ width: 110 }}>
-                  <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>
-                    Postcode *
-                  </ThemedText>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-                    placeholder="2010"
-                    placeholderTextColor={colors.icon}
-                    value={postcode}
-                    onChangeText={setPostcode}
-                    keyboardType="number-pad"
-                    maxLength={4}
-                  />
-                </View>
-              </View>
-
-              <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>
-                Service radius (km)
-              </ThemedText>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border, width: 110 }]}
-                value={radiusKm}
-                onChangeText={setRadiusKm}
-                keyboardType="number-pad"
-              />
-
-              <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>
-                Urgency capacity
-              </ThemedText>
-              <View style={styles.chipGrid}>
-                {URGENCY_OPTIONS.map((opt) => {
-                  const selected = urgencyCapacity.includes(opt.toLowerCase());
-                  return (
-                    <Pressable
-                      key={opt}
-                      onPress={() => toggleUrgency(opt)}
-                      style={({ pressed }) => [
-                        styles.chip,
-                        {
-                          backgroundColor: selected ? colors.tintLight : colors.surface,
-                          borderColor: selected ? colors.tint : colors.border,
-                        },
-                        pressed && { opacity: 0.7 },
-                      ]}
-                    >
-                      <ThemedText
-                        style={[styles.chipText, { color: selected ? colors.tint : colors.text }]}
-                      >
-                        {opt}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-
-          {/* === STEP 2 === */}
-          {step === 2 && (
-            <View style={styles.formSection}>
-              {/* Trust banner */}
-              <View style={[styles.trustBanner, { backgroundColor: colors.tintLight, borderColor: colors.tint + '30' }]}>
-                <ThemedText style={[styles.trustBannerTitle, { color: colors.tint }]}>
-                  Why this matters
-                </ThemedText>
-                <ThemedText style={[styles.trustBannerText, { color: colors.textSecondary }]}>
-                  Verified tradies get a "Verified" badge on their profile and rank higher in search results. Customers are 3x more likely to contact verified builders.
-                </ThemedText>
-              </View>
-
-              <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>
-                ABN
-              </ThemedText>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-                placeholder="11 222 333 444"
-                placeholderTextColor={colors.icon}
-                value={abn}
-                onChangeText={setAbn}
-                keyboardType="number-pad"
-              />
-
-              <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>
-                Licence / Registration Number
-              </ThemedText>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-                placeholder="e.g. BLD12345"
-                placeholderTextColor={colors.icon}
-                value={licenseNumber}
-                onChangeText={setLicenseNumber}
-                autoCapitalize="characters"
-              />
-
-              <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <ThemedText style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 20 }}>
-                  Both fields are optional for now. Document uploads (photos, certificates) are coming soon — we'll verify your details manually.
-                </ThemedText>
-              </View>
-            </View>
-          )}
-
-          {/* === STEP 3 === */}
-          {step === 3 && (
-            <View style={styles.formSection}>
-              <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>
-                Business name *
-              </ThemedText>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-                placeholder="Smith's Plumbing"
-                placeholderTextColor={colors.icon}
-                value={businessName}
-                onChangeText={setBusinessName}
-              />
-
-              <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>
-                Bio
-              </ThemedText>
-              <TextInput
-                style={[styles.inputMultiline, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-                placeholder="Tell customers about your experience, what makes you different..."
-                placeholderTextColor={colors.icon}
-                value={bio}
-                onChangeText={setBio}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-              />
-
-              <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>
-                Phone *
-              </ThemedText>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-                placeholder="0412 345 678"
-                placeholderTextColor={colors.icon}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-              />
-
-              <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>
-                Email
-              </ThemedText>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-                placeholder="you@example.com"
-                placeholderTextColor={colors.icon}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-
-              <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>
-                Website
-              </ThemedText>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-                placeholder="www.smithsplumbing.com.au"
-                placeholderTextColor={colors.icon}
-                value={website}
-                onChangeText={setWebsite}
-                autoCapitalize="none"
-                keyboardType="url"
-              />
-            </View>
-          )}
-          </Animated.View>
-
-          {/* Action button */}
-          {step < 3 ? (
+        {/* Specialties */}
+        <View style={styles.fieldGroup}>
+          <ThemedText style={[styles.label, { color: colors.textSecondary }]}>SPECIALTIES</ThemedText>
+          <View style={[styles.specialtyInputWrap, { backgroundColor: '#fff', borderColor: colors.border }]}>
+            <TextInput
+              style={[styles.specialtyInput, { color: colors.text }]}
+              placeholder="e.g. heritage homes, bathrooms..."
+              placeholderTextColor={colors.textSecondary}
+              value={specialtyInput}
+              onChangeText={setSpecialtyInput}
+              onSubmitEditing={addSpecialty}
+              returnKeyType="done"
+              blurOnSubmit={false}
+            />
             <Pressable
-              style={({ pressed }) => [
-                styles.primaryButton,
-                { backgroundColor: colors.tint },
-                pressed && { opacity: 0.7 },
-              ]}
-              onPress={handleNext}
+              onPress={addSpecialty}
+              style={({ pressed }) => [styles.specialtyAddBtn, pressed && { opacity: 0.7 }]}
+              accessibilityLabel="Add specialty"
+              accessibilityRole="button"
             >
-              <ThemedText style={styles.primaryButtonText}>Continue</ThemedText>
+              <LinearGradient
+                colors={['#0d9488', '#0f766e']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.specialtyAddBtnGrad}
+              >
+                <Text style={styles.specialtyAddBtnText}>Add</Text>
+              </LinearGradient>
             </Pressable>
-          ) : (
-            <Pressable
-              style={({ pressed }) => [
-                styles.primaryButton,
-                { backgroundColor: colors.tint, opacity: submitting ? 0.6 : 1 },
-                pressed && !submitting && { opacity: 0.7 },
+          </View>
+          {specialties.length > 0 && (
+            <View style={styles.specialtyChips}>
+              {specialties.map((s) => (
+                <Pressable
+                  key={s}
+                  onPress={() => removeSpecialty(s)}
+                  style={[styles.chip, { backgroundColor: '#E1F5EE', borderColor: '#0F6E56' }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${s}`}
+                >
+                  <Text style={[styles.chipText, { color: '#0F6E56' }]}>{s}</Text>
+                  <Text style={[styles.chipText, { color: '#0F6E56', marginLeft: 4 }]}>×</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* Location */}
+        <View style={styles.fieldGroup}>
+          <ThemedText style={[styles.label, { color: colors.textSecondary }]}>LOCATION *</ThemedText>
+          <View style={[styles.locationInputWrap, { backgroundColor: '#fff', borderColor: colors.border }]}>
+            <Ionicons name="location-outline" size={18} color={colors.textSecondary} />
+            <TextInput
+              style={[styles.locationInput, { color: colors.text }]}
+              placeholder="Suburb e.g. Surry Hills"
+              placeholderTextColor={colors.textSecondary}
+              value={suburb}
+              onChangeText={handleSuburbChange}
+            />
+          </View>
+          {locSuggestions.length > 0 && (
+            <View style={[styles.suggestionsWrap, { backgroundColor: '#fff', borderColor: colors.border }]}>
+              {locSuggestions.map((sub) => (
+                <Pressable
+                  key={sub}
+                  onPress={() => selectSuburb(sub)}
+                  style={({ pressed }) => [
+                    styles.suggestionItem,
+                    pressed && { backgroundColor: colors.tealBg },
+                  ]}
+                >
+                  <Ionicons name="location" size={14} color={colors.teal} />
+                  <Text style={[styles.suggestionText, { color: colors.text }]}>{sub}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          <View style={[styles.locationInputWrap, { backgroundColor: '#fff', borderColor: colors.border }]}>
+            <Text style={[styles.postcodePrefix, { color: colors.textSecondary }]}>Postcode</Text>
+            <TextInput
+              style={[styles.locationInput, { color: colors.text }]}
+              placeholder="e.g. 2010"
+              placeholderTextColor={colors.textSecondary}
+              value={postcode}
+              onChangeText={setPostcode}
+              keyboardType="number-pad"
+              maxLength={4}
+            />
+          </View>
+          <Pressable
+            onPress={handleUseCurrentLocation}
+            style={({ pressed }) => [styles.currentLocBtn, pressed && { opacity: 0.7 }]}
+          >
+            <Ionicons name="navigate" size={14} color="#0F6E56" />
+            <Text style={styles.currentLocText}>Use my current location</Text>
+          </Pressable>
+        </View>
+
+        {/* Service radius */}
+        <View style={styles.fieldGroup}>
+          <ThemedText style={[styles.label, { color: colors.textSecondary }]}>SERVICE RADIUS (KM)</ThemedText>
+          <TextInput
+            style={[
+              styles.input,
+              { color: colors.text, backgroundColor: '#fff', borderColor: colors.border, width: 120 },
+            ]}
+            value={radiusKm}
+            onChangeText={setRadiusKm}
+            keyboardType="number-pad"
+            placeholder="25"
+            placeholderTextColor={colors.textSecondary}
+          />
+        </View>
+
+        {/* Urgency capacity */}
+        <View style={styles.fieldGroup}>
+          <ThemedText style={[styles.label, { color: colors.textSecondary }]}>URGENCY CAPACITY</ThemedText>
+          <View style={styles.urgencyCapacityRow}>
+            {URGENCY_OPTIONS.map((opt) => {
+              const selected = urgencyCapacity.includes(opt.toLowerCase());
+              return (
+                <Pressable
+                  key={opt}
+                  onPress={() => toggleUrgency(opt)}
+                  style={({ pressed }) => [
+                    styles.chip,
+                    {
+                      backgroundColor: selected ? '#0F6E56' : '#fff',
+                      borderColor: selected ? '#0F6E56' : colors.border,
+                    },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={opt}
+                  accessibilityState={{ selected }}
+                >
+                  <Text style={[styles.chipText, { color: selected ? '#fff' : colors.text }]}>
+                    {opt}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  /* ───────────── Step 2: Credentials ───────────── */
+
+  function renderStep2() {
+    return (
+      <View style={styles.stepContent}>
+        <ThemedText type="subtitle" style={{ marginBottom: 4 }}>
+          Verify your credentials
+        </ThemedText>
+        <ThemedText style={[styles.stepHint, { color: colors.textSecondary }]}>
+          Add your ABN and licence info (optional for now).
+        </ThemedText>
+
+        {/* Trust banner */}
+        <View style={[styles.trustCard, { backgroundColor: '#E1F5EE', borderColor: '#0F6E56' + '30' }]}>
+          <View style={styles.trustCardHeader}>
+            <MaterialIcons name="verified" size={18} color="#0F6E56" />
+            <Text style={[styles.trustCardTitle, { color: '#0F6E56' }]}>Why this matters</Text>
+          </View>
+          <Text style={[styles.trustCardText, { color: colors.textSecondary }]}>
+            Verified tradies get a "Verified" badge on their profile and rank higher in search results. Customers are 3x more likely to contact verified builders.
+          </Text>
+        </View>
+
+        {/* ABN */}
+        <View style={styles.fieldGroup}>
+          <ThemedText style={[styles.label, { color: colors.textSecondary }]}>ABN</ThemedText>
+          <TextInput
+            style={[styles.input, { color: colors.text, backgroundColor: '#fff', borderColor: colors.border }]}
+            placeholder="11 222 333 444"
+            placeholderTextColor={colors.textSecondary}
+            value={abn}
+            onChangeText={setAbn}
+            keyboardType="number-pad"
+          />
+        </View>
+
+        {/* Licence */}
+        <View style={styles.fieldGroup}>
+          <ThemedText style={[styles.label, { color: colors.textSecondary }]}>LICENCE / REGISTRATION NUMBER</ThemedText>
+          <TextInput
+            style={[styles.input, { color: colors.text, backgroundColor: '#fff', borderColor: colors.border }]}
+            placeholder="e.g. BLD12345"
+            placeholderTextColor={colors.textSecondary}
+            value={licenseNumber}
+            onChangeText={setLicenseNumber}
+            autoCapitalize="characters"
+          />
+        </View>
+
+        {/* Info card */}
+        <View style={[styles.infoCard, { backgroundColor: '#fff', borderColor: colors.border }]}>
+          <MaterialIcons name="info-outline" size={16} color={colors.textSecondary} />
+          <Text style={[styles.infoCardText, { color: colors.textSecondary }]}>
+            Both fields are optional for now. Document uploads (photos, certificates) are coming soon — we'll verify your details manually.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  /* ───────────── Step 3: Your Details ───────────── */
+
+  function renderStep3() {
+    return (
+      <View style={styles.stepContent}>
+        <ThemedText type="subtitle" style={{ marginBottom: 4 }}>
+          Your business details
+        </ThemedText>
+        <ThemedText style={[styles.stepHint, { color: colors.textSecondary }]}>
+          How should customers find and contact you?
+        </ThemedText>
+
+        {/* Business name */}
+        <View style={styles.fieldGroup}>
+          <ThemedText style={[styles.label, { color: colors.textSecondary }]}>BUSINESS NAME *</ThemedText>
+          <TextInput
+            style={[styles.input, { color: colors.text, backgroundColor: '#fff', borderColor: colors.border }]}
+            placeholder="Smith's Plumbing"
+            placeholderTextColor={colors.textSecondary}
+            value={businessName}
+            onChangeText={setBusinessName}
+          />
+        </View>
+
+        {/* Bio */}
+        <View style={styles.fieldGroup}>
+          <ThemedText style={[styles.label, { color: colors.textSecondary }]}>BIO</ThemedText>
+          <View>
+            <TextInput
+              style={[
+                styles.input,
+                styles.multilineInput,
+                { color: colors.text, backgroundColor: '#fff', borderColor: colors.border },
               ]}
-              onPress={handleSubmit}
-              disabled={submitting}
+              placeholder="Tell customers about your experience, what makes you different..."
+              placeholderTextColor={colors.textSecondary}
+              value={bio}
+              onChangeText={setBio}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              maxLength={500}
+            />
+            <Text style={[styles.charCount, { color: colors.textSecondary }]}>
+              {bio.length} / 500
+            </Text>
+          </View>
+        </View>
+
+        {/* Phone */}
+        <View style={styles.fieldGroup}>
+          <ThemedText style={[styles.label, { color: colors.textSecondary }]}>PHONE *</ThemedText>
+          <View style={[styles.locationInputWrap, { backgroundColor: '#fff', borderColor: colors.border }]}>
+            <Ionicons name="call-outline" size={18} color={colors.textSecondary} />
+            <TextInput
+              style={[styles.locationInput, { color: colors.text }]}
+              placeholder="0412 345 678"
+              placeholderTextColor={colors.textSecondary}
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+              maxLength={15}
+            />
+          </View>
+        </View>
+
+        {/* Email */}
+        <View style={styles.fieldGroup}>
+          <ThemedText style={[styles.label, { color: colors.textSecondary }]}>EMAIL (OPTIONAL)</ThemedText>
+          <View style={[styles.locationInputWrap, { backgroundColor: '#fff', borderColor: colors.border }]}>
+            <Ionicons name="mail-outline" size={18} color={colors.textSecondary} />
+            <TextInput
+              style={[styles.locationInput, { color: colors.text }]}
+              placeholder="you@example.com"
+              placeholderTextColor={colors.textSecondary}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={100}
+            />
+          </View>
+        </View>
+
+        {/* Website */}
+        <View style={styles.fieldGroup}>
+          <ThemedText style={[styles.label, { color: colors.textSecondary }]}>WEBSITE (OPTIONAL)</ThemedText>
+          <View style={[styles.locationInputWrap, { backgroundColor: '#fff', borderColor: colors.border }]}>
+            <MaterialIcons name="language" size={18} color={colors.textSecondary} />
+            <TextInput
+              style={[styles.locationInput, { color: colors.text }]}
+              placeholder="www.smithsplumbing.com.au"
+              placeholderTextColor={colors.textSecondary}
+              value={website}
+              onChangeText={setWebsite}
+              autoCapitalize="none"
+              keyboardType="url"
+              autoCorrect={false}
+            />
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  /* ───────────── Main render ───────────── */
+
+  return (
+    <View style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
+      {/* Header */}
+      <LinearGradient colors={['#0F4F3E', '#0F6E56']} style={[styles.header, { paddingTop: insets.top }]}>
+        <Pressable
+          onPress={() => (step > 1 ? animateToStep(step, step - 1) : router.back())}
+          style={styles.headerBack}
+          accessibilityRole="button"
+          accessibilityLabel={step > 1 ? 'Back' : 'Cancel'}
+        >
+          <Ionicons name="arrow-back" size={22} color="#fff" />
+        </Pressable>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Register as a Builder</Text>
+          <Text style={styles.headerSubtitle}>Join the BLDESY network</Text>
+        </View>
+        <Text style={styles.headerStepText}>{step}/3</Text>
+      </LinearGradient>
+
+      {/* Trust bar */}
+      <View style={[styles.trustBar, { backgroundColor: '#E1F5EE' }]}>
+        <MaterialIcons name="bolt" size={14} color="#0F6E56" />
+        <Text style={styles.trustBarText}>Verified tradies get found first</Text>
+      </View>
+
+      {/* Progress indicator */}
+      {renderProgressBar()}
+
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          ref={scrollRef}
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View style={{ transform: [{ translateX: slideAnim }], opacity: fadeAnim }}>
+            {step === 1 && renderStep1()}
+            {step === 2 && renderStep2()}
+            {step === 3 && renderStep3()}
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Bottom button bar */}
+      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16), backgroundColor: colors.canvas }]}>
+        {step < 3 ? (
+          <Pressable
+            onPress={handleContinue}
+            disabled={step === 1 ? !step1Valid : false}
+            style={({ pressed }) => [
+              styles.primaryBtn,
+              step === 1 && !step1Valid && { opacity: 0.4 },
+              pressed && { opacity: 0.85 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Continue"
+          >
+            <LinearGradient
+              colors={step === 1 && !step1Valid ? ['#9CA3AF', '#9CA3AF'] : ['#0d9488', '#0f766e']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.primaryBtnGrad}
+            >
+              <Text style={styles.primaryBtnText}>Continue</Text>
+              <MaterialIcons name="arrow-forward" size={18} color="#fff" />
+            </LinearGradient>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={handleSubmit}
+            disabled={submitting || !step3Valid}
+            style={({ pressed }) => [
+              styles.primaryBtn,
+              (!step3Valid || submitting) && { opacity: 0.4 },
+              pressed && { opacity: 0.85 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Submit application"
+          >
+            <LinearGradient
+              colors={step3Valid && !submitting ? ['#0d9488', '#0f766e'] : ['#9CA3AF', '#9CA3AF']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.primaryBtnGrad}
             >
               {submitting ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <ThemedText style={styles.primaryButtonText}>Submit Application</ThemedText>
+                <>
+                  <MaterialIcons name="send" size={18} color="#fff" />
+                  <Text style={styles.primaryBtnText}>Submit Application</Text>
+                </>
               )}
-            </Pressable>
-          )}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+            </LinearGradient>
+          </Pressable>
+        )}
+      </View>
+    </View>
   );
 }
 
+/* ───────────── Styles ───────────── */
+
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: Spacing['2xl'],
-    paddingBottom: Spacing['5xl'],
-  },
-  headerRow: {
+  safeArea: { flex: 1 },
+
+  /* Header */
+  header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.lg,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+    gap: 12,
   },
-  backText: {
-    fontSize: 16,
+  headerBack: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerCenter: { flex: 1 },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  headerSubtitle: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 1,
+  },
+  headerStepText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 13,
     fontWeight: '600',
   },
-  stepIndicator: {
+
+  /* Trust bar */
+  trustBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
-    marginBottom: Spacing['2xl'],
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 6,
   },
-  stepDot: {
-    height: 8,
-    borderRadius: Radius.full,
+  trustBarText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0F6E56',
   },
-  title: {
-    marginBottom: Spacing.xs,
+
+  /* Progress */
+  progressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 40,
+    gap: 0,
   },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: Spacing['2xl'],
+  progressStep: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
   },
-  formSection: {
-    gap: Spacing.xs,
+  progressDotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    justifyContent: 'center',
   },
-  fieldLabel: {
-    marginTop: Spacing.lg,
+  progressLine: {
+    flex: 1,
+    height: 2,
+  },
+  progressDot: {
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 20,
+  },
+  progressLabel: {
+    fontSize: 11,
+    letterSpacing: 0.3,
+  },
+
+  /* Scroll / step content */
+  scrollContent: {
+    paddingBottom: 24,
+  },
+  stepContent: {
+    gap: 20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+  },
+  stepHint: {
     fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+
+  /* Fields */
+  fieldGroup: {
+    gap: 8,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
   input: {
-    height: 52,
-    borderRadius: Radius.md,
     borderWidth: 1,
-    paddingHorizontal: Spacing.lg,
-    fontSize: 16,
-    marginTop: Spacing.xs,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 48,
+    fontSize: 15,
   },
-  inputMultiline: {
-    minHeight: 110,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    fontSize: 16,
-    marginTop: Spacing.xs,
+  multilineInput: {
+    minHeight: 130,
+    height: undefined,
+    paddingTop: 14,
+    paddingBottom: 30,
+    textAlignVertical: 'top',
   },
-  row: {
+
+  /* Char count */
+  charCount: {
+    position: 'absolute',
+    bottom: 10,
+    right: 14,
+    fontSize: 11,
+    fontWeight: '500',
+  },
+
+  /* Chips */
+  chipRow: {
     flexDirection: 'row',
-    gap: Spacing.md,
-  },
-  chipGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-    marginTop: Spacing.sm,
+    gap: 8,
+    paddingRight: 8,
   },
   chip: {
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderWidth: 1,
+    borderWidth: 1.5,
+    borderRadius: 100,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
   },
   chipText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
   },
-  infoCard: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    padding: Spacing.lg,
-    marginTop: Spacing.xl,
+  urgencyCapacityRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  specialtyInputRow: {
+
+  /* Specialty input */
+  specialtyInputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: Radius.md,
     borderWidth: 1,
-    height: 52,
-    marginTop: Spacing.xs,
+    borderRadius: 12,
+    height: 48,
     overflow: 'hidden',
   },
   specialtyInput: {
     flex: 1,
-    paddingHorizontal: Spacing.lg,
-    fontSize: 16,
+    paddingHorizontal: 16,
+    fontSize: 15,
   },
   specialtyAddBtn: {
-    paddingHorizontal: Spacing.lg,
     height: '100%',
+    overflow: 'hidden',
+  },
+  specialtyAddBtnGrad: {
+    height: '100%',
+    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -650,31 +978,128 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  trustBanner: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    padding: Spacing.lg,
-    marginTop: Spacing.lg,
-    gap: Spacing.xs,
+  specialtyChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  trustBannerTitle: {
+
+  /* Location */
+  locationInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 48,
+  },
+  locationInput: {
+    flex: 1,
+    fontSize: 15,
+    height: '100%',
+  },
+  postcodePrefix: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  suggestionsWrap: {
+    borderWidth: 1,
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginTop: -4,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  suggestionText: {
+    fontSize: 14,
+  },
+  currentLocBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+  },
+  currentLocText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0F6E56',
+  },
+
+  /* Trust card (Step 2) */
+  trustCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    gap: 8,
+  },
+  trustCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  trustCardTitle: {
     fontSize: 14,
     fontWeight: '700',
   },
-  trustBannerText: {
+  trustCardText: {
     fontSize: 13,
     lineHeight: 19,
   },
-  primaryButton: {
-    height: 52,
-    borderRadius: Radius.lg,
+
+  /* Info card */
+  infoCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+  },
+  infoCardText: {
+    fontSize: 13,
+    lineHeight: 19,
+    flex: 1,
+  },
+
+  /* Bottom bar */
+  bottomBar: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.06)',
+  },
+  primaryBtn: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0d9488',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: { elevation: 4 },
+      default: {},
+    }),
+  },
+  primaryBtnGrad: {
+    height: 50,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: Spacing['3xl'],
+    gap: 8,
   },
-  primaryButtonText: {
+  primaryBtnText: {
     color: '#fff',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
+    letterSpacing: -0.2,
   },
 });

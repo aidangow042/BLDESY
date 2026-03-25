@@ -133,3 +133,50 @@ export function distanceKm(
 function toRad(deg: number): number {
   return (deg * Math.PI) / 180;
 }
+
+/* ───────────────────────── Suburb / postcode helpers ───────────────────────── */
+
+const allSuburbs = Object.keys(localities).map((s) =>
+  s.replace(/\b\w/g, (c) => c.toUpperCase()),
+);
+
+/**
+ * Return up to `limit` suburb names that start with the given query.
+ * Case-insensitive, works against the bundled AU suburbs database.
+ */
+export function getSuburbSuggestions(query: string, limit = 6): string[] {
+  if (!query || query.length < 2) return [];
+  const lower = query.toLowerCase();
+  const results: string[] = [];
+  for (const suburb of allSuburbs) {
+    if (suburb.toLowerCase().startsWith(lower)) {
+      results.push(suburb);
+      if (results.length >= limit) break;
+    }
+  }
+  return results;
+}
+
+/**
+ * Find the most likely postcode for a given suburb name by matching coordinates.
+ * Returns a 4-digit postcode string or null if not found.
+ */
+export function getPostcodeForSuburb(suburb: string): string | null {
+  const lower = suburb.toLowerCase().trim();
+  const coords = localities[lower];
+  if (!coords) return null;
+
+  const [lat, lon] = coords;
+  let bestPostcode: string | null = null;
+  let bestDist = Infinity;
+
+  for (const [pc, pcCoords] of Object.entries(postcodes)) {
+    const d = distanceKm(lat, lon, pcCoords[0], pcCoords[1]);
+    if (d < bestDist) {
+      bestDist = d;
+      bestPostcode = pc;
+    }
+  }
+
+  return bestPostcode;
+}
