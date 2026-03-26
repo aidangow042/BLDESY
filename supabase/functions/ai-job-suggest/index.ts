@@ -1,15 +1,21 @@
 import Anthropic from 'npm:@anthropic-ai/sdk@0.39.0';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').filter(Boolean);
 
-/* ── Rate limiter: 30 requests/minute per user ── */
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('Origin') ?? '';
+  const allowedOrigin = ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+}
+
+/* ── Rate limiter: 10 requests/hour per user ── */
 const rateLimitMap = new Map<string, number[]>();
-const RATE_LIMIT = 30;
-const RATE_WINDOW_MS = 60_000;
+const RATE_LIMIT = 10;
+const RATE_WINDOW_MS = 3_600_000;
 
 function checkRateLimit(userId: string): boolean {
   const now = Date.now();
@@ -22,7 +28,7 @@ function checkRateLimit(userId: string): boolean {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: getCorsHeaders(req) });
   }
 
   try {
@@ -31,7 +37,7 @@ Deno.serve(async (req) => {
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Missing authorization' }), {
         status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       });
     }
 
@@ -45,7 +51,7 @@ Deno.serve(async (req) => {
     if (authError || !user) {
       return new Response(JSON.stringify({ error: 'Unauthorized — please sign in' }), {
         status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       });
     }
 
@@ -53,7 +59,7 @@ Deno.serve(async (req) => {
     if (!checkRateLimit(user.id)) {
       return new Response(
         JSON.stringify({ error: 'Too many requests — please wait a moment' }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '60' } },
+        { status: 429, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json', 'Retry-After': '60' } },
       );
     }
 
@@ -62,7 +68,7 @@ Deno.serve(async (req) => {
     if (!title || typeof title !== 'string') {
       return new Response(JSON.stringify({ error: 'title string required' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       });
     }
 
@@ -70,19 +76,19 @@ Deno.serve(async (req) => {
     if (title.length > 200) {
       return new Response(
         JSON.stringify({ error: 'Title must be 200 characters or less' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       );
     }
     if (trade_type && (typeof trade_type !== 'string' || trade_type.length > 50)) {
       return new Response(
         JSON.stringify({ error: 'Trade type must be 50 characters or less' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       );
     }
     if (mode !== 'suggest' && mode !== 'describe') {
       return new Response(
         JSON.stringify({ error: 'Mode must be "suggest" or "describe"' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       );
     }
 
@@ -112,7 +118,7 @@ Return ONLY the description text — no JSON, no markdown, no quotes.`,
         response.content[0].type === 'text' ? response.content[0].text.trim() : '';
 
       return new Response(JSON.stringify({ description }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       });
     }
 
@@ -144,13 +150,13 @@ Return ONLY valid JSON. No markdown, no explanation.`,
         suggested_urgency: result.suggested_urgency ?? null,
         clarifying_question: result.clarifying_question ?? null,
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
     );
   } catch (error: any) {
     console.error('ai-job-suggest error:', error);
     return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     });
   }
 });

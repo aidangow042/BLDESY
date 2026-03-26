@@ -287,25 +287,13 @@ export function SideDrawer({ visible, onClose, builderMode = false }: SideDrawer
           },
         ]}
       >
-        {/* ─── User header with premium gradient ─── */}
+        {/* ─── User header ─── */}
         <LinearGradient
-          colors={isDark ? ['#042f2e', '#0a3a38', '#134E4A'] : ['#064E3B', '#0F6E56', '#1D9E75']}
+          colors={isDark ? ['#134E4A', '#0D3B3B'] : ['#0D7C66', '#0A6B58']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[styles.userHeader, { paddingTop: insets.top + Spacing.lg }]}
         >
-          {/* Subtle radial glow */}
-          <View style={styles.glowWrap} pointerEvents="none">
-            <View style={[styles.glow, isDark && { opacity: 0.06 }]} />
-          </View>
-
-          {/* Diagonal accent lines */}
-          <View style={styles.accentLines} pointerEvents="none">
-            <View style={[styles.accentLine, { left: '25%', opacity: 0.04 }]} />
-            <View style={[styles.accentLine, { left: '55%', opacity: 0.03 }]} />
-            <View style={[styles.accentLine, { left: '80%', opacity: 0.025 }]} />
-          </View>
-
           <View style={styles.avatarWrap}>
             <Image source={{ uri: avatarUri }} style={styles.avatar} />
           </View>
@@ -440,6 +428,27 @@ export function SideDrawer({ visible, onClose, builderMode = false }: SideDrawer
             <MaterialIcons name="login" size={20} color={colors.teal} />
             <Text style={[styles.logoutText, { color: colors.teal }]}>Sign In</Text>
           </Pressable>
+        ) : builderMode ? (
+          <>
+            <Pressable
+              style={({ pressed }) => [styles.logoutRow, { opacity: pressed ? 0.7 : 1 }]}
+              onPress={() => { onClose(); setTimeout(() => router.replace('/(tabs)' as any), 120); }}
+              accessibilityRole="button"
+              accessibilityLabel="Exit Builder Portal"
+            >
+              <MaterialIcons name="exit-to-app" size={20} color={colors.teal} />
+              <Text style={[styles.logoutText, { color: colors.teal }]}>Exit Builder Portal</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.logoutRow, { opacity: pressed ? 0.7 : 1, marginTop: 0 }]}
+              onPress={handleLogout}
+              accessibilityRole="button"
+              accessibilityLabel="Log out of BLDESY!"
+            >
+              <MaterialIcons name="logout" size={20} color={colors.error} />
+              <Text style={[styles.logoutText, { color: colors.error }]}>Log Out</Text>
+            </Pressable>
+          </>
         ) : (
           <Pressable
             style={({ pressed }) => [styles.logoutRow, { opacity: pressed ? 0.7 : 1 }]}
@@ -604,32 +613,6 @@ const styles = StyleSheet.create({
     gap: 4,
     position: 'relative',
     overflow: 'hidden',
-  },
-  glowWrap: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'flex-end',
-    justifyContent: 'flex-start',
-    overflow: 'hidden',
-  },
-  glow: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    marginTop: -30,
-    marginRight: -30,
-  },
-  accentLines: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-  },
-  accentLine: {
-    position: 'absolute' as const,
-    top: -20,
-    width: 1,
-    height: '150%',
-    backgroundColor: '#fff',
-    transform: [{ rotate: '15deg' }],
   },
   avatarWrap: {
     width: 68,

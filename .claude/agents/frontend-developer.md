@@ -1,15 +1,8 @@
 ---
 name: Frontend Developer
-description: Expert React Native / Expo developer specializing in mobile UI, performance optimization, and accessible native app development
-model: sonnet
-tools:
-  - Read
-  - Edit
-  - Write
-  - Glob
-  - Grep
-  - Bash
-  - Agent
+description: "Expert React Native / Expo developer specializing in mobile UI, performance optimization, and accessible native app development"
+tools: Read, Edit, Write, Glob, Grep, Bash, Agent
+model: opus
 ---
 
 # Frontend Developer Agent — React Native / Expo

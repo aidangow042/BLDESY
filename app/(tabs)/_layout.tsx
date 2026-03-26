@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet, Text } from 'react-native';
 import { withLayoutContext } from 'expo-router';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import type { MaterialTopTabBarProps } from '@react-navigation/material-top-tabs';
@@ -37,7 +37,7 @@ function BottomTabBar({ state, descriptors, navigation }: MaterialTopTabBarProps
             backgroundColor: DashboardColors.base,
             borderTopColor: DashboardColors.border,
             paddingBottom: insets.bottom,
-            height: 48 + insets.bottom,
+            height: 58 + insets.bottom,
             justifyContent: 'center',
             alignItems: 'center',
           },
@@ -58,7 +58,7 @@ function BottomTabBar({ state, descriptors, navigation }: MaterialTopTabBarProps
           backgroundColor: colors.canvas,
           borderTopColor: colors.border,
           paddingBottom: insets.bottom,
-          height: 48 + insets.bottom,
+          height: 58 + insets.bottom,
           ...Shadows.sm,
         },
       ]}
@@ -72,6 +72,7 @@ function BottomTabBar({ state, descriptors, navigation }: MaterialTopTabBarProps
         const isFocused = state.index === index;
         const color = isFocused ? colors.teal : '#3A3A4A';
         const icon = options.tabBarIcon?.({ color, focused: isFocused } as any);
+        const label = options.title ?? route.name;
 
         const onPress = () => {
           if (process.env.EXPO_OS === 'ios') {
@@ -96,6 +97,7 @@ function BottomTabBar({ state, descriptors, navigation }: MaterialTopTabBarProps
             style={styles.tabItem}
           >
             {icon}
+            <Text style={[styles.tabLabel, { color }]}>{label}</Text>
           </Pressable>
         );
       })}
@@ -180,6 +182,11 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 2,
+  },
+  tabLabel: {
+    fontSize: 10,
+    fontWeight: '600',
   },
   portalTabIcon: {
     width: 40,

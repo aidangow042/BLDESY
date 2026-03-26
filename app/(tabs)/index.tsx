@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
+  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -15,12 +16,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
+import * as Haptics from 'expo-haptics';
+
 import { ThemedText } from '@/components/themed-text';
 import { SideDrawer } from '@/components/side-drawer';
-import { Colors, Spacing } from '@/constants/theme';
+import { Colors, Shadows, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 import { getSuburbSuggestions } from '@/lib/geo';
+import { addSearchEntry } from '@/lib/search-history';
+import { getRecentProfiles, type RecentProfile } from '@/lib/recent-profiles';
 
 /* ───────────────────────── Data ───────────────────────── */
 
@@ -85,6 +90,7 @@ export default function HomeScreen() {
   const fabAnim = useRef(new Animated.Value(0)).current;
 
   function toggleFab() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const toValue = fabOpen ? 0 : 1;
     Animated.spring(fabAnim, { toValue, useNativeDriver: true, friction: 6 }).start();
     setFabOpen(!fabOpen);
@@ -107,6 +113,19 @@ export default function HomeScreen() {
   const [selectedUrgency, setSelectedUrgency] = useState('Any');
   const locationInputRef = useRef<TextInput>(null);
   const keywordInputRef = useRef<TextInput>(null);
+
+  /* ── Recent profiles state ── */
+  const [recentProfiles, setRecentProfiles] = useState<RecentProfile[]>([]);
+
+  /* ── Load recent profiles on focus ── */
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        const profiles = await getRecentProfiles();
+        setRecentProfiles(profiles);
+      })();
+    }, []),
+  );
 
   /* ── Listen for trade selected from all-trades page ── */
   const { selectedTrade: tradeParam } = useLocalSearchParams<{ selectedTrade?: string }>();
@@ -185,6 +204,7 @@ export default function HomeScreen() {
   /* ── Search submission ── */
 
   function handleSearch() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const params: Record<string, string> = {};
     if (locationText.trim()) params.suburb = locationText.trim();
     if (selectedTrade)
@@ -206,6 +226,11 @@ export default function HomeScreen() {
       setLocationSuggestions([]);
       setSelectedUrgency('Any');
     });
+
+    // Save to search history
+    if (selectedTrade) {
+      addSearchEntry(selectedTrade, locationText.trim() || null);
+    }
 
     router.push({ pathname: '/results', params });
   }
@@ -390,6 +415,59 @@ export default function HomeScreen() {
               })}
             </View>
           </View>
+
+          {/* ─── RECENTLY VIEWED ─── */}
+          {recentProfiles.length > 0 && (
+            <View style={styles.section}>
+              <ThemedText style={[styles.sectionTitle, { color: isDark ? colors.text : '#1A1A2E' }]}>
+                Recently viewed
+              </ThemedText>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.recentList}
+              >
+                {recentProfiles.slice(0, 6).map((profile) => {
+                  const photoUri = profile.profile_photo_url
+                    || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.business_name)}&background=0d9488&color=fff`;
+                  return (
+                    <Pressable
+                      key={profile.id}
+                      style={[
+                        styles.recentCard,
+                        {
+                          backgroundColor: isDark ? colors.surface : '#FFFFFF',
+                          borderColor: isDark ? colors.border : '#EBEBEB',
+                        },
+                      ]}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push({ pathname: '/builder-profile', params: { id: profile.id } });
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`View ${profile.business_name}`}
+                    >
+                      <Image
+                        source={{ uri: photoUri }}
+                        style={styles.recentPhoto}
+                      />
+                      <View style={styles.recentCardBody}>
+                        <ThemedText style={[styles.recentName, { color: colors.text }]} numberOfLines={1}>
+                          {profile.business_name}
+                        </ThemedText>
+                        <ThemedText style={[styles.recentTrade, { color: colors.teal }]} numberOfLines={1}>
+                          {profile.trade_category}
+                        </ThemedText>
+                        <ThemedText style={[styles.recentSuburb, { color: colors.textSecondary }]} numberOfLines={1}>
+                          {profile.suburb || 'Australia'}
+                        </ThemedText>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
 
           {/* ─── 3. COMMON JOBS ─── */}
           <View style={styles.section}>
@@ -909,8 +987,7 @@ const styles = StyleSheet.create({
     maxWidth: 300,
   },
   heroSearchPillText: {
-    fontSize: 14,
-    fontWeight: '400',
+    ...Type.bodySemiBold,
     color: 'rgba(255,255,255,0.9)',
     flex: 1,
   },
@@ -981,7 +1058,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
   },
-  sectionTitle: { fontSize: 16, fontWeight: '600' },
+  sectionTitle: { ...Type.h2 },
   seeAllText: { fontSize: 13, fontWeight: '500', color: '#0D7C66' },
 
   /* ─── Trade Grid — 2-column horizontal cards ─── */
@@ -994,7 +1071,7 @@ const styles = StyleSheet.create({
     width: (SCREEN_WIDTH - 32 - 8) / 2,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 16,
     paddingVertical: 10,
     paddingHorizontal: 12,
     gap: 10,
@@ -1009,9 +1086,8 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   tradeListLabel: {
+    ...Type.captionSemiBold,
     flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
   },
   tradeListChevron: {
     flexShrink: 0,
@@ -1020,7 +1096,7 @@ const styles = StyleSheet.create({
   /* ─── Trending Now ─── */
   trendingList: {
     marginTop: 8,
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
   },
@@ -1036,14 +1112,50 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   trendingLabel: {
+    ...Type.body,
     flex: 1,
+  },
+
+  /* ─── Recently Viewed ─── */
+  recentList: {
+    gap: 12,
+    paddingRight: 16,
+  },
+  recentCard: {
+    width: 160,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    ...Shadows.md,
+  },
+  recentPhoto: {
+    width: '100%',
+    height: 100,
+    backgroundColor: '#E0E7EC',
+  },
+  recentCardBody: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
+    gap: 2,
+  },
+  recentName: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '700',
+  },
+  recentTrade: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'capitalize' as const,
+  },
+  recentSuburb: {
+    fontSize: 12,
+    fontWeight: '400',
   },
 
   /* ─── AI Nudge Card ─── */
   aiCard: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     paddingHorizontal: 18,
     paddingVertical: 16,
@@ -1055,17 +1167,13 @@ const styles = StyleSheet.create({
     }),
   },
   aiCardTitle: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...Type.h3,
   },
   aiCardSubtitle: {
-    fontSize: 13,
-    fontWeight: '400',
-    lineHeight: 18,
+    ...Type.caption,
   },
   aiCardLink: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...Type.captionSemiBold,
     marginTop: 8,
   },
 
@@ -1154,9 +1262,7 @@ const styles = StyleSheet.create({
   overlayContent: { paddingHorizontal: 20, paddingTop: 24, gap: 28 },
   overlaySection: { gap: 12 },
   overlayLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.2,
+    ...Type.label,
     textTransform: 'uppercase',
   },
 
@@ -1165,7 +1271,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: 16,
     height: 56,
     paddingHorizontal: 16,
     gap: 12,
@@ -1178,7 +1284,7 @@ const styles = StyleSheet.create({
   locationTextInput: { flex: 1, fontSize: 16, height: '100%' },
   suggestionsContainer: {
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
     marginTop: -4,
   },
@@ -1204,7 +1310,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     paddingHorizontal: 8,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     gap: 8,
     ...Platform.select({
@@ -1216,13 +1322,13 @@ const styles = StyleSheet.create({
   overlayTradeIconBox: {
     width: 48,
     height: 48,
-    borderRadius: 14,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   overlayTradeLabel: {
+    ...Type.captionSemiBold,
     fontSize: 12,
-    fontWeight: '600',
     textAlign: 'center',
   },
   tradeCheckmark: {
@@ -1281,7 +1387,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: 16,
     height: 52,
     paddingHorizontal: 16,
     gap: 10,
@@ -1298,15 +1404,15 @@ const styles = StyleSheet.create({
   urgencyChip: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: 16,
     paddingVertical: 12,
     alignItems: 'center',
   },
-  urgencyChipText: { fontSize: 13, fontWeight: '600' },
+  urgencyChipText: { ...Type.captionSemiBold },
 
   /* CTA */
   stickyButtonContainer: { paddingHorizontal: 20, paddingTop: Spacing.md, borderTopWidth: 1 },
-  searchBtn: { borderRadius: 14, overflow: 'hidden' },
+  searchBtn: { borderRadius: 16, overflow: 'hidden' },
   searchBtnGradient: {
     height: 56,
     flexDirection: 'row',
@@ -1314,7 +1420,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  searchBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  searchBtnText: { ...Type.btnPrimary, color: '#fff' },
   hamburgerBtn: {
     position: 'absolute',
     left: 16,

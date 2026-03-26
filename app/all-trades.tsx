@@ -13,8 +13,10 @@ import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
+import Animated, { FadeInUp } from 'react-native-reanimated';
+
 import { ThemedText } from '@/components/themed-text';
-import { Colors } from '@/constants/theme';
+import { Colors, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 /* ───────────────────────── All Trades Data ───────────────────────── */
@@ -189,6 +191,7 @@ export default function AllTradesScreen() {
       </View>
 
       {/* ── Trades list ── */}
+      <Animated.View entering={FadeInUp.duration(300).delay(100)} style={{ flex: 1 }}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
@@ -237,6 +240,7 @@ export default function AllTradesScreen() {
           </View>
         )}
       </ScrollView>
+      </Animated.View>
     </View>
   );
 }
@@ -265,8 +269,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.h2,
   },
 
   /* Filter bar */
@@ -294,8 +297,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   categoryTitle: {
-    fontSize: 11,
-    fontWeight: '700',
+    ...Type.label,
     letterSpacing: 1.2,
     marginBottom: 10,
     paddingLeft: 4,
@@ -329,10 +331,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tradeGridLabel: {
-    fontSize: 12,
+    ...Type.caption,
     fontWeight: '500',
     textAlign: 'center',
-    lineHeight: 16,
   },
 
   /* Empty state */
@@ -343,7 +344,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyText: {
-    fontSize: 15,
+    ...Type.body,
     fontWeight: '500',
   },
 });

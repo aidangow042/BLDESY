@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Dimensions,
   FlatList,
@@ -18,7 +19,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
+import ReAnimated, { FadeInUp } from 'react-native-reanimated';
+
+import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 
@@ -433,9 +436,10 @@ export default function BuilderJobsFeed() {
       const trade = profile?.trade_category ?? null;
       setBuilderTrade(trade);
 
+      // Build query: show matching trade first, then all other open jobs
       let query = supabase
         .from('jobs')
-        .select('id, title, description, trade_type, suburb, postcode, urgency, budget, status, created_at, customer_id')
+        .select('id, title, description, trade_category, suburb, postcode, urgency, budget, status, created_at, customer_id')
         .eq('status', 'open')
         .order('created_at', { ascending: false });
 
@@ -444,6 +448,8 @@ export default function BuilderJobsFeed() {
       }
 
       const { data: jobsData, error } = await query;
+
+      // RLS filters to open jobs visible to approved builders
 
       if (!error && jobsData?.length) {
         // Fetch photos for all jobs in one query
@@ -462,7 +468,16 @@ export default function BuilderJobsFeed() {
           photoMap.set(photo.job_id, arr);
         }
 
-        setJobs(jobsData.map((j: any) => ({ ...j, photos: photoMap.get(j.id) ?? [] })));
+        const allJobs = jobsData.map((j: any) => ({ ...j, photos: photoMap.get(j.id) ?? [] }));
+        // Sort: matching trade jobs first, then the rest
+        if (trade) {
+          const tradeLower = trade.toLowerCase();
+          const matchingTrade = allJobs.filter((j: any) => j.trade_category?.toLowerCase() === tradeLower);
+          const otherJobs = allJobs.filter((j: any) => j.trade_category?.toLowerCase() !== tradeLower);
+          setJobs([...matchingTrade, ...otherJobs]);
+        } else {
+          setJobs(allJobs);
+        }
       } else {
         setJobs([]);
       }
@@ -486,19 +501,46 @@ export default function BuilderJobsFeed() {
     [router],
   );
 
+  // Find the index where "other jobs" start
+  const otherJobsStartIndex = builderTrade
+    ? jobs.findIndex((j) => j.trade_category?.toLowerCase() !== builderTrade.toLowerCase())
+    : -1;
+  const hasMatchingJobs = builderTrade && otherJobsStartIndex !== 0;
+  const hasOtherJobs = otherJobsStartIndex > 0 && otherJobsStartIndex < jobs.length;
+
   const renderJob = useCallback(
     ({ item, index }: { item: Job; index: number }) => (
-      <JobCard
-        item={item}
-        index={index}
-        colors={colors}
-        teal={teal}
-        isDark={isDark}
-        onPress={() => handleJobPress(item.id)}
-        onApply={() => handleJobPress(item.id)}
-      />
+      <>
+        {/* Section header: Your Trade */}
+        {index === 0 && hasMatchingJobs && builderTrade ? (
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionHeaderDot, { backgroundColor: teal }]} />
+            <Text style={[styles.sectionHeaderText, { color: colors.text }]}>
+              {capitalise(builderTrade)} Jobs
+            </Text>
+          </View>
+        ) : null}
+        {/* Section header: Other Jobs */}
+        {index === otherJobsStartIndex && hasOtherJobs ? (
+          <View style={[styles.sectionHeader, { marginTop: Spacing.lg }]}>
+            <View style={[styles.sectionHeaderDot, { backgroundColor: colors.textSecondary }]} />
+            <Text style={[styles.sectionHeaderText, { color: colors.textSecondary }]}>
+              Other Trades
+            </Text>
+          </View>
+        ) : null}
+        <JobCard
+          item={item}
+          index={index}
+          colors={colors}
+          teal={teal}
+          isDark={isDark}
+          onPress={() => handleJobPress(item.id)}
+          onApply={() => handleJobPress(item.id)}
+        />
+      </>
     ),
-    [colors, teal, isDark, handleJobPress],
+    [colors, teal, isDark, handleJobPress, builderTrade, otherJobsStartIndex, hasMatchingJobs, hasOtherJobs],
   );
 
   const keyExtractor = useCallback((item: Job) => item.id, []);
@@ -506,38 +548,35 @@ export default function BuilderJobsFeed() {
   return (
     <View style={[styles.screen, { backgroundColor: colors.canvas }]}>
       {/* ─── Header ─── */}
-      <SafeAreaView edges={['top']} style={{ backgroundColor: colors.background }}>
-        <View style={[styles.headerBar, { backgroundColor: colors.background }]}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.backBtn,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-              pressed && { opacity: 0.7 },
-            ]}
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-          >
-            <MaterialIcons name="arrow-back" size={20} color={teal} />
-          </Pressable>
-          <View style={styles.headerCenter}>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>Open Jobs</Text>
-            <View style={styles.headerMeta}>
-              <MaterialIcons name="work-outline" size={13} color={colors.textSecondary} />
-              <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-                {loading ? '...' : `${jobs.length} job${jobs.length !== 1 ? 's' : ''} available`}
-              </Text>
-              {builderTrade ? (
-                <>
-                  <View style={[styles.headerDot, { backgroundColor: colors.textSecondary }]} />
-                  <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-                    {capitalise(builderTrade)}
-                  </Text>
-                </>
-              ) : null}
+      <LinearGradient
+        colors={isDark ? ['#134E4A', '#0D3B3B'] : ['#0D7C66', '#0A6B58']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <SafeAreaView edges={['top']}>
+          <View style={styles.headerBar}>
+            <View style={styles.headerRow}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.backBtn,
+                  pressed && { opacity: 0.7 },
+                ]}
+                onPress={() => router.back()}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+              >
+                <MaterialIcons name="arrow-back" size={20} color="#fff" />
+              </Pressable>
+              <View style={styles.headerCenter}>
+                <Text style={styles.headerTitle}>Open Jobs</Text>
+                <Text style={styles.headerSubtitle}>
+                  {loading ? '...' : `${jobs.length} job${jobs.length !== 1 ? 's' : ''} available`}
+                  {builderTrade ? ` · ${capitalise(builderTrade)}` : ''}
+                </Text>
+              </View>
+              <View style={{ width: 36 }} />
             </View>
           </View>
-        </View>
 
         {/* ─── Filter/sort bar ─── */}
         <View style={[styles.sortBar, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
@@ -576,9 +615,11 @@ export default function BuilderJobsFeed() {
             })}
           </ScrollView>
         </View>
-      </SafeAreaView>
+        </SafeAreaView>
+      </LinearGradient>
 
       {/* ─── Content ─── */}
+      <ReAnimated.View entering={FadeInUp.duration(300).delay(100)} style={{ flex: 1 }}>
       {loading ? (
         <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
           {[0, 1, 2].map((i) => (
@@ -641,6 +682,7 @@ export default function BuilderJobsFeed() {
           }
         />
       )}
+      </ReAnimated.View>
     </View>
   );
 }
@@ -654,42 +696,33 @@ const styles = StyleSheet.create({
 
   // ─── Header ────────────────────────────────────
   headerBar: {
+    paddingBottom: 12,
+  },
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    gap: Spacing.md,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerCenter: {
     flex: 1,
+    alignItems: 'center',
+    gap: 2,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: -0.4,
-  },
-  headerMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
+    ...Type.h3,
+    color: '#fff',
+    fontWeight: '700',
   },
   headerSubtitle: {
-    fontSize: 13,
-  },
-  headerDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    marginHorizontal: 4,
+    ...Type.caption,
+    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '500',
   },
 
   // ─── Sort bar ──────────────────────────────────
@@ -715,7 +748,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   sortPillText: {
-    fontSize: 13,
+    ...Type.captionSemiBold,
   },
 
   // ─── List ──────────────────────────────────────
@@ -732,7 +765,7 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   resultCounter: {
-    fontSize: 12,
+    ...Type.caption,
     fontWeight: '500',
   },
   endRow: {
@@ -746,7 +779,7 @@ const styles = StyleSheet.create({
     height: 1,
   },
   endText: {
-    fontSize: 13,
+    ...Type.caption,
   },
 
   // ─── Card ──────────────────────────────────────
@@ -786,9 +819,9 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   imageCountText: {
-    color: '#fff',
-    fontSize: 11,
+    ...Type.label,
     fontWeight: '600',
+    color: '#fff',
   },
   dotRow: {
     position: 'absolute',
@@ -832,9 +865,8 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   urgencyPillText: {
+    ...Type.label,
     color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
   },
   // ─── Info section ──────────────────────────────
   infoSection: {
@@ -858,9 +890,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   jobTitle: {
-    fontSize: 16,
+    ...Type.h3,
     fontWeight: '700',
-    letterSpacing: -0.2,
   },
   infoMetaRow: {
     flexDirection: 'row',
@@ -874,8 +905,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   tradePillText: {
-    fontSize: 11,
-    fontWeight: '700',
+    ...Type.label,
     textTransform: 'capitalize',
   },
   locationRow: {
@@ -884,7 +914,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   locationText: {
-    fontSize: 12,
+    ...Type.caption,
   },
 
   // ─── Stats row ─────────────────────────────────
@@ -903,7 +933,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statText: {
-    fontSize: 12,
+    ...Type.caption,
     fontWeight: '500',
   },
   statDot: {
@@ -925,8 +955,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
   },
   description: {
-    fontSize: 13,
-    lineHeight: 19,
+    ...Type.caption,
   },
 
   // ─── Action row ────────────────────────────────
@@ -946,8 +975,8 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   btnPrimaryText: {
+    ...Type.btnSecondary,
     color: '#fff',
-    fontSize: 14,
     fontWeight: '700',
   },
   btnOutline: {
@@ -962,7 +991,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   btnOutlineText: {
-    fontSize: 14,
+    ...Type.btnSecondary,
     fontWeight: '700',
   },
 
@@ -983,13 +1012,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   stateTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.h2,
     textAlign: 'center',
   },
   stateSubtext: {
-    fontSize: 14,
-    lineHeight: 21,
+    ...Type.body,
     textAlign: 'center',
   },
   stateCta: {
@@ -1003,8 +1030,25 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   stateCtaText: {
+    ...Type.bodySemiBold,
     color: '#fff',
-    fontSize: 15,
+    fontWeight: '700',
+  },
+
+  // ─── Section headers ────────────────────────────
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  sectionHeaderDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  sectionHeaderText: {
+    ...Type.h3,
     fontWeight: '700',
   },
 });

@@ -10,8 +10,10 @@ import {
   ActivityIndicator,
   StatusBar,
   ScrollView,
+  Dimensions,
 } from 'react-native';
 import { Link, router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,7 +26,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { supabase } from '@/lib/supabase';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors, Spacing, Radius } from '@/constants/theme';
+import { Colors, Spacing, Radius, Type } from '@/constants/theme';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 type Role = 'customer' | 'builder';
 
@@ -117,19 +121,16 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Compact dark header */}
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop: insets.top + 16,
-              backgroundColor: isDark ? '#042f2e' : '#0F4F3E',
-            },
-          ]}
+        {/* Compact header */}
+        <LinearGradient
+          colors={isDark ? ['#134E4A', '#0D3B3B'] : ['#0D7C66', '#0A6B58']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.header, { paddingTop: insets.top + 6 }]}
         >
           <Text style={styles.headerLogo}>BLDESY!</Text>
           <Text style={styles.headerTagline}>Find trusted tradies, fast.</Text>
-        </View>
+        </LinearGradient>
 
         {/* Content area with entrance animation */}
         <Animated.View style={[styles.contentArea, cardAnimStyle]}>
@@ -477,24 +478,22 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
 
-  // Compact header
+  // Header
   header: {
     alignItems: 'center',
-    paddingBottom: 24,
+    paddingBottom: 14,
+    gap: 2,
   },
   headerLogo: {
-    fontSize: 32,
+    fontSize: 28,
     fontFamily: 'RussoOne_400Regular',
     color: '#ffffff',
-    textAlign: 'center',
     letterSpacing: -0.3,
   },
   headerTagline: {
-    fontSize: 14,
+    ...Type.caption,
+    color: 'rgba(255,255,255,0.6)',
     fontWeight: '500',
-    color: 'rgba(255,255,255,0.7)',
-    textAlign: 'center',
-    marginTop: 6,
   },
 
   // Content area
@@ -505,8 +504,8 @@ const styles = StyleSheet.create({
 
   // Guest button
   guestButton: {
-    height: 48,
-    borderRadius: 12,
+    height: 52,
+    borderRadius: 16,
     borderWidth: 1.5,
     flexDirection: 'row',
     alignItems: 'center',
@@ -515,8 +514,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   guestButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...Type.bodySemiBold,
   },
 
   // Role toggle
@@ -548,7 +546,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   toggleText: {
-    fontSize: 13,
+    ...Type.captionSemiBold,
   },
 
   // Card
@@ -558,9 +556,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   cardTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.4,
+    ...Type.h1,
     textAlign: 'center',
   },
 
@@ -575,10 +571,9 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
   },
   errorText: {
+    ...Type.caption,
     flex: 1,
-    fontSize: 13,
     fontWeight: '500',
-    lineHeight: 18,
   },
 
   // Inputs
@@ -589,7 +584,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     height: 48,
-    borderRadius: 12,
+    borderRadius: 16,
     paddingHorizontal: Spacing.lg,
     gap: Spacing.md,
   },
@@ -605,16 +600,14 @@ const styles = StyleSheet.create({
   // Button
   btn: {
     height: 50,
-    borderRadius: 12,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#0F4F3E',
   },
   btnText: {
+    ...Type.btnPrimary,
     color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.2,
   },
   loadingRow: {
     flexDirection: 'row',
@@ -630,8 +623,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   forgotText: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...Type.bodySemiBold,
     textAlign: 'center',
   },
 
@@ -646,7 +638,7 @@ const styles = StyleSheet.create({
     height: 1,
   },
   dividerText: {
-    fontSize: 13,
+    ...Type.caption,
     fontWeight: '500',
   },
 
@@ -659,13 +651,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: 48,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     gap: Spacing.md,
   },
   socialBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...Type.bodySemiBold,
   },
   appleSocialBtn: {
     backgroundColor: '#000000',
@@ -683,10 +674,10 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.xs,
   },
   footerText: {
-    fontSize: 14,
+    ...Type.body,
   },
   footerLink: {
-    fontSize: 14,
+    ...Type.body,
     fontWeight: '700',
   },
 });

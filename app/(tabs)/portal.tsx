@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -73,6 +73,7 @@ export default function PortalScreen() {
 
   const [status, setStatus] = useState<BuilderStatus>('loading');
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const notificationsRef = useRef<BottomSheet>(null);
 
@@ -91,7 +92,7 @@ export default function PortalScreen() {
 
     const { data, error } = await supabase
       .from('builder_profiles')
-      .select('*')
+      .select('id, user_id, business_name, trade_category, suburb, postcode, bio, phone, email, website, profile_photo_url, cover_photo_url, projects, specialties, credentials, availability, availability_note, response_time, urgency_capacity, abn, license_key, approved, latitude, longitude, radius_km')
       .eq('user_id', userData.user.id)
       .maybeSingle();
 
@@ -103,6 +104,12 @@ export default function PortalScreen() {
     } else {
       setStatus('pending');
     }
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await checkBuilderStatus();
+    setRefreshing(false);
   }
 
   if (status === 'loading') {
@@ -256,7 +263,13 @@ export default function PortalScreen() {
           </View>
         ))}
       </View>
-      <ScrollView contentContainerStyle={styles.dashboardScroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.dashboardScroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={teal} />
+        }
+      >
         {/* Header */}
         <DashboardHeader
           businessName={profile?.business_name || 'Builder'}

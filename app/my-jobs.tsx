@@ -16,9 +16,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import Animated, { FadeInUp } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 
@@ -63,6 +64,7 @@ type Applicant = {
     trade_category: string;
     suburb: string;
     phone: string | null;
+    profile_photo_url: string | null;
   } | null;
 };
 
@@ -153,14 +155,33 @@ export default function MyJobsScreen() {
 
   async function fetchApplicants(jobId: string) {
     setLoadingApplicants(true);
-    const { data, error } = await supabase
+
+    // Fetch applications
+    const { data: appsData, error } = await supabase
       .from('applications')
-      .select('id, builder_id, message, status, created_at, builder_profiles!applications_builder_id_fkey(business_name, trade_category, suburb, phone)')
+      .select('id, builder_id, message, status, created_at')
       .eq('job_id', jobId)
       .order('created_at', { ascending: true });
 
-    if (!error && data) {
-      setApplicants(data as unknown as Applicant[]);
+    if (!error && appsData && appsData.length > 0) {
+      // Fetch builder profiles for all applicants
+      const builderIds = appsData.map((a: any) => a.builder_id);
+      const { data: profiles } = await supabase
+        .from('builder_profiles')
+        .select('user_id, business_name, trade_category, suburb, phone, profile_photo_url')
+        .in('user_id', builderIds);
+
+      const profileMap = new Map<string, any>();
+      for (const p of profiles ?? []) {
+        profileMap.set(p.user_id, p);
+      }
+
+      setApplicants(appsData.map((a: any) => ({
+        ...a,
+        builder_profiles: profileMap.get(a.builder_id) ?? null,
+      })));
+    } else {
+      setApplicants([]);
     }
     setLoadingApplicants(false);
   }
@@ -419,11 +440,18 @@ export default function MyJobsScreen() {
                     <View key={app.id} style={styles.applicantCard}>
                       {/* Applicant header */}
                       <View style={styles.applicantHeader}>
-                        <View style={styles.applicantInitials}>
-                          <Text style={styles.applicantInitialsText}>
-                            {(app.builder_profiles?.business_name ?? 'U')[0].toUpperCase()}
-                          </Text>
-                        </View>
+                        {app.builder_profiles?.profile_photo_url ? (
+                          <Image
+                            source={{ uri: app.builder_profiles.profile_photo_url }}
+                            style={styles.applicantAvatar}
+                          />
+                        ) : (
+                          <View style={styles.applicantInitials}>
+                            <Text style={styles.applicantInitialsText}>
+                              {(app.builder_profiles?.business_name ?? 'U')[0].toUpperCase()}
+                            </Text>
+                          </View>
+                        )}
                         <View style={{ flex: 1 }}>
                           <Text style={styles.applicantName}>
                             {app.builder_profiles?.business_name ?? 'Unknown Builder'}
@@ -494,18 +522,23 @@ export default function MyJobsScreen() {
         </View>
       </View>
 
+      <Animated.View entering={FadeInUp.duration(300).delay(100)} style={{ flex: 1 }}>
       {loading ? (
         <ActivityIndicator color="#0F6E56" style={{ marginTop: 60 }} />
       ) : jobs.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="document-text-outline" size={48} color="#94A3B8" />
-          <Text style={styles.emptyTitle}>No jobs yet</Text>
-          <Text style={styles.emptySubtitle}>Post your first job to get started</Text>
+          <View style={styles.emptyIconCircle}>
+            <Ionicons name="clipboard-outline" size={48} color="#0d9488" />
+          </View>
+          <Text style={styles.emptyTitle}>No jobs posted yet</Text>
+          <Text style={styles.emptySubtitle}>Post a job to find the right tradie for your project.</Text>
           <Pressable
             onPress={() => router.push('/post-job')}
-            style={({ pressed }) => [styles.emptyBtn, pressed && { opacity: 0.8 }]}
+            style={({ pressed }) => [styles.emptyOutlineCta, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Post a Job"
           >
-            <Text style={styles.emptyBtnText}>Post a Job</Text>
+            <Text style={styles.emptyOutlineCtaText}>Post a Job</Text>
           </Pressable>
         </View>
       ) : (
@@ -520,6 +553,7 @@ export default function MyJobsScreen() {
           }
         />
       )}
+      </Animated.View>
     </View>
   );
 }
@@ -553,11 +587,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
+    ...Type.h2,
     flex: 1,
-    fontSize: 18,
-    fontWeight: '700',
     color: '#fff',
-    letterSpacing: -0.3,
   },
   headerSubRow: {
     flexDirection: 'row',
@@ -567,8 +599,8 @@ const styles = StyleSheet.create({
     paddingLeft: 42,
   },
   headerSubText: {
+    ...Type.caption,
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 12,
     fontWeight: '500',
   },
 
@@ -626,8 +658,8 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   tradePillText: {
+    ...Type.label,
     color: '#fff',
-    fontSize: 12,
     fontWeight: '600',
     textTransform: 'capitalize',
   },
@@ -640,21 +672,20 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   urgencyPillText: {
-    fontSize: 12,
+    ...Type.label,
     fontWeight: '600',
   },
   timeText: {
+    ...Type.caption,
     color: '#94A3B8',
-    fontSize: 12,
     fontWeight: '500',
   },
 
   /* Title */
   cardTitle: {
-    fontSize: 17,
+    ...Type.h3,
     fontWeight: '700',
     color: '#0f172a',
-    letterSpacing: -0.3,
     marginBottom: 10,
   },
 
@@ -674,8 +705,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   factChipText: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...Type.captionSemiBold,
     color: '#334155',
   },
 
@@ -688,8 +718,7 @@ const styles = StyleSheet.create({
 
   /* Description */
   descriptionText: {
-    fontSize: 14,
-    lineHeight: 21,
+    ...Type.body,
     color: '#334155',
   },
 
@@ -707,8 +736,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   actionBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...Type.captionSemiBold,
     color: '#0F6E56',
   },
   actionDivider: {
@@ -731,7 +759,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   noApplicantsText: {
-    fontSize: 14,
+    ...Type.body,
     color: '#94A3B8',
     fontWeight: '500',
   },
@@ -748,6 +776,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
+  applicantAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
   applicantInitials: {
     width: 36,
     height: 36,
@@ -757,17 +790,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   applicantInitialsText: {
+    ...Type.body,
     color: '#fff',
-    fontSize: 14,
     fontWeight: '700',
   },
   applicantName: {
-    fontSize: 15,
+    ...Type.bodySemiBold,
     fontWeight: '700',
     color: '#0f172a',
   },
   applicantMeta: {
-    fontSize: 12,
+    ...Type.caption,
     color: '#64748b',
     textTransform: 'capitalize',
     marginTop: 1,
@@ -778,15 +811,14 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   applicantStatusText: {
-    fontSize: 12,
+    ...Type.label,
     fontWeight: '600',
     textTransform: 'capitalize',
   },
   applicantMessage: {
-    fontSize: 13,
+    ...Type.caption,
     fontStyle: 'italic',
     color: '#334155',
-    lineHeight: 19,
     paddingLeft: 46,
   },
 
@@ -807,8 +839,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#059669',
   },
   acceptBtnText: {
+    ...Type.btnSecondary,
     color: '#fff',
-    fontSize: 14,
     fontWeight: '700',
   },
   rejectBtn: {
@@ -824,8 +856,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
   },
   rejectBtnText: {
+    ...Type.btnSecondary,
     color: '#DC2626',
-    fontSize: 14,
     fontWeight: '700',
   },
 
@@ -834,32 +866,39 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: 40,
     gap: 8,
   },
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#f0fdfa',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.h2,
     color: '#0f172a',
-    marginTop: 8,
   },
   emptySubtitle: {
-    fontSize: 15,
+    ...Type.body,
     color: '#64748b',
     textAlign: 'center',
   },
-  emptyBtn: {
+  emptyOutlineCta: {
     marginTop: 16,
     height: 48,
-    borderRadius: 12,
-    backgroundColor: '#0F4F3E',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#0d9488',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
   },
-  emptyBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
+  emptyOutlineCtaText: {
+    ...Type.btnPrimary,
+    color: '#0d9488',
   },
 });

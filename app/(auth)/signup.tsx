@@ -25,7 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { supabase } from '@/lib/supabase';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -627,10 +627,8 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   tagline: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...Type.h2,
     color: 'rgba(255,255,255,0.85)',
-    letterSpacing: -0.2,
   },
 
   // Gradient fade
@@ -669,9 +667,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   roleText: {
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: -0.1,
+    ...Type.bodySemiBold,
   },
   roleTextActive: {
     fontWeight: '700',
@@ -684,9 +680,7 @@ const styles = StyleSheet.create({
     gap: Spacing.xl,
   },
   cardTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.4,
+    ...Type.h1,
   },
 
   // Error banner
@@ -701,10 +695,9 @@ const styles = StyleSheet.create({
     marginTop: -Spacing.sm,
   },
   errorText: {
+    ...Type.caption,
     flex: 1,
-    fontSize: 13,
     fontWeight: '500',
-    lineHeight: 18,
   },
 
   // Inputs
@@ -728,7 +721,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   builderNote: {
-    fontSize: 12,
+    ...Type.caption,
     marginTop: Spacing.xs,
     marginLeft: Spacing.xs,
     fontStyle: 'italic',
@@ -757,10 +750,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F6E56',
   },
   btnText: {
+    ...Type.btnPrimary,
     color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.2,
   },
   loadingRow: {
     flexDirection: 'row',
@@ -770,9 +761,9 @@ const styles = StyleSheet.create({
 
   // Fine print
   finePrint: {
-    fontSize: 11,
+    ...Type.label,
+    fontWeight: '400',
     textAlign: 'center',
-    lineHeight: 16,
     marginTop: -Spacing.sm,
   },
 
@@ -787,7 +778,7 @@ const styles = StyleSheet.create({
     height: 1,
   },
   dividerText: {
-    fontSize: 13,
+    ...Type.caption,
     fontWeight: '500',
   },
 
@@ -805,8 +796,7 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   socialBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...Type.bodySemiBold,
   },
 
   // Footer inside card
@@ -817,10 +807,10 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.xs,
   },
   footerText: {
-    fontSize: 14,
+    ...Type.body,
   },
   footerLink: {
-    fontSize: 14,
+    ...Type.body,
     fontWeight: '700',
   },
 
@@ -842,14 +832,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   successTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.4,
+    ...Type.h1,
   },
   successBody: {
-    fontSize: 15,
+    ...Type.body,
     textAlign: 'center',
-    lineHeight: 22,
   },
   successBtn: {
     height: 50,
@@ -861,8 +848,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
   },
   successBtnText: {
+    ...Type.btnPrimary,
     color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
   },
 });

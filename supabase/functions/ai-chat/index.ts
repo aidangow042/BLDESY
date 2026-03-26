@@ -1,15 +1,21 @@
 import Anthropic from 'npm:@anthropic-ai/sdk@0.39.0';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').filter(Boolean);
 
-/* ── Rate limiter: 20 requests/minute per user ── */
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('Origin') ?? '';
+  const allowedOrigin = ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+}
+
+/* ── Rate limiter: 10 requests/hour per user ── */
 const rateLimitMap = new Map<string, number[]>();
-const RATE_LIMIT = 20;
-const RATE_WINDOW_MS = 60_000;
+const RATE_LIMIT = 10;
+const RATE_WINDOW_MS = 3_600_000;
 
 function checkRateLimit(userId: string): boolean {
   const now = Date.now();
@@ -31,7 +37,7 @@ type BuilderRec = {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: getCorsHeaders(req) });
   }
 
   try {
@@ -40,7 +46,7 @@ Deno.serve(async (req) => {
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Missing authorization' }), {
         status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       });
     }
 
@@ -54,7 +60,7 @@ Deno.serve(async (req) => {
     if (authError || !user) {
       return new Response(JSON.stringify({ error: 'Unauthorized — please sign in' }), {
         status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       });
     }
 
@@ -62,7 +68,7 @@ Deno.serve(async (req) => {
     if (!checkRateLimit(user.id)) {
       return new Response(
         JSON.stringify({ error: 'Too many requests — please wait a moment before trying again' }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '60' } },
+        { status: 429, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json', 'Retry-After': '60' } },
       );
     }
 
@@ -71,7 +77,7 @@ Deno.serve(async (req) => {
     if (!messages || !Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: 'messages array required' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       });
     }
 
@@ -79,20 +85,20 @@ Deno.serve(async (req) => {
     if (messages.length > 30) {
       return new Response(
         JSON.stringify({ error: 'Too many messages — please start a new conversation' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       );
     }
     for (const m of messages) {
       if (!m.role || !['user', 'assistant'].includes(m.role)) {
         return new Response(
           JSON.stringify({ error: 'Each message must have a valid role (user or assistant)' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
         );
       }
       if (typeof m.content !== 'string' || m.content.length === 0 || m.content.length > 2000) {
         return new Response(
           JSON.stringify({ error: 'Each message content must be 1-2000 characters' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
         );
       }
     }
@@ -156,25 +162,28 @@ SEARCH:{"trade":"<trade>","location":"<suburb or null>","urgency":"<emergency|so
         const location = intent.location;
         const urgency = intent.urgency;
 
-        if (trade) {
-          searchParams.trade_category = trade;
+        // Sanitize trade: only allow alphanumeric + spaces + common chars
+        const sanitizedTrade = trade ? trade.replace(/[^a-zA-Z0-9 &\-\/]/g, '').slice(0, 50) : null;
+
+        if (sanitizedTrade) {
+          searchParams.trade_category = sanitizedTrade;
           if (location && location !== 'null') searchParams.suburb = location;
           if (urgency && urgency !== 'null') {
             const urgencyMap: Record<string, string> = { emergency: 'asap', soon: 'this_week', planned: 'flexible' };
             searchParams.urgency = urgencyMap[urgency] ?? urgency;
           }
 
-          // Query matching builders
+          // Query matching builders (anon key — RLS handles approved-only filtering)
           const supabase = createClient(
             Deno.env.get('SUPABASE_URL')!,
-            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+            Deno.env.get('SUPABASE_ANON_KEY')!,
           );
 
           const { data } = await supabase
             .from('builder_profiles')
             .select('id, business_name, trade_category, suburb, postcode, bio, urgency_capacity')
             .eq('approved', true)
-            .ilike('trade_category', `%${trade}%`)
+            .ilike('trade_category', `%${sanitizedTrade}%`)
             .limit(10);
 
           if (data && data.length > 0) {
@@ -213,13 +222,13 @@ SEARCH:{"trade":"<trade>","location":"<suburb or null>","urgency":"<emergency|so
       builders: builders.length > 0 ? builders : undefined,
       searchParams: Object.keys(searchParams).length > 0 ? searchParams : undefined,
     }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
     console.error('ai-chat error:', error);
     return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     });
   }
 });

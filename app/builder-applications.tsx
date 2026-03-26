@@ -13,7 +13,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ThemedText } from '@/components/themed-text';
 import { PageHeader } from '@/components/page-header';
-import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 
@@ -149,14 +149,26 @@ export default function MyApplicationsScreen() {
         <ActivityIndicator color={colors.tint} style={{ marginTop: Spacing['5xl'] }} />
       ) : applications.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <ThemedText style={[styles.emptyText, { color: colors.textSecondary }]}>
-            You haven't applied to any jobs yet.
+          <View style={[styles.emptyIconCircle, { backgroundColor: colors.tealBg }]}>
+            <Ionicons name="briefcase-outline" size={48} color={colors.teal} />
+          </View>
+          <ThemedText style={[styles.emptyTitle, { color: colors.text }]}>
+            No applications yet
+          </ThemedText>
+          <ThemedText style={[styles.emptySubtext, { color: colors.textSecondary }]}>
+            Browse available jobs that match your trade and start applying.
           </ThemedText>
           <Pressable
             onPress={() => router.push('/builder-jobs')}
-            style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [
+              styles.emptyOutlineCta,
+              { borderColor: colors.teal },
+              pressed && { opacity: 0.7 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Browse Jobs"
           >
-            <ThemedText style={[styles.linkText, { color: colors.tint }]}>Browse Jobs</ThemedText>
+            <ThemedText style={[styles.emptyOutlineCtaText, { color: colors.teal }]}>Browse Jobs</ThemedText>
           </Pressable>
         </View>
       ) : (
@@ -208,7 +220,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   jobTitle: {
-    fontSize: 16,
+    ...Type.h3,
     flex: 1,
   },
   statusBadge: {
@@ -217,8 +229,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xs,
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: '700',
+    ...Type.label,
   },
   metaRow: {
     flexDirection: 'row',
@@ -231,35 +242,53 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xs,
   },
   tradeBadgeText: {
-    fontSize: 12,
+    ...Type.label,
     fontWeight: '600',
     textTransform: 'capitalize',
   },
   locationText: {
-    fontSize: 13,
+    ...Type.caption,
   },
   messageText: {
-    fontSize: 14,
+    ...Type.body,
     fontStyle: 'italic',
-    lineHeight: 20,
   },
   dateText: {
-    fontSize: 12,
+    ...Type.caption,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: Spacing['5xl'],
+    padding: 40,
     gap: Spacing.md,
   },
-  emptyText: {
-    textAlign: 'center',
-    fontSize: 15,
-    lineHeight: 22,
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
   },
-  linkText: {
-    fontSize: 16,
-    fontWeight: '600',
+  emptyTitle: {
+    ...Type.h2,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    ...Type.body,
+    textAlign: 'center',
+  },
+  emptyOutlineCta: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderRadius: 16,
+    height: 48,
+    paddingHorizontal: 32,
+    marginTop: Spacing.md,
+  },
+  emptyOutlineCtaText: {
+    ...Type.btnPrimary,
   },
 });

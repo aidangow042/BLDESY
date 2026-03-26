@@ -21,9 +21,12 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Location from 'expo-location';
+import * as Haptics from 'expo-haptics';
+
+import ReAnimated, { FadeInUp } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { getSuburbSuggestions, getPostcodeForSuburb } from '@/lib/geo';
@@ -489,6 +492,7 @@ export default function PostJobScreen() {
   /* ───────────── Submit ───────────── */
 
   async function handleSubmit() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     dispatch({ type: 'SET', field: 'submitting', value: true });
 
     try {
@@ -1335,6 +1339,7 @@ export default function PostJobScreen() {
         </Text>
       </LinearGradient>
 
+      <ReAnimated.View entering={FadeInUp.duration(300).delay(100)} style={{ flex: 1 }}>
       {/* Trust bar */}
       <View style={[styles.trustBar, { backgroundColor: '#E1F5EE' }]}>
         <MaterialIcons name="bolt" size={14} color="#0F6E56" />
@@ -1364,6 +1369,7 @@ export default function PostJobScreen() {
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+      </ReAnimated.View>
 
       {/* Bottom button */}
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16), backgroundColor: colors.canvas }]}>
@@ -1441,21 +1447,18 @@ const styles = StyleSheet.create({
   },
   headerCenter: { flex: 1 },
   headerTitle: {
+    ...Type.h2,
     color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.3,
   },
   headerSubtitle: {
+    ...Type.caption,
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 12,
     fontWeight: '500',
     marginTop: 1,
   },
   headerStepText: {
+    ...Type.captionSemiBold,
     color: 'rgba(255,255,255,0.6)',
-    fontSize: 13,
-    fontWeight: '600',
   },
 
   /* Trust bar */
@@ -1467,7 +1470,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   trustBarText: {
-    fontSize: 12,
+    ...Type.label,
     fontWeight: '600',
     color: '#0F6E56',
   },
@@ -1505,7 +1508,8 @@ const styles = StyleSheet.create({
     minWidth: 20,
   },
   progressLabel: {
-    fontSize: 11,
+    ...Type.label,
+    fontWeight: '400',
     letterSpacing: 0.3,
   },
 
@@ -1519,8 +1523,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   stepHint: {
-    fontSize: 14,
-    lineHeight: 20,
+    ...Type.body,
     marginBottom: 8,
   },
 
@@ -1529,9 +1532,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.8,
+    ...Type.label,
     textTransform: 'uppercase',
   },
   input: {
@@ -1553,7 +1554,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   fieldHint: {
-    fontSize: 12,
+    ...Type.caption,
     fontStyle: 'italic',
   },
 
@@ -1573,16 +1574,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chipText: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...Type.bodySemiBold,
   },
   aiSuggestedLabel: {
-    fontSize: 9,
-    fontWeight: '700',
+    ...Type.micro,
     color: '#0F6E56',
     textAlign: 'center',
     marginBottom: 2,
-    letterSpacing: 0.3,
   },
 
   /* Urgency cards */
@@ -1599,11 +1597,11 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   urgencyLabel: {
-    fontSize: 13,
+    ...Type.captionSemiBold,
     fontWeight: '700',
   },
   urgencySubtitle: {
-    fontSize: 10,
+    ...Type.micro,
     fontWeight: '500',
     textAlign: 'center',
   },
@@ -1623,12 +1621,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   aiCardTitle: {
-    fontSize: 13,
+    ...Type.captionSemiBold,
     fontWeight: '700',
     color: '#0F6E56',
   },
   aiCardText: {
-    fontSize: 13,
+    ...Type.caption,
     color: '#0F6E56',
     fontWeight: '500',
   },
@@ -1639,7 +1637,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   aiSuggestionText: {
-    fontSize: 14,
+    ...Type.body,
     color: '#1e293b',
     flex: 1,
   },
@@ -1648,7 +1646,7 @@ const styles = StyleSheet.create({
     color: '#0F6E56',
   },
   aiClarifyText: {
-    fontSize: 13,
+    ...Type.caption,
     color: '#64748b',
     fontStyle: 'italic',
   },
@@ -1664,18 +1662,17 @@ const styles = StyleSheet.create({
     borderRadius: 100,
   },
   aiHelpBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...Type.captionSemiBold,
     color: '#0F6E56',
   },
 
   /* Char count */
   charCount: {
+    ...Type.label,
+    fontWeight: '500',
     position: 'absolute',
     bottom: 10,
     right: 14,
-    fontSize: 11,
-    fontWeight: '500',
   },
 
   /* Photos */
@@ -1704,10 +1701,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   coverBadgeText: {
+    ...Type.micro,
     color: '#fff',
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.5,
   },
   photoRemove: {
     position: 'absolute',
@@ -1744,7 +1739,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   addPhotoText: {
-    fontSize: 10,
+    ...Type.micro,
     fontWeight: '600',
   },
 
@@ -1758,11 +1753,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   docName: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...Type.captionSemiBold,
   },
   docSize: {
-    fontSize: 11,
+    ...Type.label,
+    fontWeight: '400',
   },
   addDocBtn: {
     flexDirection: 'row',
@@ -1774,7 +1769,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   addDocText: {
-    fontSize: 13,
+    ...Type.caption,
     fontWeight: '500',
   },
 
@@ -1794,8 +1789,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   postcodePrefix: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...Type.captionSemiBold,
   },
   suggestionsWrap: {
     borderWidth: 1,
@@ -1811,7 +1805,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   suggestionText: {
-    fontSize: 14,
+    ...Type.body,
   },
   currentLocBtn: {
     flexDirection: 'row',
@@ -1821,8 +1815,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   currentLocText: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...Type.captionSemiBold,
     color: '#0F6E56',
   },
 
@@ -1840,7 +1833,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   previewTitle: {
-    fontSize: 17,
+    ...Type.h3,
     fontWeight: '700',
     flex: 1,
   },
@@ -1850,8 +1843,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   previewBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
+    ...Type.label,
   },
   previewTradeBadge: {
     alignSelf: 'flex-start',
@@ -1860,13 +1852,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   previewTradeText: {
-    fontSize: 12,
+    ...Type.label,
     fontWeight: '600',
     color: '#0F6E56',
   },
   previewDesc: {
-    fontSize: 13,
-    lineHeight: 19,
+    ...Type.caption,
   },
   previewLocationRow: {
     flexDirection: 'row',
@@ -1874,7 +1865,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   previewLocationText: {
-    fontSize: 13,
+    ...Type.caption,
   },
   previewThumb: {
     width: 56,
@@ -1889,10 +1880,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   previewDocText: {
-    fontSize: 12,
+    ...Type.caption,
   },
   previewTimestamp: {
-    fontSize: 11,
+    ...Type.label,
+    fontWeight: '400',
     marginTop: 4,
   },
 
@@ -1911,13 +1903,12 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   editLabel: {
-    fontSize: 11,
+    ...Type.label,
     fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 0.3,
   },
   editValue: {
-    fontSize: 14,
+    ...Type.body,
     fontWeight: '500',
     marginTop: 1,
   },
@@ -1951,10 +1942,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   primaryBtnText: {
+    ...Type.btnPrimary,
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.2,
   },
   outlineBtn: {
     borderWidth: 1.5,
@@ -1965,8 +1954,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   outlineBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...Type.btnSecondary,
   },
 
   /* Success screen */
@@ -1987,7 +1975,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   successSubtitle: {
-    fontSize: 15,
+    ...Type.body,
     textAlign: 'center',
   },
   nextStepsCard: {
@@ -1997,9 +1985,8 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   nextStepsHeading: {
-    fontSize: 14,
+    ...Type.bodySemiBold,
     fontWeight: '700',
-    letterSpacing: -0.2,
   },
   nextStepRow: {
     flexDirection: 'row',
@@ -2014,7 +2001,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   nextStepText: {
-    fontSize: 14,
+    ...Type.body,
     fontWeight: '500',
   },
   successButtons: {
@@ -2022,8 +2009,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   browseLink: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...Type.bodySemiBold,
     marginTop: 8,
   },
 
@@ -2039,7 +2025,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   centeredSubtext: {
+    ...Type.body,
     textAlign: 'center',
-    fontSize: 14,
   },
 });

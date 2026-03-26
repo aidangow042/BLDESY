@@ -9,6 +9,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,7 +21,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
+import * as Haptics from 'expo-haptics';
+import ReAnimated, { FadeInUp } from 'react-native-reanimated';
+
+import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { geocode, distanceKm } from '@/lib/geo';
 import { supabase } from '@/lib/supabase';
@@ -529,6 +533,7 @@ export default function ResultsScreen() {
   const [displayedBuilders, setDisplayedBuilders] = useState<BuilderResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>('best');
   const [page, setPage] = useState(1);
@@ -712,11 +717,18 @@ export default function ResultsScreen() {
     }, 300);
   }
 
+  async function handleRefresh() {
+    setRefreshing(true);
+    await fetchBuilders();
+    setRefreshing(false);
+  }
+
   const totalFiltered = getFilteredSorted(allBuilders, sortMode, filters).length;
 
   // ─── Save/unsave ──────────────────────────────────────────────────
 
   async function toggleSave(builderId: string) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const { data: userData } = await supabase.auth.getUser();
     if (!userData?.user) {
       Alert.alert('Sign in required', 'You need to be logged in to save builders.');
@@ -1067,6 +1079,7 @@ export default function ResultsScreen() {
       </SafeAreaView>
 
       {/* ─── Content ─── */}
+      <ReAnimated.View entering={FadeInUp.duration(300).delay(100)} style={{ flex: 1 }}>
       {loading ? (
         <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
           {[0, 1, 2].map((i) => (
@@ -1090,19 +1103,24 @@ export default function ResultsScreen() {
         </View>
       ) : displayedBuilders.length === 0 ? (
         <View style={styles.centeredState}>
-          <View style={[styles.stateIconWrap, { backgroundColor: colors.tealBg }]}>
-            <Ionicons name="search-outline" size={36} color={teal} />
+          <View style={[styles.stateIconCircle, { backgroundColor: colors.tealBg }]}>
+            <MaterialIcons name="search-off" size={48} color={teal} />
           </View>
-          <Text style={[styles.stateTitle, { color: colors.text }]}>No tradies found</Text>
+          <Text style={[styles.stateTitle, { color: colors.text }]}>No matches found</Text>
           <Text style={[styles.stateSubtext, { color: colors.textSecondary }]}>
-            Try broadening your search, changing your location, or using different keywords.
+            Try broadening your search — adjust the trade, location, or filters.
           </Text>
           <Pressable
             onPress={() => router.back()}
-            style={[styles.stateCta, { backgroundColor: teal }]}
+            style={({ pressed }) => [
+              styles.stateOutlineCta,
+              { borderColor: teal },
+              pressed && { opacity: 0.7 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Modify Search"
           >
-            <MaterialIcons name="search" size={18} color="#fff" />
-            <Text style={styles.stateCtaText}>Modify Search</Text>
+            <Text style={[styles.stateOutlineCtaText, { color: teal }]}>Modify Search</Text>
           </Pressable>
         </View>
       ) : (
@@ -1114,6 +1132,9 @@ export default function ResultsScreen() {
           showsVerticalScrollIndicator={false}
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={teal} />
+          }
           ListHeaderComponent={
             displayedBuilders.length < totalFiltered ? (
               <View style={styles.resultCountRow}>
@@ -1139,6 +1160,7 @@ export default function ResultsScreen() {
           }
         />
       )}
+      </ReAnimated.View>
 
       <FilterSheet
         visible={filterVisible}
@@ -1178,9 +1200,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: -0.4,
+    ...Type.h1,
   },
   headerMeta: {
     flexDirection: 'row',
@@ -1189,7 +1209,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   headerSubtitle: {
-    fontSize: 13,
+    ...Type.caption,
   },
   headerDot: {
     width: 3,
@@ -1222,8 +1242,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   sortPillText: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...Type.captionSemiBold,
   },
   filterBtn: {
     width: 40,
@@ -1245,9 +1264,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   filterBadgeText: {
+    ...Type.micro,
     color: '#fff',
-    fontSize: 10,
-    fontWeight: '700',
   },
 
   // ─── List ──────────────────────────────────────
@@ -1264,8 +1282,7 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   resultCounter: {
-    fontSize: 12,
-    fontWeight: '500',
+    ...Type.caption,
   },
   endRow: {
     flexDirection: 'row',
@@ -1278,7 +1295,7 @@ const styles = StyleSheet.create({
     height: 1,
   },
   endText: {
-    fontSize: 13,
+    ...Type.caption,
   },
 
   // ─── Carousel ────────────────────────────────────
@@ -1348,9 +1365,8 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   imageCountText: {
+    ...Type.label,
     color: '#fff',
-    fontSize: 11,
-    fontWeight: '600',
   },
 
   // ─── Card ──────────────────────────────────────
@@ -1370,9 +1386,8 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   matchPillText: {
+    ...Type.label,
     color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
   },
 
   // ─── Profile info ───────────────────────────────
@@ -1412,9 +1427,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   businessName: {
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.3,
+    ...Type.h3,
   },
   tradeRow: {
     flexDirection: 'row',
@@ -1428,8 +1441,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   tradePillText: {
-    fontSize: 11,
-    fontWeight: '700',
+    ...Type.label,
   },
   verifiedPill: {
     flexDirection: 'row',
@@ -1440,8 +1452,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   verifiedText: {
-    fontSize: 10,
-    fontWeight: '600',
+    ...Type.micro,
   },
   locationRow: {
     flexDirection: 'row',
@@ -1449,7 +1460,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   locationText: {
-    fontSize: 12,
+    ...Type.caption,
   },
 
   // ─── Stats row ─────────────────────────────────
@@ -1467,8 +1478,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statText: {
-    fontSize: 12,
-    fontWeight: '500',
+    ...Type.label,
   },
   availDot: {
     width: 7,
@@ -1488,8 +1498,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   bio: {
-    fontSize: 13,
-    lineHeight: 19,
+    ...Type.caption,
   },
   specRow: {
     flexDirection: 'row',
@@ -1504,12 +1513,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   specChipText: {
-    fontSize: 11,
-    fontWeight: '500',
+    ...Type.label,
   },
   specMore: {
-    fontSize: 11,
-    fontWeight: '500',
+    ...Type.label,
   },
 
   // ─── Action row ────────────────────────────────
@@ -1550,8 +1557,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
   },
   btnPrimaryText: {
-    fontSize: 14,
-    fontWeight: '700',
+    ...Type.btnSecondary,
     color: '#fff',
   },
   btnOutline: {
@@ -1565,8 +1571,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   btnOutlineText: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...Type.btnSecondary,
   },
 
   // ─── States ────────────────────────────────────
@@ -1585,14 +1590,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: Spacing.sm,
   },
+  stateIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
+  },
   stateTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...Type.h2,
   },
   stateSubtext: {
-    fontSize: 14,
+    ...Type.body,
     textAlign: 'center',
-    lineHeight: 20,
   },
   stateCta: {
     flexDirection: 'row',
@@ -1605,9 +1616,20 @@ const styles = StyleSheet.create({
     ...Shadows.md,
   },
   stateCtaText: {
+    ...Type.btnPrimary,
     color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
+  },
+  stateOutlineCta: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderRadius: 16,
+    height: 48,
+    paddingHorizontal: 32,
+    marginTop: Spacing.sm,
+  },
+  stateOutlineCtaText: {
+    ...Type.btnPrimary,
   },
 
   // ─── Filter sheet ──────────────────────────────
@@ -1633,15 +1655,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   filterTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.h2,
     marginBottom: 20,
   },
   filterLabel: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...Type.label,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
     marginBottom: 8,
   },
   filterChip: {
@@ -1651,8 +1670,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   filterChipText: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...Type.captionSemiBold,
   },
   filterRow: {
     flexDirection: 'row',
@@ -1662,11 +1680,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   filterRowLabel: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...Type.bodySemiBold,
   },
   filterRowSub: {
-    fontSize: 12,
+    ...Type.caption,
     marginTop: 2,
   },
   filterResetBtn: {
@@ -1677,8 +1694,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   filterResetText: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...Type.btnSecondary,
   },
   filterApplyBtn: {
     flex: 2,
@@ -1687,8 +1703,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   filterApplyText: {
+    ...Type.btnPrimary,
     color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
   },
 });

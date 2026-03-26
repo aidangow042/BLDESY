@@ -20,7 +20,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
+import * as Haptics from 'expo-haptics';
+
+import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 
@@ -395,6 +397,7 @@ export default function SavedScreen() {
   }
 
   async function unsaveBuilder(builderId: string) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const { data: userData } = await supabase.auth.getUser();
     if (!userData?.user) return;
     setBuilders((prev) => prev.filter((b) => b.builder_id !== builderId));
@@ -640,52 +643,29 @@ export default function SavedScreen() {
 
   function renderHeader() {
     return (
-      <View style={headerStyles.container}>
-        <LinearGradient
-          colors={isDark ? ['#042f2e', '#0a3a38', '#134E4A'] : ['#064E3B', '#0F6E56', '#1D9E75']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[headerStyles.gradient, { paddingTop: insets.top + Spacing.lg }]}
-        >
-          {/* Subtle radial glow */}
-          <View style={headerStyles.glowWrap} pointerEvents="none">
-            <View style={[headerStyles.glow, isDark && { opacity: 0.06 }]} />
+      <LinearGradient
+        colors={isDark ? ['#134E4A', '#0D3B3B'] : ['#0D7C66', '#0A6B58']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[headerStyles.gradient, { paddingTop: insets.top + 6 }]}
+      >
+        <View style={headerStyles.content}>
+          <View style={headerStyles.textCol}>
+            <Text style={headerStyles.title}>Saved</Text>
+            <Text style={headerStyles.subtitle}>{subtitleText}</Text>
           </View>
-
-          {/* Diagonal accent lines */}
-          <View style={headerStyles.accentLines} pointerEvents="none">
-            <View style={[headerStyles.accentLine, { left: '20%', opacity: 0.04 }]} />
-            <View style={[headerStyles.accentLine, { left: '50%', opacity: 0.03 }]} />
-            <View style={[headerStyles.accentLine, { left: '75%', opacity: 0.025 }]} />
-          </View>
-
-          {/* Content row */}
-          <View style={headerStyles.content}>
-            <View style={headerStyles.textCol}>
-              <Text style={headerStyles.title}>Saved</Text>
-              <Text style={headerStyles.subtitle}>{subtitleText}</Text>
+          {count > 0 ? (
+            <View style={headerStyles.countBadge}>
+              <Text style={headerStyles.countNumber}>{count}</Text>
+              <Ionicons name="bookmark" size={11} color="rgba(255,255,255,0.7)" />
             </View>
-
-            {/* Count badge / icon */}
-            {count > 0 ? (
-              <View style={headerStyles.countBadge}>
-                <Text style={headerStyles.countNumber}>{count}</Text>
-                <Ionicons name="bookmark" size={11} color="rgba(255,255,255,0.7)" />
-              </View>
-            ) : (
-              <View style={headerStyles.iconCircle}>
-                <Ionicons name="bookmark-outline" size={22} color="#fff" />
-              </View>
-            )}
-          </View>
-        </LinearGradient>
-
-        {/* Bottom fade edge */}
-        <LinearGradient
-          colors={['rgba(13,148,136,0.12)', 'transparent']}
-          style={headerStyles.bottomEdge}
-        />
-      </View>
+          ) : (
+            <View style={headerStyles.iconCircle}>
+              <Ionicons name="bookmark-outline" size={20} color="#fff" />
+            </View>
+          )}
+        </View>
+      </LinearGradient>
     );
   }
 
@@ -714,8 +694,8 @@ export default function SavedScreen() {
       <View style={[styles.safeArea, { backgroundColor: pageBackground }]}>
         {renderHeader()}
         <View style={styles.emptyState}>
-          <View style={[styles.emptyIconWrap, { backgroundColor: colors.tealBg }]}>
-            <MaterialIcons name="lock-outline" size={44} color={teal} />
+          <View style={[styles.emptyIconCircle, { backgroundColor: colors.tealBg }]}>
+            <MaterialIcons name="lock-outline" size={48} color={teal} />
           </View>
           <Text style={[styles.emptyTitle, { color: colors.text }]}>Sign in to save tradies</Text>
           <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
@@ -733,25 +713,26 @@ export default function SavedScreen() {
       <View style={[styles.safeArea, { backgroundColor: pageBackground }]}>
         {renderHeader()}
         <View style={styles.emptyState}>
-          <View style={[styles.emptyIconWrap, { backgroundColor: colors.tealBg }]}>
-            <Ionicons name="bookmarks-outline" size={44} color={teal} />
+          <View style={[styles.emptyIconCircle, { backgroundColor: colors.tealBg }]}>
+            <Ionicons name="bookmark-outline" size={48} color={teal} />
           </View>
           <Text style={[styles.emptyTitle, { color: colors.text }]}>
             No saved tradies yet
           </Text>
           <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-            Tradies you save will appear here. Tap the bookmark on any tradie's profile to save them.
+            Tap the bookmark on any tradie's profile to save them here for quick access.
           </Text>
           <Pressable
             style={({ pressed }) => [
-              styles.emptyCta,
-              { backgroundColor: teal },
-              pressed && { opacity: 0.85 },
+              styles.emptyOutlineCta,
+              { borderColor: teal },
+              pressed && { opacity: 0.7 },
             ]}
             onPress={() => router.push('/(tabs)' as any)}
+            accessibilityRole="button"
+            accessibilityLabel="Browse Tradies"
           >
-            <MaterialIcons name="search" size={20} color="#fff" />
-            <Text style={styles.emptyCtaText}>Search tradies</Text>
+            <Text style={[styles.emptyOutlineCtaText, { color: teal }]}>Browse Tradies</Text>
           </Pressable>
         </View>
       </View>
@@ -922,9 +903,8 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   imageCountText: {
+    ...Type.label,
     color: '#fff',
-    fontSize: 11,
-    fontWeight: '600',
   },
 
   /* ─── Avatar overlapping banner ──────────────────── */
@@ -972,9 +952,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   businessName: {
-    fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: -0.3,
+    ...Type.h3,
   },
   tradeLocationRow: {
     flexDirection: 'row',
@@ -988,8 +966,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   tradePillText: {
-    fontSize: 11,
-    fontWeight: '700',
+    ...Type.label,
   },
   locationChip: {
     flexDirection: 'row',
@@ -997,11 +974,10 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   locationText: {
-    fontSize: 12,
+    ...Type.caption,
   },
   savedDateInline: {
-    fontSize: 12,
-    fontWeight: '400',
+    ...Type.caption,
   },
 
   /* ─── Rating ────────────────────────────────────── */
@@ -1011,13 +987,11 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   ratingBig: {
-    fontSize: 14,
-    fontWeight: '800',
+    ...Type.captionSemiBold,
     color: '#92400E',
   },
   reviewCountText: {
-    fontSize: 13,
-    fontWeight: '400',
+    ...Type.caption,
   },
 
   /* ─── New badge ─────────────────────────────────── */
@@ -1034,8 +1008,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   newBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
+    ...Type.label,
     color: '#92400E',
   },
 
@@ -1056,8 +1029,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   verifyText: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...Type.caption,
   },
   specBadge: {
     flexDirection: 'row',
@@ -1069,15 +1041,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   specBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...Type.caption,
   },
 
   /* ─── Bio ──────────────────────────────────────── */
   bio: {
-    fontSize: 13,
-    lineHeight: 19,
-    letterSpacing: -0.1,
+    ...Type.caption,
   },
 
   /* ─── CTA buttons ──────────────────────────────── */
@@ -1101,8 +1070,7 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   btnOutlineText: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...Type.btnSecondary,
   },
   btnPrimary: {
     flex: 1,
@@ -1114,9 +1082,8 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   btnPrimaryText: {
+    ...Type.btnSecondary,
     color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
   },
 
   /* ─── Discover card ─────────────────────────────── */
@@ -1140,13 +1107,10 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   discoverTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+    ...Type.bodySemiBold,
   },
   discoverSub: {
-    fontSize: 13,
-    lineHeight: 18,
+    ...Type.caption,
   },
 
   /* ─── Empty state ──────────────────────────────── */
@@ -1157,40 +1121,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing['3xl'] + 8,
     gap: Spacing.md,
   },
-  emptyIconWrap: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.sm,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...Type.h2,
     textAlign: 'center',
-    letterSpacing: -0.3,
   },
   emptySubtext: {
-    fontSize: 15,
-    lineHeight: 22,
+    ...Type.body,
     textAlign: 'center',
-    letterSpacing: -0.1,
   },
-  emptyCta: {
-    flexDirection: 'row',
+  emptyOutlineCta: {
     alignItems: 'center',
-    gap: Spacing.sm,
-    paddingHorizontal: Spacing['2xl'],
-    paddingVertical: Spacing.md + 2,
-    borderRadius: Radius.lg,
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderRadius: 16,
+    height: 48,
+    paddingHorizontal: 32,
     marginTop: Spacing.md,
-    ...Shadows.md,
   },
-  emptyCtaText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
+  emptyOutlineCtaText: {
+    ...Type.btnSecondary,
   },
 });
 
@@ -1199,94 +1156,49 @@ const styles = StyleSheet.create({
 // ═════════════════════════════════════════════════════════════════════════════
 
 const headerStyles = StyleSheet.create({
-  container: {
-    position: 'relative',
-  },
   gradient: {
-    paddingBottom: Spacing['2xl'],
+    paddingBottom: 12,
     paddingHorizontal: Spacing.xl,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  glowWrap: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'flex-end',
-    justifyContent: 'flex-start',
-    overflow: 'hidden',
-  },
-  glow: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    marginTop: -40,
-    marginRight: -40,
-  },
-  accentLines: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-  },
-  accentLine: {
-    position: 'absolute',
-    top: -20,
-    width: 1,
-    height: '150%',
-    backgroundColor: '#fff',
-    transform: [{ rotate: '15deg' }],
   },
   content: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.lg,
-    zIndex: 1,
   },
   textCol: {
     flex: 1,
-    gap: 4,
+    gap: 2,
   },
   title: {
-    fontSize: 30,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-    lineHeight: 36,
+    ...Type.h3,
     color: '#fff',
+    fontWeight: '700',
   },
   subtitle: {
-    fontSize: 14,
+    ...Type.caption,
+    color: 'rgba(255,255,255,0.6)',
     fontWeight: '500',
-    letterSpacing: -0.1,
-    lineHeight: 19,
-    color: 'rgba(255,255,255,0.75)',
   },
   countBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     backgroundColor: 'rgba(255,255,255,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: Radius.full,
   },
   countNumber: {
-    fontSize: 18,
-    fontWeight: '800',
+    ...Type.captionSemiBold,
     color: '#fff',
-    letterSpacing: -0.3,
   },
   iconCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  bottomEdge: {
-    height: 3,
   },
 });

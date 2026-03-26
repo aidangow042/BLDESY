@@ -85,7 +85,7 @@ export const Spacing = {
 export const Radius = {
   sm: 6,
   md: 10,
-  lg: 14,
+  lg: 16,
   xl: 20,
   full: 9999,
 } as const;
@@ -123,6 +123,22 @@ export const Shadows = {
     default: {},
   }) as Record<string, any>,
 };
+
+/** Typography scale — use these instead of inline font styles */
+export const Type = {
+  display:         { fontSize: 32, fontWeight: '800' as const, lineHeight: 38, letterSpacing: -0.8 },
+  h1:              { fontSize: 24, fontWeight: '700' as const, lineHeight: 30, letterSpacing: -0.5 },
+  h2:              { fontSize: 20, fontWeight: '700' as const, lineHeight: 26, letterSpacing: -0.3 },
+  h3:              { fontSize: 17, fontWeight: '600' as const, lineHeight: 22, letterSpacing: -0.2 },
+  body:            { fontSize: 15, fontWeight: '400' as const, lineHeight: 22 },
+  bodySemiBold:    { fontSize: 15, fontWeight: '600' as const, lineHeight: 22 },
+  caption:         { fontSize: 13, fontWeight: '400' as const, lineHeight: 18 },
+  captionSemiBold: { fontSize: 13, fontWeight: '600' as const, lineHeight: 18 },
+  label:           { fontSize: 11, fontWeight: '700' as const, lineHeight: 14, letterSpacing: 0.8 },
+  micro:           { fontSize: 10, fontWeight: '700' as const, lineHeight: 13, letterSpacing: 0.5 },
+  btnPrimary:      { fontSize: 17, fontWeight: '700' as const, lineHeight: 22 },
+  btnSecondary:    { fontSize: 15, fontWeight: '600' as const, lineHeight: 20 },
+} as const;
 
 export const Fonts = Platform.select({
   ios: {

@@ -20,8 +20,10 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from '@gorhom/bottom-sheet';
 
+import Animated, { FadeInUp } from 'react-native-reanimated';
+
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 
@@ -87,7 +89,7 @@ type Job = {
 
 type JobPhoto = { id: string; file_path: string; is_cover: boolean };
 type JobDocument = { id: string; file_path: string; file_name: string | null };
-type CustomerInfo = { full_name: string | null; avatar_url: string | null };
+type CustomerInfo = { name: string | null; avatar_url: string | null };
 
 /* ─── Component ────────────────────────────────────────────── */
 
@@ -127,7 +129,7 @@ export default function JobDetailScreen() {
     setLoading(true);
 
     const [jobRes, photoRes, docRes] = await Promise.all([
-      supabase.from('jobs').select('id, title, description, trade_type, suburb, postcode, urgency, budget, status, created_at, customer_id').eq('id', id).single(),
+      supabase.from('jobs').select('id, title, description, trade_category, suburb, postcode, urgency, budget, status, created_at, customer_id').eq('id', id).single(),
       supabase.from('job_photos').select('id, file_path, is_cover').eq('job_id', id).order('is_cover', { ascending: false }),
       supabase.from('job_documents').select('id, file_path, file_name').eq('job_id', id),
     ]);
@@ -136,7 +138,7 @@ export default function JobDetailScreen() {
       setJob(jobRes.data);
       const { data: prof } = await supabase
         .from('profiles')
-        .select('full_name, avatar_url')
+        .select('name, avatar_url')
         .eq('id', jobRes.data.customer_id)
         .maybeSingle();
       setCustomer(prof);
@@ -257,8 +259,8 @@ export default function JobDetailScreen() {
   /* ─── Derived values ─────────────────────────────────────── */
 
   const urg = URGENCY_CONFIG[job.urgency] ?? { label: job.urgency, icon: 'help-circle-outline' as const, color: '#64748b', bg: '#f1f5f9' };
-  const displayName = getDisplayName(customer?.full_name);
-  const initials = getInitials(customer?.full_name);
+  const displayName = getDisplayName(customer?.name);
+  const initials = getInitials(customer?.name);
   // Contact info is server-gated via get_job_contact() RPC — only returned for job owner or accepted applicant
   const hasContact = contactInfo?.contact_phone || contactInfo?.contact_email;
 
@@ -290,6 +292,7 @@ export default function JobDetailScreen() {
           </View>
         </View>
 
+        <Animated.View entering={FadeInUp.duration(300).delay(100)}>
         {/* ── 1. Contact buttons — copy to clipboard ── */}
         {hasContact && (
           <View style={styles.contactBtnRow}>
@@ -454,6 +457,7 @@ export default function JobDetailScreen() {
             </View>
           )}
         </View>
+        </Animated.View>
       </ScrollView>
 
       {/* ── Sticky Footer — Apply + Quick Contact ──────────── */}
@@ -671,11 +675,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
+    ...Type.h1,
     flex: 1,
-    fontSize: 18,
-    fontWeight: '700',
     color: '#fff',
-    letterSpacing: -0.3,
   },
   headerSubRow: {
     flexDirection: 'row',
@@ -691,9 +693,8 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   headerTradePillText: {
+    ...Type.label,
     color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
     textTransform: 'capitalize',
   },
   headerUrgencyPill: {
@@ -705,12 +706,12 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   headerUrgencyText: {
-    fontSize: 12,
+    ...Type.label,
     fontWeight: '600',
   },
   headerSubText: {
+    ...Type.caption,
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 12,
     fontWeight: '500',
   },
 
@@ -751,10 +752,9 @@ const styles = StyleSheet.create({
     borderColor: '#BFDBFE',
   },
   contactBtnLabel: {
+    ...Type.captionSemiBold,
     flex: 1,
     color: '#0f172a',
-    fontSize: 13,
-    fontWeight: '600',
   },
 
   /* Fact chips */
@@ -774,8 +774,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   factChipText: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...Type.captionSemiBold,
     color: '#334155',
   },
 
@@ -812,27 +811,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   postedByInitialsTinyText: {
+    ...Type.label,
     color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
   },
   postedByInlineText: {
-    fontSize: 13,
+    ...Type.caption,
     color: '#64748b',
     fontWeight: '500',
   },
 
   /* Section content */
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...Type.h2,
     color: '#0f172a',
     marginBottom: 10,
-    letterSpacing: -0.2,
   },
   descriptionText: {
-    fontSize: 15,
-    lineHeight: 23,
+    ...Type.body,
     color: '#334155',
   },
 
@@ -877,12 +872,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   docFileName: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...Type.captionSemiBold,
     color: '#0f172a',
   },
   docMeta: {
-    fontSize: 12,
+    ...Type.caption,
     color: '#94A3B8',
     marginTop: 2,
   },
@@ -933,10 +927,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#0D9488',
   },
   applyBtnText: {
+    ...Type.btnPrimary,
     color: '#fff',
-    fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: -0.2,
   },
 
   /* Lightbox */
@@ -967,9 +959,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   lightboxCounterText: {
+    ...Type.captionSemiBold,
     color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
   },
 
   /* Bottom sheet */
@@ -979,10 +970,8 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   sheetTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.h2,
     color: '#0f172a',
-    letterSpacing: -0.3,
     marginBottom: 20,
   },
   sheetCustomerRow: {
@@ -1005,17 +994,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sheetInitialsText: {
+    ...Type.h3,
     color: '#fff',
-    fontSize: 18,
     fontWeight: '700',
   },
   sheetCustomerName: {
-    fontSize: 17,
+    ...Type.h3,
     fontWeight: '700',
     color: '#0f172a',
   },
   sheetCustomerSub: {
-    fontSize: 14,
+    ...Type.caption,
     color: '#64748b',
     marginTop: 2,
   },
@@ -1040,13 +1029,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   contactLabel: {
-    fontSize: 13,
+    ...Type.caption,
     color: '#64748b',
     fontWeight: '500',
   },
   contactValue: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...Type.h3,
     color: '#0f172a',
     marginTop: 2,
   },
@@ -1060,10 +1048,9 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   sheetNoteText: {
+    ...Type.caption,
     flex: 1,
-    fontSize: 13,
     color: '#64748b',
-    lineHeight: 19,
   },
 
   /* Success confirmation (no contact info) */
@@ -1073,10 +1060,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sheetSuccessBody: {
-    fontSize: 15,
+    ...Type.body,
     color: '#64748b',
     textAlign: 'center',
-    lineHeight: 22,
     paddingHorizontal: 8,
   },
   sheetDoneBtn: {
@@ -1089,9 +1075,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   sheetDoneBtnText: {
+    ...Type.btnPrimary,
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
   },
 
   /* Empty states */

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLDESY! - App Summary</title>
+<style>
+  @page { margin: 40px 50px; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; color: #1a1a2e; line-height: 1.6; padding: 40px 50px; max-width: 900px; margin: 0 auto; }
+
+  .header { background: linear-gradient(135deg, #0D7C66, #0A6B58); color: white; padding: 50px 40px; border-radius: 16px; margin-bottom: 40px; }
+  .header h1 { font-size: 42px; font-weight: 800; letter-spacing: -1px; margin-bottom: 8px; }
+  .header .tagline { font-size: 20px; font-weight: 500; opacity: 0.9; }
+  .header .subtitle { font-size: 14px; opacity: 0.7; margin-top: 16px; }
+
+  h2 { font-size: 22px; font-weight: 700; color: #0D7C66; margin-top: 36px; margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
+  h3 { font-size: 17px; font-weight: 600; margin-top: 20px; margin-bottom: 8px; color: #334155; }
+  p { margin-bottom: 12px; color: #475569; font-size: 15px; }
+
+  .highlight-box { background: #f0fdfa; border-left: 4px solid #0D7C66; padding: 16px 20px; border-radius: 0 12px 12px 0; margin: 20px 0; }
+  .highlight-box p { margin: 0; color: #115e59; font-weight: 500; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+  .grid-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; }
+  .grid-item h4 { font-size: 14px; font-weight: 700; color: #0D7C66; margin-bottom: 6px; }
+  .grid-item p { font-size: 13px; margin: 0; color: #64748b; }
+
+  .feature-list { list-style: none; padding: 0; }
+  .feature-list li { padding: 10px 0; border-bottom: 1px solid #f1f5f9; font-size: 15px; color: #334155; display: flex; align-items: flex-start; gap: 10px; }
+  .feature-list li:last-child { border-bottom: none; }
+  .check { color: #0D7C66; font-weight: 700; font-size: 16px; flex-shrink: 0; }
+
+  .tech-pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .pill { background: #f0fdfa; border: 1px solid #0D7C66; color: #0D7C66; padding: 6px 14px; border-radius: 100px; font-size: 13px; font-weight: 600; }
+
+  .flow-diagram { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; text-align: center; margin: 20px 0; }
+  .flow-steps { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+  .flow-step { background: #0D7C66; color: white; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+  .flow-arrow { color: #94a3b8; font-size: 18px; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin: 20px 0; }
+  .col h3 { color: #0D7C66; }
+  .col ul { padding-left: 20px; }
+  .col li { font-size: 14px; color: #475569; margin-bottom: 6px; }
+
+  .revenue-box { background: linear-gradient(135deg, #f0fdfa, #ecfdf5); border: 1px solid #0D7C66; border-radius: 12px; padding: 24px; margin: 20px 0; }
+  .revenue-box h3 { color: #0D7C66; margin-top: 0; }
+
+  .stats-row { display: flex; gap: 16px; margin: 20px 0; }
+  .stat { flex: 1; text-align: center; background: #f8fafc; border-radius: 12px; padding: 20px 12px; border: 1px solid #e2e8f0; }
+  .stat .number { font-size: 28px; font-weight: 800; color: #0D7C66; }
+  .stat .label { font-size: 12px; color: #64748b; margin-top: 4px; }
+
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 2px solid #e2e8f0; text-align: center; color: #94a3b8; font-size: 13px; }
+
+  .security-badge { display: inline-flex; align-items: center; gap: 6px; background: #ecfdf5; color: #059669; padding: 4px 12px; border-radius: 100px; font-size: 12px; font-weight: 600; }
+
+  @media print {
+    body { padding: 20px 30px; }
+    .header { break-after: avoid; }
+    h2 { break-after: avoid; }
+    .grid, .two-col, .stats-row { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>BLDESY!</h1>
+  <div class="tagline">Find your tradie. Fast.</div>
+  <div class="subtitle">A smart trade connection platform for the Australian market</div>
+</div>
+
+<h2>The Problem</h2>
+<p>Finding a reliable tradie in Australia is frustrating. Customers spend hours searching Google, asking friends, and calling around. Existing platforms like Hipages charge tradies per lead (driving up costs), while Airtasker focuses on odd jobs rather than licensed trade work.</p>
+<p>Builders and tradies, meanwhile, waste money on pay-per-lead platforms where they compete in bidding wars, often losing jobs to the lowest quote rather than the best fit.</p>
+
+<div class="highlight-box">
+  <p>BLDESY! is a pure connector. No quote bidding. No pay-to-win rankings. Customers find the right tradie based on trade, location, urgency, and verified credentials. Builders pay a flat subscription to be listed — that's it.</p>
+</div>
+
+<h2>How It Works</h2>
+
+<div class="flow-diagram">
+  <div class="flow-steps">
+    <div class="flow-step">Customer searches</div>
+    <span class="flow-arrow">&#8594;</span>
+    <div class="flow-step">Browse profiles</div>
+    <span class="flow-arrow">&#8594;</span>
+    <div class="flow-step">Post a job</div>
+    <span class="flow-arrow">&#8594;</span>
+    <div class="flow-step">Builder applies</div>
+    <span class="flow-arrow">&#8594;</span>
+    <div class="flow-step">Customer accepts</div>
+    <span class="flow-arrow">&#8594;</span>
+    <div class="flow-step">Leave a review</div>
+  </div>
+</div>
+
+<div class="two-col">
+  <div class="col">
+    <h3>For Customers</h3>
+    <ul>
+      <li>Search by trade, suburb/postcode, and urgency</li>
+      <li>Browse verified builder profiles with photos, reviews, and credentials</li>
+      <li>Post a job and receive applications from matched builders</li>
+      <li>Save favourite tradies for future reference</li>
+      <li>AI-powered assistant to help describe jobs and find the right trade</li>
+      <li>Interactive map showing nearby tradies and their service areas</li>
+    </ul>
+  </div>
+  <div class="col">
+    <h3>For Builders & Tradies</h3>
+    <ul>
+      <li>Create a rich profile: photos, projects, team, FAQs, credentials</li>
+      <li>Browse and apply to jobs matching your trade</li>
+      <li>Dashboard with analytics and job management</li>
+      <li>Flat subscription fee — no per-lead charges</li>
+      <li>Verified badges (ABN, licence, insurance) build trust</li>
+      <li>AI-powered job suggestions and description writing</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Key Features</h2>
+
+<ul class="feature-list">
+  <li><span class="check">&#10003;</span> <strong>Smart Search</strong> — Multi-trade search with location auto-suggest (16,000+ AU suburbs), urgency filters, and keyword matching</li>
+  <li><span class="check">&#10003;</span> <strong>AI Assist</strong> — Powered by Claude AI. Helps customers describe their job, suggests the right trade, and recommends matching builders</li>
+  <li><span class="check">&#10003;</span> <strong>Interactive Map</strong> — See tradies near you with service radius visualisation, trade filters, and bottom sheet details</li>
+  <li><span class="check">&#10003;</span> <strong>Builder Profiles</strong> — Project galleries with before/after photos, team members, FAQs, credentials, reviews, and availability status</li>
+  <li><span class="check">&#10003;</span> <strong>Job Posting</strong> — Step-by-step wizard with AI-generated descriptions, photo/document attachments, and trade auto-detection</li>
+  <li><span class="check">&#10003;</span> <strong>Builder Dashboard</strong> — Professional portal with metrics, job feed, application management, and profile editor</li>
+  <li><span class="check">&#10003;</span> <strong>Saved Tradies</strong> — Bookmark builders for quick access with photo carousels and star ratings</li>
+  <li><span class="check">&#10003;</span> <strong>Guest Browsing</strong> — Browse and search without signing up. Account required only to post, contact, or save</li>
+</ul>
+
+<h2>Market Opportunity</h2>
+
+<div class="stats-row">
+  <div class="stat">
+    <div class="number">$150B+</div>
+    <div class="label">Australian construction industry</div>
+  </div>
+  <div class="stat">
+    <div class="number">380K+</div>
+    <div class="label">Trade businesses in Australia</div>
+  </div>
+  <div class="stat">
+    <div class="number">50+</div>
+    <div class="label">Trade categories supported</div>
+  </div>
+</div>
+
+<h3>Competitive Advantage</h3>
+<div class="grid">
+  <div class="grid-item">
+    <h4>vs Hipages</h4>
+    <p>No per-lead fees. Builders pay a flat subscription, so there's no incentive to race to the bottom on pricing.</p>
+  </div>
+  <div class="grid-item">
+    <h4>vs Airtasker</h4>
+    <p>Purpose-built for licensed trades, not odd jobs. Verified credentials (ABN, licence, insurance) build real trust.</p>
+  </div>
+  <div class="grid-item">
+    <h4>vs Google Search</h4>
+    <p>Structured profiles, verified reviews, urgency matching, and AI-powered recommendations — not just a list of links.</p>
+  </div>
+  <div class="grid-item">
+    <h4>vs Word of Mouth</h4>
+    <p>Searchable by trade + location + urgency. See credentials, past work, and reviews before making contact.</p>
+  </div>
+</div>
+
+<h2>Revenue Model</h2>
+
+<div class="revenue-box">
+  <h3>Flat Subscription for Builders</h3>
+  <p>Builders pay a monthly subscription to be listed on the platform. No commission, no per-lead fees. Tiers provide different levels of visibility and features.</p>
+  <p style="margin-top: 12px; margin-bottom: 0;"><strong>Phase 4 (upcoming):</strong> Stripe integration for automated payments, subscription management, and tier-based features.</p>
+</div>
+
+<h2>Technology</h2>
+
+<div class="tech-pills">
+  <span class="pill">React Native</span>
+  <span class="pill">Expo</span>
+  <span class="pill">TypeScript</span>
+  <span class="pill">Supabase</span>
+  <span class="pill">PostgreSQL</span>
+  <span class="pill">Claude AI</span>
+  <span class="pill">Row Level Security</span>
+  <span class="pill">Edge Functions</span>
+  <span class="pill">Expo Router</span>
+  <span class="pill">React Native Maps</span>
+  <span class="pill">Reanimated</span>
+</div>
+
+<div class="grid">
+  <div class="grid-item">
+    <h4>Cross-Platform</h4>
+    <p>Single codebase runs on iOS, Android, and web via React Native + Expo.</p>
+  </div>
+  <div class="grid-item">
+    <h4>Secure by Design</h4>
+    <p>Row Level Security on all tables, server-side auth verification, rate limiting on all API endpoints. <span class="security-badge">Security Score: 8/10</span></p>
+  </div>
+  <div class="grid-item">
+    <h4>AI-Powered</h4>
+    <p>Claude AI via server-side Edge Functions for chat, job classification, description generation, and builder recommendations.</p>
+  </div>
+  <div class="grid-item">
+    <h4>Australian-First</h4>
+    <p>Bundled database of 16,000+ AU suburbs for instant geocoding. Sydney-region Supabase deployment for low latency.</p>
+  </div>
+</div>
+
+<h2>Current Status</h2>
+
+<p>The app is in <strong>MVP stage</strong> with all core features built and functional:</p>
+
+<ul class="feature-list">
+  <li><span class="check">&#10003;</span> Full customer flow (search, browse, save, post jobs, manage applications)</li>
+  <li><span class="check">&#10003;</span> Full builder flow (onboarding, profile editor, job feed, applications, dashboard)</li>
+  <li><span class="check">&#10003;</span> AI Assist with builder recommendations</li>
+  <li><span class="check">&#10003;</span> Interactive tradie map</li>
+  <li><span class="check">&#10003;</span> Security hardening (RLS, auth, rate limiting, input validation)</li>
+  <li><span class="check">&#10003;</span> Premium visual design with consistent typography and animations</li>
+</ul>
+
+<h3>Next Steps</h3>
+<div class="grid">
+  <div class="grid-item">
+    <h4>Phase 4 — Payments</h4>
+    <p>Stripe integration for builder subscriptions and automated approval.</p>
+  </div>
+  <div class="grid-item">
+    <h4>Phase 5 — Launch</h4>
+    <p>TestFlight beta, App Store submission, and initial marketing push.</p>
+  </div>
+</div>
+
+<div class="footer">
+  <p>BLDESY! &mdash; Connecting Australians with trusted tradies</p>
+  <p style="margin-top: 4px;">March 2026</p>
+</div>
+
+</body>
+</html>

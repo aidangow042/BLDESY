@@ -31,6 +31,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { addRecentProfile } from '@/lib/recent-profiles';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COVER_HEIGHT = 260;
@@ -571,6 +572,7 @@ export default function BuilderProfileScreen() {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [expandedReviews, setExpandedReviews] = useState<Set<string>>(new Set());
   const [expandedFAQs, setExpandedFAQs] = useState<Set<string>>(new Set());
+  const [faqOpen, setFaqOpen] = useState(false);
 
   // Animated save icon
   const saveScale = useRef(new RNAnimated.Value(1)).current;
@@ -648,7 +650,7 @@ export default function BuilderProfileScreen() {
 
     const { data, error: fetchError } = await supabase
       .from('builder_profiles')
-      .select('id, user_id, business_name, trade_category, suburb, postcode, bio, phone, email, website, profile_photo_url, cover_photo_url, projects, specialties, credentials, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km')
+      .select('id, user_id, business_name, trade_category, suburb, postcode, bio, website, profile_photo_url, cover_photo_url, projects, specialties, credentials, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km, faqs, team_members')
       .eq('id', id)
       .single();
 
@@ -656,6 +658,13 @@ export default function BuilderProfileScreen() {
       setError(fetchError.message);
     } else {
       setBuilder(data);
+      addRecentProfile({
+        id: data.id,
+        business_name: data.business_name,
+        trade_category: data.trade_category,
+        suburb: data.suburb,
+        profile_photo_url: data.profile_photo_url,
+      });
     }
     setLoading(false);
   }
@@ -712,17 +721,37 @@ export default function BuilderProfileScreen() {
     setSavingToggle(false);
   }
 
+  async function fetchContactInfo(): Promise<{ phone: string | null; email: string | null } | null> {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData?.user) {
+      Alert.alert('Sign in required', 'Please sign in to view contact details.');
+      return null;
+    }
+    const { data, error } = await supabase.rpc('get_builder_contact', { p_builder_id: id });
+    if (error || !data) {
+      Alert.alert('Error', 'Could not load contact info.');
+      return null;
+    }
+    return data as { phone: string | null; email: string | null };
+  }
+
   async function handleCall() {
-    if (builder?.phone) {
-      await Clipboard.setStringAsync(builder.phone);
-      Alert.alert('Copied', `${builder.phone} copied to clipboard`);
+    const contact = await fetchContactInfo();
+    if (contact?.phone) {
+      await Clipboard.setStringAsync(contact.phone);
+      Alert.alert('Copied', `${contact.phone} copied to clipboard`);
+    } else if (contact) {
+      Alert.alert('No phone', 'This builder has not listed a phone number.');
     }
   }
 
   async function handleEmail() {
-    if (builder?.email) {
-      await Clipboard.setStringAsync(builder.email);
-      Alert.alert('Copied', `${builder.email} copied to clipboard`);
+    const contact = await fetchContactInfo();
+    if (contact?.email) {
+      await Clipboard.setStringAsync(contact.email);
+      Alert.alert('Copied', `${contact.email} copied to clipboard`);
+    } else if (contact) {
+      Alert.alert('No email', 'This builder has not listed an email address.');
     }
   }
 
@@ -835,10 +864,41 @@ export default function BuilderProfileScreen() {
         onClose={() => setLightboxVisible(false)}
       />
 
+      {/* ─── TOP TEAL BAR ─── */}
+      <LinearGradient
+        colors={colorScheme === 'dark' ? ['#134E4A', '#0D3B3B'] : ['#0D7C66', '#0A6B58']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.topBar, { paddingTop: insets.top + 4 }]}
+      >
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          style={({ pressed }) => [styles.topBarBackBtn, pressed && { opacity: 0.7 }]}
+        >
+          <Ionicons name="arrow-back" size={20} color="#fff" />
+        </Pressable>
+        <Text style={styles.topBarTitle} numberOfLines={1}>{builder.business_name}</Text>
+        <Pressable
+          onPress={toggleSave}
+          disabled={savingToggle}
+          accessibilityRole="button"
+          accessibilityLabel={isSaved ? 'Remove from saved' : 'Save builder'}
+          style={({ pressed }) => [styles.topBarBackBtn, pressed && { opacity: 0.7 }]}
+        >
+          <MaterialIcons
+            name={isSaved ? 'bookmark' : 'bookmark-border'}
+            size={20}
+            color={isSaved ? '#fff' : 'rgba(255,255,255,0.7)'}
+          />
+        </Pressable>
+      </LinearGradient>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         bounces
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 140 }}
       >
         {/* ─── COVER PHOTO + HEADER ─── */}
         <View style={{ height: COVER_HEIGHT + AVATAR_SIZE / 2 }}>
@@ -867,40 +927,7 @@ export default function BuilderProfileScreen() {
             style={styles.coverGradient}
           />
 
-          {/* Back button */}
-          <Pressable
-            onPress={() => (router.back())}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            style={({ pressed }) => [
-              styles.backBtn,
-              { top: insets.top + 8 },
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <Ionicons name="arrow-back" size={22} color="#ffffff" />
-          </Pressable>
-
-          {/* Save button (top right) */}
-          <Pressable
-            onPress={toggleSave}
-            disabled={savingToggle}
-            accessibilityRole="button"
-            accessibilityLabel={isSaved ? 'Remove from saved' : 'Save builder'}
-            style={({ pressed }) => [
-              styles.saveHeaderBtn,
-              { top: insets.top + 8 },
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <RNAnimated.View style={{ transform: [{ scale: saveScale }] }}>
-              <MaterialIcons
-                name={isSaved ? 'bookmark' : 'bookmark-border'}
-                size={22}
-                color={isSaved ? teal : '#ffffff'}
-              />
-            </RNAnimated.View>
-          </Pressable>
+          {/* Back + Save buttons moved to top teal bar */}
 
           {/* Profile photo + info overlay */}
           <View style={styles.headerInfoContainer}>
@@ -916,6 +943,23 @@ export default function BuilderProfileScreen() {
               </Text>
             </View>
           </View>
+        </View>
+
+        {/* ─── AVAILABILITY BANNER ─── */}
+        <View style={[styles.availBanner, { backgroundColor: availDotColor + '12', borderColor: availDotColor + '30' }]}>
+          <View style={[styles.availBannerDot, { backgroundColor: availDotColor }]} />
+          <Text style={[styles.availBannerText, { color: availDotColor === '#22c55e' ? '#15803d' : availDotColor === '#f59e0b' ? '#b45309' : '#dc2626' }]}>
+            {availLabel}
+          </Text>
+          {builder.response_time && (
+            <>
+              <View style={{ width: 1, height: 14, backgroundColor: availDotColor + '40', marginHorizontal: 8 }} />
+              <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
+              <Text style={{ fontSize: 13, color: colors.textSecondary, fontWeight: '500' }}>
+                {builder.response_time}
+              </Text>
+            </>
+          )}
         </View>
 
         {/* ─── QUICK INFO BAR ─── */}
@@ -1146,6 +1190,44 @@ export default function BuilderProfileScreen() {
           </View>
         </View>
 
+        {/* ─── TEAM MEMBERS ─── */}
+        {(builder.team_members ?? []).length > 0 && (
+          <View style={[styles.sectionContainer, styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <SectionHeader title="Meet the Team" colors={colors} />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.teamScroll}
+            >
+              {(builder.team_members ?? []).map((member) => {
+                const initials = member.name
+                  .split(' ')
+                  .map(w => w.charAt(0))
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase();
+                return (
+                  <View key={member.id} style={styles.teamCard}>
+                    {member.photoUri ? (
+                      <Image source={{ uri: member.photoUri }} style={styles.teamPhoto} />
+                    ) : (
+                      <View style={[styles.teamPhoto, styles.teamInitials, { backgroundColor: tealBg }]}>
+                        <Text style={{ color: teal, fontSize: 18, fontWeight: '700' }}>{initials}</Text>
+                      </View>
+                    )}
+                    <Text style={[styles.teamName, { color: colors.text }]} numberOfLines={1}>
+                      {member.name.split(' ')[0]}
+                    </Text>
+                    <Text style={[styles.teamRole, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {member.role}
+                    </Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
         {/* ─── REVIEWS ─── */}
         <View style={styles.sectionContainer}>
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -1277,105 +1359,11 @@ export default function BuilderProfileScreen() {
           </View>
         </View>
 
-        {/* ─── TEAM MEMBERS ─── */}
-        {(builder.team_members ?? []).length > 0 && (
-          <View style={[styles.sectionContainer, styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <SectionHeader title="Meet the Team" colors={colors} />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.teamScroll}
-            >
-              {(builder.team_members ?? []).map((member) => {
-                const initials = member.name
-                  .split(' ')
-                  .map(w => w.charAt(0))
-                  .join('')
-                  .slice(0, 2)
-                  .toUpperCase();
-                return (
-                  <View key={member.id} style={styles.teamCard}>
-                    {member.photoUri ? (
-                      <Image source={{ uri: member.photoUri }} style={styles.teamPhoto} />
-                    ) : (
-                      <View style={[styles.teamPhoto, styles.teamInitials, { backgroundColor: tealBg }]}>
-                        <Text style={{ color: teal, fontSize: 18, fontWeight: '700' }}>{initials}</Text>
-                      </View>
-                    )}
-                    <Text style={[styles.teamName, { color: colors.text }]} numberOfLines={1}>
-                      {member.name.split(' ')[0]}
-                    </Text>
-                    <Text style={[styles.teamRole, { color: colors.textSecondary }]} numberOfLines={1}>
-                      {member.role}
-                    </Text>
-                  </View>
-                );
-              })}
-            </ScrollView>
-          </View>
-        )}
+        {/* Team Members moved after Our Work */}
 
-        {/* ─── FAQ ─── */}
-        {(builder.faqs ?? []).length > 0 && (
-          <View style={[styles.sectionContainer, styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <SectionHeader title="Frequently Asked Questions" colors={colors} />
-            {(builder.faqs ?? []).map((faq, idx) => {
-              const isOpen = expandedFAQs.has(faq.id);
-              return (
-                <Pressable
-                  key={faq.id}
-                  onPress={() => {
-                    setExpandedFAQs(prev => {
-                      const next = new Set(prev);
-                      if (next.has(faq.id)) next.delete(faq.id);
-                      else next.add(faq.id);
-                      return next;
-                    });
-                  }}
-                  style={[
-                    styles.faqItem,
-                    idx > 0 && { borderTopWidth: 1, borderTopColor: colors.border },
-                  ]}
-                >
-                  <View style={styles.faqQuestion}>
-                    <Text style={[styles.faqQuestionText, { color: colors.text }]}>{faq.question}</Text>
-                    <Ionicons
-                      name={isOpen ? 'chevron-up' : 'chevron-down'}
-                      size={18}
-                      color={colors.textSecondary}
-                    />
-                  </View>
-                  {isOpen && (
-                    <Text style={[styles.faqAnswer, { color: colors.textSecondary }]}>
-                      {faq.answer}
-                    </Text>
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
+        {/* FAQ moved to bottom */}
 
-        {/* ─── AVAILABILITY ─── */}
-        <View style={[styles.sectionContainer, styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <SectionHeader title="Availability" colors={colors} />
-          <View style={styles.availRow}>
-            <View style={[styles.greenDot, { backgroundColor: availDotColor }]} />
-            <Text style={[styles.availTextPrimary, { color: colors.text }]}>{availLabel}</Text>
-          </View>
-          {builder.response_time && (
-            <View style={styles.availRow}>
-              <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
-              <Text style={[styles.availText, { color: colors.textSecondary }]}>Usually responds {builder.response_time.toLowerCase()}</Text>
-            </View>
-          )}
-          <View style={styles.availRow}>
-            <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
-            <Text style={[styles.availText, { color: colors.textSecondary }]}>
-              {builder.areas_serviced || builder.suburb}
-            </Text>
-          </View>
-        </View>
+        {/* Availability moved to top */}
 
         {/* ─── AWARDS & MEMBERSHIPS ─── */}
         {builderCredentials.filter(c => c.type === 'membership' || c.type === 'award').length > 0 && (
@@ -1425,22 +1413,69 @@ export default function BuilderProfileScreen() {
           </View>
         )}
 
-        {/* ─── CREDENTIALS ─── */}
+        {/* ─── FAQ (fold-out) ─── */}
+        {(builder.faqs ?? []).length > 0 && (
+          <View style={[styles.sectionContainer, styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Pressable
+              onPress={() => setFaqOpen(!faqOpen)}
+              style={styles.foldoutHeader}
+            >
+              <Text style={[styles.foldoutTitle, { color: colors.text }]}>FAQ</Text>
+              <Ionicons name={faqOpen ? 'chevron-up' : 'chevron-down'} size={20} color={teal} />
+            </Pressable>
+            {faqOpen && (builder.faqs ?? []).map((faq, idx) => {
+              const isOpen = expandedFAQs.has(faq.id);
+              return (
+                <Pressable
+                  key={faq.id}
+                  onPress={() => {
+                    setExpandedFAQs(prev => {
+                      const next = new Set(prev);
+                      if (next.has(faq.id)) next.delete(faq.id);
+                      else next.add(faq.id);
+                      return next;
+                    });
+                  }}
+                  style={[
+                    styles.faqItem,
+                    { borderTopWidth: 1, borderTopColor: colors.border },
+                  ]}
+                >
+                  <View style={styles.faqQuestion}>
+                    <Text style={[styles.faqQuestionText, { color: colors.text }]}>{faq.question}</Text>
+                    <Ionicons
+                      name={isOpen ? 'chevron-up' : 'chevron-down'}
+                      size={16}
+                      color={colors.textSecondary}
+                    />
+                  </View>
+                  {isOpen && (
+                    <Text style={[styles.faqAnswer, { color: colors.textSecondary }]}>
+                      {faq.answer}
+                    </Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        {/* ─── CREDENTIALS & DOCUMENTS (fold-out) ─── */}
         <View style={[styles.sectionContainer, styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Pressable
             onPress={() => setCredentialsExpanded(!credentialsExpanded)}
-            style={styles.credentialsHeader}
+            style={styles.foldoutHeader}
           >
-            <SectionHeader title="Credentials & Documents" colors={colors} />
+            <Text style={[styles.foldoutTitle, { color: colors.text }]}>Credentials & Documents</Text>
             <Ionicons
               name={credentialsExpanded ? 'chevron-up' : 'chevron-down'}
-              size={18}
-              color={colors.textSecondary}
+              size={20}
+              color={teal}
             />
           </Pressable>
 
           {credentialsExpanded && builderCredentials.length > 0 && (
-            <View style={{ gap: Spacing.sm }}>
+            <View style={{ gap: Spacing.sm, marginTop: Spacing.md }}>
               {builderCredentials.map((cred: CredentialData) => (
                 <View key={cred.id} style={[styles.credCard, { borderColor: colors.border }]}>
                   <View style={[styles.credIconCircle, { backgroundColor: tealBg }]}>
@@ -1475,42 +1510,7 @@ export default function BuilderProfileScreen() {
           )}
         </View>
 
-        {/* ─── SIMILAR TRADIES ─── */}
-        {similarBuilders.length > 0 && (
-          <View style={styles.sectionContainer}>
-            <SectionHeader title="Similar tradies in your area" colors={colors} />
-            <FlatList
-              data={similarBuilders}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={{ gap: Spacing.md }}
-              renderItem={({ item }) => (
-                <Pressable
-                  onPress={() => router.push({ pathname: '/builder-profile', params: { id: item.id } })}
-                  style={({ pressed }) => [
-                    styles.similarCard,
-                    { backgroundColor: colors.surface, borderColor: colors.border },
-                    pressed && { opacity: 0.8 },
-                  ]}
-                >
-                  <Image source={{ uri: item.photo }} style={styles.similarPhoto} />
-                  <View style={styles.similarInfo}>
-                    <Text style={[styles.similarName, { color: colors.text }]} numberOfLines={1}>
-                      {item.name}
-                    </Text>
-                    <Text style={[styles.similarTrade, { color: colors.textSecondary }]}>
-                      {item.trade}
-                    </Text>
-                    <Text style={[styles.similarLocation, { color: colors.textSecondary }]}>
-                      {item.location}
-                    </Text>
-                  </View>
-                </Pressable>
-              )}
-            />
-          </View>
-        )}
+        {/* Similar tradies removed — don't recommend competitors on a builder's profile */}
       </ScrollView>
 
       {/* ─── STICKY BOTTOM CTA ─── */}
@@ -1527,8 +1527,8 @@ export default function BuilderProfileScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.stickyQuoteBtn,
-            { backgroundColor: teal },
-            pressed && { backgroundColor: tealDark },
+            { backgroundColor: '#0D7C66' },
+            pressed && { backgroundColor: '#0A6B58' },
           ]}
         >
           <Text style={styles.stickyQuoteText}>Request a Quote</Text>
@@ -1693,6 +1693,47 @@ const styles = StyleSheet.create({
   },
 
   // Meta bar
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    gap: 8,
+  },
+  topBarBackBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarTitle: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#fff',
+    textAlign: 'center',
+    letterSpacing: -0.3,
+  },
+  availBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.md,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+  },
+  availBannerDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  availBannerText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   metaBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1746,7 +1787,7 @@ const styles = StyleSheet.create({
 
   // Actions
   sectionContainer: {
-    paddingHorizontal: Spacing.lg,
+    marginHorizontal: Spacing.lg,
     marginTop: Spacing.xl,
   },
   actionSection: {
@@ -2153,6 +2194,18 @@ const styles = StyleSheet.create({
     color: '#22c55e',
   },
 
+  // Fold-out sections (FAQ, Credentials)
+  foldoutHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  foldoutTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
   // Credentials
   credentialsHeader: {
     flexDirection: 'row',
