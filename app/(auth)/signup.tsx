@@ -29,7 +29,7 @@ import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-type Role = 'customer' | 'builder';
+type Role = 'customer' | 'builder' | 'enterprise';
 
 export default function SignupScreen() {
   const colorScheme = useColorScheme();
@@ -38,7 +38,7 @@ export default function SignupScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ role?: string }>();
 
-  const [role, setRole] = useState<Role>(params.role === 'builder' ? 'builder' : 'customer');
+  const [role, setRole] = useState<Role>(params.role === 'builder' ? 'builder' : params.role === 'enterprise' ? 'enterprise' : 'customer');
   const [fullName, setFullName] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [email, setEmail] = useState('');
@@ -229,8 +229,10 @@ export default function SignupScreen() {
                 Shadows.md,
               ]}
             >
-              {(['customer', 'builder'] as Role[]).map((r) => {
+              {(['customer', 'builder', 'enterprise'] as Role[]).map((r) => {
                 const isActive = role === r;
+                const labelMap = { customer: 'Customer', builder: 'Builder', enterprise: 'For Builders' };
+                const iconMap = { customer: 'person' as const, builder: 'construction' as const, enterprise: 'business' as const };
                 return (
                   <Pressable
                     key={r}
@@ -241,11 +243,11 @@ export default function SignupScreen() {
                     ]}
                     onPress={() => setRole(r)}
                     accessibilityRole="button"
-                    accessibilityLabel={r === 'customer' ? 'Customer' : 'Builder'}
+                    accessibilityLabel={labelMap[r]}
                     accessibilityState={{ selected: isActive }}
                   >
                     <MaterialIcons
-                      name={r === 'customer' ? 'person' : 'construction'}
+                      name={iconMap[r]}
                       size={18}
                       color={isActive ? '#ffffff' : colors.teal}
                     />
@@ -256,7 +258,7 @@ export default function SignupScreen() {
                         isActive && styles.roleTextActive,
                       ]}
                     >
-                      {r === 'customer' ? 'Customer' : 'Builder'}
+                      {labelMap[r]}
                     </Text>
                   </Pressable>
                 );

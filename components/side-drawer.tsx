@@ -63,11 +63,13 @@ type SideDrawerProps = {
   onClose: () => void;
   /** When true, shows "Switch to Consumer Mode" instead of "Switch to Builder Mode" */
   builderMode?: boolean;
+  /** When true, shows enterprise mode navigation */
+  enterpriseMode?: boolean;
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function SideDrawer({ visible, onClose, builderMode = false }: SideDrawerProps) {
+export function SideDrawer({ visible, onClose, builderMode = false, enterpriseMode = false }: SideDrawerProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];

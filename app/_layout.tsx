@@ -82,6 +82,20 @@ export default function RootLayout() {
             } else {
               router.replace('/builder-signup' as any);
             }
+          } else if (role === 'enterprise') {
+            const { data } = await supabase
+              .from('enterprise_profiles')
+              .select('status')
+              .eq('user_id', session.user.id)
+              .maybeSingle();
+
+            if (data && ((data as any).status === 'approved' || (data as any).status === 'active')) {
+              router.replace('/enterprise-dashboard' as any);
+            } else if (data) {
+              router.replace('/pending-approval' as any);
+            } else {
+              router.replace('/enterprise-signup' as any);
+            }
           } else {
             // Customer or no role set — default to home
             router.replace('/(tabs)');
@@ -117,6 +131,13 @@ export default function RootLayout() {
           <Stack.Screen name="builder-edit-profile" options={{ fullScreenGestureEnabled: false }} />
           <Stack.Screen name="my-jobs" />
           <Stack.Screen name="all-trades" />
+          <Stack.Screen name="enterprise-signup" />
+          <Stack.Screen name="enterprise-dashboard" />
+          <Stack.Screen name="enterprise-jobs" />
+          <Stack.Screen name="enterprise-edit-profile" options={{ fullScreenGestureEnabled: false }} />
+          <Stack.Screen name="enterprise-analytics" />
+          <Stack.Screen name="enterprise-billing" />
+          <Stack.Screen name="enterprise-settings" />
           <Stack.Screen name="messages" />
           <Stack.Screen name="billing" />
           <Stack.Screen name="settings" />
