@@ -14,6 +14,7 @@ import 'react-native-reanimated';
 
 import { supabase } from '@/lib/supabase';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { CookieBanner } from '@/components/ui/cookie-banner';
 import type { Session } from '@supabase/supabase-js';
 
 export const unstable_settings = {
@@ -147,6 +148,7 @@ export default function RootLayout() {
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <StatusBar style="auto" translucent />
+        <CookieBanner />
       </ThemeProvider>
     </GestureHandlerRootView>
   );

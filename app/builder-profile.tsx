@@ -33,6 +33,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { addRecentProfile } from '@/lib/recent-profiles';
 import { CredentialBadges } from '@/components/builder/credential-badges';
+import { StarRating } from '@/components/ui/star-rating';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COVER_HEIGHT = 260;
@@ -150,17 +151,7 @@ function projectToDisplay(p: ProjectData): Project {
 // ─── Helper Components ───────────────────────────────────────────────────────
 
 function StarRow({ rating, size = 14, color }: { rating: number; size?: number; color: string }) {
-  const stars = [];
-  for (let i = 1; i <= 5; i++) {
-    if (i <= Math.floor(rating)) {
-      stars.push(<Text key={i} style={{ fontSize: size, color }}>★</Text>);
-    } else if (i - 0.5 <= rating) {
-      stars.push(<Text key={i} style={{ fontSize: size, color }}>★</Text>);
-    } else {
-      stars.push(<Text key={i} style={{ fontSize: size, color, opacity: 0.3 }}>★</Text>);
-    }
-  }
-  return <View style={{ flexDirection: 'row', gap: 1 }}>{stars}</View>;
+  return <StarRating rating={rating} size={size} color={color} />;
 }
 
 function SectionHeader({ title, colors }: { title: string; colors: any }) {
