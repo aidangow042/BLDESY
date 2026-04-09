@@ -198,7 +198,7 @@ export default function EnterpriseDashboardScreen() {
         </View>
       </ScrollView>
 
-      <SideDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      <SideDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} enterpriseMode />
     </View>
   );
 }

@@ -44,6 +44,7 @@ type UserInfo = {
   email: string | null;
   avatar: string | null;
   isBuilder: boolean;
+  isEnterprise: boolean;
   isGuest: boolean;
   // Builder entity info
   businessName: string | null;
@@ -109,17 +110,17 @@ export function SideDrawer({ visible, onClose, builderMode = false, enterpriseMo
   async function fetchUserInfo() {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData?.user) {
-      setUserInfo({ name: 'Guest', email: null, avatar: null, isBuilder: false, isGuest: true, businessName: null, tradeCategory: null, profilePhoto: null });
+      setUserInfo({ name: 'Guest', email: null, avatar: null, isBuilder: false, isEnterprise: false, isGuest: true, businessName: null, tradeCategory: null, profilePhoto: null });
       hasFetched.current = true;
       return;
     }
 
     const email = userData.user.email ?? null;
 
-    const [{ data: profile }, { data: builderProfile }] = await Promise.all([
+    const [{ data: profile }, { data: builderProfile }, { data: enterpriseProfile }] = await Promise.all([
       supabase
         .from('profiles')
-        .select('name, avatar_url')
+        .select('name, avatar_url, role')
         .eq('id', userData.user.id)
         .maybeSingle(),
       supabase
@@ -127,15 +128,24 @@ export function SideDrawer({ visible, onClose, builderMode = false, enterpriseMo
         .select('approved, business_name, trade_category, profile_photo_url')
         .eq('user_id', userData.user.id)
         .maybeSingle(),
+      supabase
+        .from('enterprise_profiles')
+        .select('status, company_name')
+        .eq('user_id', userData.user.id)
+        .maybeSingle(),
     ]);
+
+    const epStatus = (enterpriseProfile as any)?.status;
+    const isEnterprise = epStatus === 'approved' || epStatus === 'active';
 
     setUserInfo({
       name: (profile as any)?.name ?? email?.split('@')[0] ?? 'User',
       email,
       avatar: (profile as any)?.avatar_url ?? null,
       isBuilder: !!(builderProfile as any)?.approved,
+      isEnterprise,
       isGuest: false,
-      businessName: (builderProfile as any)?.business_name ?? null,
+      businessName: (builderProfile as any)?.business_name ?? (enterpriseProfile as any)?.company_name ?? null,
       tradeCategory: (builderProfile as any)?.trade_category ?? null,
       profilePhoto: (builderProfile as any)?.profile_photo_url ?? null,
     });
@@ -366,19 +376,13 @@ export function SideDrawer({ visible, onClose, builderMode = false, enterpriseMo
         {/* ─── Divider ─── */}
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-        {/* ─── Mode toggle ─── */}
-        {builderMode ? (
+        {/* ─── Mode toggles ─── */}
+        {(builderMode || enterpriseMode) ? (
           <View style={styles.menuSection}>
             <Pressable
               style={({ pressed }) => [
                 styles.menuItem,
-                {
-                  backgroundColor: pressed
-                    ? isDark
-                      ? 'rgba(255,255,255,0.05)'
-                      : 'rgba(0,0,0,0.03)'
-                    : 'transparent',
-                },
+                { backgroundColor: pressed ? (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)') : 'transparent' },
               ]}
               onPress={() => navigate('/(tabs)')}
               accessibilityRole="button"
@@ -387,39 +391,65 @@ export function SideDrawer({ visible, onClose, builderMode = false, enterpriseMo
               <View style={[styles.menuIconWrap, { backgroundColor: colors.tealBg }]}>
                 <Ionicons name="swap-horizontal" size={20} color={colors.teal} />
               </View>
-              <Text style={[styles.menuLabel, { color: colors.text }]}>
-                Switch to Consumer Mode
-              </Text>
+              <Text style={[styles.menuLabel, { color: colors.text }]}>Switch to Consumer Mode</Text>
               <MaterialIcons name="chevron-right" size={18} color={colors.icon} />
             </Pressable>
           </View>
-        ) : userInfo.isBuilder ? (
+        ) : (
           <View style={styles.menuSection}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.menuItem,
-                {
-                  backgroundColor: pressed
-                    ? isDark
-                      ? 'rgba(255,255,255,0.05)'
-                      : 'rgba(0,0,0,0.03)'
-                    : 'transparent',
-                },
-              ]}
-              onPress={openReauthModal}
-              accessibilityRole="button"
-              accessibilityLabel="Switch to Builder Mode"
-            >
-              <View style={[styles.menuIconWrap, { backgroundColor: colors.tealBg }]}>
-                <Ionicons name="swap-horizontal" size={20} color={colors.teal} />
-              </View>
-              <Text style={[styles.menuLabel, { color: colors.text }]}>
-                Switch to Builder Mode
-              </Text>
-              <MaterialIcons name="chevron-right" size={18} color={colors.icon} />
-            </Pressable>
+            {userInfo.isBuilder && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.menuItem,
+                  { backgroundColor: pressed ? (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)') : 'transparent' },
+                ]}
+                onPress={openReauthModal}
+                accessibilityRole="button"
+                accessibilityLabel="Switch to Builder Mode"
+              >
+                <View style={[styles.menuIconWrap, { backgroundColor: colors.tealBg }]}>
+                  <Ionicons name="swap-horizontal" size={20} color={colors.teal} />
+                </View>
+                <Text style={[styles.menuLabel, { color: colors.text }]}>Switch to Builder Mode</Text>
+                <MaterialIcons name="chevron-right" size={18} color={colors.icon} />
+              </Pressable>
+            )}
+            {userInfo.isEnterprise && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.menuItem,
+                  { backgroundColor: pressed ? (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)') : 'transparent' },
+                ]}
+                onPress={() => navigate('/enterprise-dashboard')}
+                accessibilityRole="button"
+                accessibilityLabel="Enterprise Portal"
+              >
+                <View style={[styles.menuIconWrap, { backgroundColor: isDark ? '#1e1b4b' : '#eef2ff' }]}>
+                  <Ionicons name="business" size={20} color={isDark ? '#818cf8' : '#4f46e5'} />
+                </View>
+                <Text style={[styles.menuLabel, { color: colors.text }]}>Enterprise Portal</Text>
+                <MaterialIcons name="chevron-right" size={18} color={colors.icon} />
+              </Pressable>
+            )}
+            {!userInfo.isEnterprise && !userInfo.isGuest && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.menuItem,
+                  { backgroundColor: pressed ? (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)') : 'transparent' },
+                ]}
+                onPress={() => navigate('/enterprise-signup')}
+                accessibilityRole="button"
+                accessibilityLabel="Register as Enterprise"
+              >
+                <View style={[styles.menuIconWrap, { backgroundColor: isDark ? '#1e1b4b' : '#eef2ff' }]}>
+                  <Ionicons name="business-outline" size={20} color={isDark ? '#818cf8' : '#4f46e5'} />
+                </View>
+                <Text style={[styles.menuLabel, { color: colors.text }]}>Enterprise Portal</Text>
+                <MaterialIcons name="chevron-right" size={18} color={colors.icon} />
+              </Pressable>
+            )}
           </View>
-        ) : null}
+        )}
 
         {/* ─── Spacer pushes logout to the bottom ─── */}
         <View style={{ flex: 1 }} />
