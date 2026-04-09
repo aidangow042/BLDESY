@@ -32,6 +32,7 @@ import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { addRecentProfile } from '@/lib/recent-profiles';
+import { CredentialBadges } from '@/components/builder/credential-badges';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COVER_HEIGHT = 260;
@@ -41,6 +42,7 @@ const AVATAR_SIZE = 88;
 
 type BuilderProfile = {
   id: string;
+  user_id: string;
   business_name: string;
   bio: string | null;
   trade_category: string;
@@ -63,6 +65,7 @@ type BuilderProfile = {
   profile_photo_url?: string | null;
   projects?: ProjectData[] | null;
   credentials?: CredentialData[] | null;
+  credentials_verified?: any | null;
   team_members?: TeamMember[] | null;
   faqs?: FAQItem[] | null;
 };
@@ -650,7 +653,7 @@ export default function BuilderProfileScreen() {
 
     const { data, error: fetchError } = await supabase
       .from('builder_profiles')
-      .select('id, user_id, business_name, trade_category, suburb, postcode, bio, website, profile_photo_url, cover_photo_url, projects, specialties, credentials, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km, faqs, team_members')
+      .select('id, user_id, business_name, trade_category, suburb, postcode, bio, phone, website, profile_photo_url, cover_photo_url, projects, specialties, credentials, credentials_verified, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km, faqs, team_members')
       .eq('id', id)
       .single();
 
@@ -1001,6 +1004,13 @@ export default function BuilderProfileScreen() {
                 <Text style={[styles.badgeText, { color: teal }]}>{badge}</Text>
               </View>
             ))}
+          </View>
+        )}
+
+        {/* ─── VERIFIED CREDENTIALS (new system) ─── */}
+        {builder.credentials_verified && (
+          <View style={[styles.sectionContainer, { marginTop: Spacing.sm }]}>
+            <CredentialBadges credentials={builder.credentials_verified} variant="pills" />
           </View>
         )}
 
@@ -1524,15 +1534,30 @@ export default function BuilderProfileScreen() {
           },
         ]}
       >
-        <Pressable
-          style={({ pressed }) => [
-            styles.stickyQuoteBtn,
-            { backgroundColor: '#0D7C66' },
-            pressed && { backgroundColor: '#0A6B58' },
-          ]}
-        >
-          <Text style={styles.stickyQuoteText}>Request a Quote</Text>
-        </Pressable>
+        <View style={styles.stickyRow}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.stickyMsgBtn,
+              { borderColor: '#0D7C66' },
+              pressed && { backgroundColor: 'rgba(13,124,102,0.08)' },
+            ]}
+            onPress={() => {
+              if (!builder) return;
+              router.push({ pathname: '/messages', params: { recipientId: builder.user_id } } as any);
+            }}
+          >
+            <MaterialIcons name="chat-bubble-outline" size={20} color="#0D7C66" />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.stickyQuoteBtn,
+              { backgroundColor: '#0D7C66', flex: 1 },
+              pressed && { backgroundColor: '#0A6B58' },
+            ]}
+          >
+            <Text style={styles.stickyQuoteText}>Request a Quote</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -2289,6 +2314,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
     borderTopWidth: 1,
+  },
+  stickyRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  stickyMsgBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: Radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
   },
   stickyQuoteBtn: {
     height: 52,

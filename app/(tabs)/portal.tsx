@@ -231,10 +231,28 @@ export default function PortalScreen() {
 
   const dashboardCards: { icon: React.ComponentProps<typeof Ionicons>['name']; title: string; description: string; onPress: () => void }[] = [
     {
+      icon: 'create-outline',
+      title: 'Edit Profile',
+      description: 'Photos, projects, specialties, credentials & contact info',
+      onPress: () => router.push('/builder-edit-profile'),
+    },
+    {
       icon: 'briefcase-outline',
-      title: 'Browse Jobs',
-      description: 'Find open jobs matching your trade and apply',
-      onPress: () => router.push('/builder-jobs'),
+      title: 'Project Jobs',
+      description: 'Browse commercial construction projects',
+      onPress: () => router.push({ pathname: '/builder-jobs', params: { type: 'commercial' } } as any),
+    },
+    {
+      icon: 'home-outline',
+      title: 'Home Jobs',
+      description: 'Browse residential home renovation jobs',
+      onPress: () => router.push({ pathname: '/builder-jobs', params: { type: 'residential' } } as any),
+    },
+    {
+      icon: 'document-text-outline',
+      title: 'Applications',
+      description: 'Track your job applications and their status',
+      onPress: () => router.push('/builder-applications'),
     },
     {
       icon: 'bar-chart-outline',
@@ -243,10 +261,22 @@ export default function PortalScreen() {
       onPress: () => router.push('/builder-analytics'),
     },
     {
-      icon: 'create-outline',
-      title: 'Edit Profile',
-      description: 'Photos, projects, specialties, credentials & contact info',
-      onPress: () => router.push('/builder-edit-profile'),
+      icon: 'chatbubble-outline',
+      title: 'Messages',
+      description: 'Conversations with customers and builders',
+      onPress: () => router.push('/messages'),
+    },
+    {
+      icon: 'card-outline',
+      title: 'Billing',
+      description: 'Manage subscription and payment details',
+      onPress: () => router.push('/billing'),
+    },
+    {
+      icon: 'settings-outline',
+      title: 'Settings',
+      description: 'Account preferences and notifications',
+      onPress: () => router.push('/settings'),
     },
   ];
 
@@ -299,28 +329,23 @@ export default function PortalScreen() {
         {/* AI Coach */}
         <AICoachCard onGetCoaching={() => router.navigate('/(tabs)/ai' as any)} />
 
-        {/* Dashboard cards */}
-        <View style={styles.dashboardCards}>
+        {/* Navigation grid */}
+        <View style={styles.navGrid}>
           {dashboardCards.map((item) => (
             <Pressable
               key={item.title}
               style={({ pressed }) => [
-                styles.dashboardCard,
+                styles.navCard,
                 { opacity: pressed ? 0.8 : 1 },
                 DashboardShadows.subtle,
               ]}
               onPress={item.onPress}
             >
-              <View style={styles.cardIconRow}>
-                <View style={styles.cardIconCircle}>
-                  <Ionicons name={item.icon} size={20} color={DashboardColors.accent} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.dashboardCardTitle}>{item.title}</Text>
-                  <Text style={styles.dashboardCardDesc}>{item.description}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={DashboardColors.textMuted} />
+              <View style={styles.navCardIconCircle}>
+                <Ionicons name={item.icon} size={22} color={DashboardColors.accent} />
               </View>
+              <Text style={styles.navCardTitle}>{item.title}</Text>
+              <Text style={styles.navCardDesc} numberOfLines={2}>{item.description}</Text>
             </Pressable>
           ))}
         </View>
@@ -518,41 +543,40 @@ const styles = StyleSheet.create({
   dashboardScroll: {
     paddingBottom: 100,
   },
-  // Dashboard cards
-  dashboardCards: {
+  // Navigation grid
+  navGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.md,
     paddingHorizontal: Spacing.xl,
     marginTop: Spacing.xl,
   },
-  dashboardCard: {
+  navCard: {
     backgroundColor: DashboardColors.surface,
     borderWidth: 1,
     borderColor: DashboardColors.border,
     borderRadius: Radius.lg,
     padding: Spacing.lg,
+    width: '47.5%' as any,
   },
-  cardIconRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  cardIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  navCardIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: DashboardColors.accentDim,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: Spacing.sm,
   },
-  dashboardCardTitle: {
-    fontSize: 16,
-    fontWeight: '600' as const,
+  navCardTitle: {
+    fontSize: 15,
+    fontWeight: '700' as const,
     letterSpacing: -0.2,
     color: DashboardColors.textPrimary,
   },
-  dashboardCardDesc: {
-    fontSize: 13,
-    lineHeight: 18,
+  navCardDesc: {
+    fontSize: 12,
+    lineHeight: 16,
     marginTop: 2,
     color: DashboardColors.textSecondary,
   },

@@ -117,6 +117,7 @@ export default function RootLayout() {
           <Stack.Screen name="builder-edit-profile" options={{ fullScreenGestureEnabled: false }} />
           <Stack.Screen name="my-jobs" />
           <Stack.Screen name="all-trades" />
+          <Stack.Screen name="messages" />
           <Stack.Screen name="billing" />
           <Stack.Screen name="settings" />
           <Stack.Screen name="help" />

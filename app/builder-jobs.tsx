@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -400,6 +400,8 @@ export default function BuilderJobsFeed() {
   const colors = Colors[colorScheme];
   const teal = colors.teal;
   const router = useRouter();
+  const params = useLocalSearchParams<{ type?: string }>();
+  const jobType = params.type || 'all'; // 'commercial', 'residential', or 'all'
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
@@ -442,6 +444,13 @@ export default function BuilderJobsFeed() {
         .select('id, title, description, trade_category, suburb, postcode, urgency, budget, status, created_at, customer_id')
         .eq('status', 'open')
         .order('created_at', { ascending: false });
+
+      // Filter by job type (commercial = enterprise, residential = customer)
+      if (jobType === 'commercial') {
+        query = query.eq('poster_type', 'enterprise');
+      } else if (jobType === 'residential') {
+        query = query.eq('poster_type', 'customer');
+      }
 
       if (filterUrgency) {
         query = query.eq('urgency', filterUrgency);
@@ -568,7 +577,9 @@ export default function BuilderJobsFeed() {
                 <MaterialIcons name="arrow-back" size={20} color="#fff" />
               </Pressable>
               <View style={styles.headerCenter}>
-                <Text style={styles.headerTitle}>Open Jobs</Text>
+                <Text style={styles.headerTitle}>
+                  {jobType === 'commercial' ? 'Project Jobs' : jobType === 'residential' ? 'Home Jobs' : 'Open Jobs'}
+                </Text>
                 <Text style={styles.headerSubtitle}>
                   {loading ? '...' : `${jobs.length} job${jobs.length !== 1 ? 's' : ''} available`}
                   {builderTrade ? ` · ${capitalise(builderTrade)}` : ''}

@@ -212,6 +212,12 @@ export function SideDrawer({ visible, onClose, builderMode = false }: SideDrawer
   // ─── Drawer items ─────────────────────────────────────────────────
 
   const mainItems: DrawerItem[] = [
+    ...(!userInfo.isGuest ? [{
+      key: 'messages',
+      label: 'Messages',
+      icon: <MaterialIcons name="chat-bubble-outline" size={20} color={colors.textSecondary} />,
+      onPress: () => navigate('/messages'),
+    }] : []),
     ...(builderMode ? [{
       key: 'billing',
       label: 'Billing',

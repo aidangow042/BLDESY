@@ -28,6 +28,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { geocode } from '@/lib/geo';
 import { uploadImage, uploadImages, isLocalUri } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
+import { VerifyCredentialsForm } from '@/components/builder/verify-credentials-form';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COVER_HEIGHT = 180;
@@ -82,7 +83,7 @@ const SPECIALTY_SUGGESTIONS = [
 
 const TEAM_SIZE_OPTIONS = ['Solo', '2-3 people', '4-5 people', '6-10 people', '10+ people'];
 
-const STEP_LABELS = ['Photos & Info', 'Specialties', 'Portfolio', 'Location', 'Availability'];
+const STEP_LABELS = ['Photos & Info', 'Specialties', 'Portfolio', 'Location', 'Availability', 'Credentials'];
 
 type ProjectDraft = {
   id: string;
@@ -232,6 +233,7 @@ export default function EditProfileScreen() {
 
   // Credentials / Documents
   const [credentials, setCredentials] = useState<CredentialDraft[]>([]);
+  const [credentialsVerified, setCredentialsVerified] = useState<any>(null);
 
   // Team Members
   const [teamMembers, setTeamMembers] = useState<TeamMemberDraft[]>([]);
@@ -254,7 +256,7 @@ export default function EditProfileScreen() {
 
     const { data, error } = await supabase
       .from('builder_profiles')
-      .select('id, user_id, business_name, trade_category, suburb, postcode, bio, phone, email, website, profile_photo_url, cover_photo_url, projects, specialties, credentials, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km')
+      .select('id, user_id, business_name, trade_category, suburb, postcode, bio, phone, email, website, profile_photo_url, cover_photo_url, projects, specialties, credentials, credentials_verified, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km')
       .eq('user_id', userData.user.id)
       .maybeSingle();
 
@@ -286,6 +288,7 @@ export default function EditProfileScreen() {
       // Projects, credentials, team members from jsonb
       if (Array.isArray(data.projects)) setProjects(data.projects);
       if (Array.isArray(data.credentials)) setCredentials(data.credentials);
+      if (data.credentials_verified) setCredentialsVerified(data.credentials_verified);
       if (Array.isArray(data.team_members)) setTeamMembers(data.team_members);
       if (Array.isArray(data.faqs)) setFaqs(data.faqs);
     }
@@ -1938,6 +1941,15 @@ export default function EditProfileScreen() {
             {step === 3 && renderStep3()}
             {step === 4 && renderStep4()}
             {step === 5 && renderStep5()}
+            {step === 6 && (
+              <View style={styles.stepContainer}>
+                <VerifyCredentialsForm
+                  tradeCategory={tradeCategory}
+                  existingCredentials={credentialsVerified}
+                  onVerified={(creds) => setCredentialsVerified(creds)}
+                />
+              </View>
+            )}
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -1958,7 +1970,7 @@ export default function EditProfileScreen() {
           )}
         </Pressable>
 
-        {step < 5 ? (
+        {step < 6 ? (
           <Pressable
             onPress={() => animateToStep(step, step + 1)}
             style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.85 }]}

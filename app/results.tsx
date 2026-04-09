@@ -114,6 +114,7 @@ type BuilderResult = {
   abn: string | null;
   license_key: string | null;
   credentials: any[] | null;
+  credentials_verified: any | null;
   _distance: number | null;
   _matchScore: number;
   _matchLabel: string;
@@ -121,76 +122,92 @@ type BuilderResult = {
 
 type SortMode = 'best' | 'closest' | 'rated' | 'available';
 
-// ─── Match score calculator ──────────────────────────────────────────────────
+// ─── 100-point match score algorithm ─────────────────────────────────────────
+// Trade (30) + Keywords (25) + Availability (12) + Response Time (8) +
+// Distance (15) + Credentials (10) = 100 points max
+
+const RT_SCORES: Record<string, number> = {
+  'Within 1 hour': 8, 'Within 4 hours': 6, 'Within 24 hours': 4,
+  'Within 2 days': 2, 'Within a week': 1,
+};
 
 function computeMatchScore(
   builder: any,
   searchKeywords: string[],
   urgencyOrder: string[] | null,
   maxDistance: number,
+  searchTrade?: string,
+  urgency?: string,
 ): { score: number; label: string } {
-  // Optimistic scoring: builders that match trade + are in radius start high.
-  // Base score: 78 (same trade category is already filtered by query).
-  // Bonuses push toward 95-99. Penalties pull down for weak fits.
-  let score = 78;
+  let total = 0;
+  const DEFAULT_RADIUS_KM = 30;
 
-  // ── Distance bonus/penalty (±12) ──
-  if (builder._distance != null && builder.radius_km) {
-    const ratio = builder._distance / builder.radius_km;
-    if (ratio <= 0.3) score += 12;        // very close
-    else if (ratio <= 0.6) score += 8;    // comfortably in range
-    else if (ratio <= 1.0) score += 4;    // at edge of radius
-    else score -= 10;                      // outside their radius
-  } else if (builder._distance != null && maxDistance > 0) {
-    const distRatio = 1 - Math.min(builder._distance / maxDistance, 1);
-    score += Math.round(distRatio * 10);
-  }
+  // 1. Trade match (30 pts)
+  const searchedTrades = (searchTrade || builder.trade_category || '').toLowerCase().split(',').map((t: string) => t.trim());
+  const primaryMatch = searchedTrades.includes(builder.trade_category?.toLowerCase());
+  if (primaryMatch) total += 30;
+  else total += 15; // partial match (already filtered by query)
 
-  // ── Keyword match bonus (up to +10) ──
+  // 2. Keywords / Specialties (25 pts)
   if (searchKeywords.length > 0) {
-    const specLower = (builder.specialties ?? []).map((s: string) => s.toLowerCase());
-    const bioLower = (builder.bio ?? '').toLowerCase();
-    const nameLower = (builder.business_name ?? '').toLowerCase();
-    let keywordHits = 0;
+    const searchable = [
+      builder.business_name ?? '',
+      builder.bio ?? '',
+      ...(builder.specialties ?? []),
+      ...(builder.projects ?? []).map((p: any) => `${p.title || ''} ${p.description || ''}`),
+    ].join(' ').toLowerCase();
+
+    const perKw = Math.round(25 / searchKeywords.length);
+    let kwPoints = 0;
     for (const kw of searchKeywords) {
-      const kwLower = kw.toLowerCase();
-      if (
-        specLower.some((s: string) => s.includes(kwLower)) ||
-        bioLower.includes(kwLower) ||
-        nameLower.includes(kwLower)
-      ) {
-        keywordHits++;
-      }
+      if (searchable.includes(kw.toLowerCase())) kwPoints += perKw;
     }
-    const hitRatio = keywordHits / searchKeywords.length;
-    score += Math.round(hitRatio * 10);
-    // Penalty if no keywords match at all
-    if (keywordHits === 0) score -= 8;
+    total += Math.min(kwPoints, 25);
   }
 
-  // ── Availability bonus (+3 to +5) / penalty ──
-  if (builder.availability === 'available') score += 5;
-  else if (builder.availability === 'limited') score += 2;
-  else if (builder.availability === 'unavailable') score -= 12;
-
-  // ── Urgency capacity match (+3) ──
-  if (urgencyOrder && builder.urgency_capacity?.length) {
-    const uScore = getUrgencyScore(builder.urgency_capacity, urgencyOrder);
-    if (uScore === 0) score += 3;
-    else if (uScore === 1) score += 1;
+  // 3. Availability (12 pts) — urgency-aware
+  const urg = urgency || '';
+  if (!urg || urg === 'any' || urg === 'flexible') {
+    if (builder.availability === 'available') total += 12;
+    else if (builder.availability === 'limited') total += 8;
+    else total += 2;
+  } else if (urg === 'asap') {
+    if (builder.availability === 'available') total += 12;
+    else if (builder.availability === 'limited') total += 4;
+  } else if (urg === 'this_week') {
+    if (builder.availability === 'available') total += 12;
+    else if (builder.availability === 'limited') total += 8;
   }
 
-  // ── Credibility bonuses (up to +4) ──
-  if (builder.license_key) score += 1;
-  if (builder.abn) score += 1;
-  if (builder.credentials?.some((c: any) => c.type === 'insurance')) score += 1;
-  if (builder.projects?.length > 0) score += 1;
+  // 4. Response time (8 pts)
+  total += RT_SCORES[builder.response_time ?? ''] ?? 0;
 
-  // Clamp between 45 and 99
-  const pct = Math.max(45, Math.min(99, score));
+  // 5. Distance proximity (15 pts) — linear scale
+  const bRadius = builder.radius_km ?? DEFAULT_RADIUS_KM;
+  if (builder._distance != null && bRadius > 0) {
+    const ratio = Math.max(0, 1 - builder._distance / bRadius);
+    total += Math.round(15 * ratio);
+  } else {
+    total += 3; // fallback for text-matched builders
+  }
+
+  // 6. Credentials (10 pts)
+  const cv = builder.credentials_verified;
+  if (cv?.abn?.verified) total += 3;
+  if (cv?.licences?.some((l: any) => l.verified)) total += 4;
+  if (cv?.insurance?.verified) total += 3;
+  // Fallback to old credentials system
+  if (!cv) {
+    if (builder.abn) total += 2;
+    if (builder.license_key) total += 2;
+    if (builder.credentials?.some((c: any) => c.type === 'insurance')) total += 2;
+    if (builder.projects?.length > 0) total += 1;
+  }
+
+  const pct = Math.max(20, Math.min(99, total));
   let label = 'Partial match';
-  if (pct >= 90) label = 'Strong match';
-  else if (pct >= 75) label = 'Good match';
+  if (pct >= 85) label = 'Strong match';
+  else if (pct >= 65) label = 'Good match';
 
   return { score: pct, label };
 }
@@ -587,7 +604,7 @@ export default function ResultsScreen() {
     let query = supabase
       .from('builder_profiles')
       .select(
-        'id, business_name, trade_category, suburb, postcode, bio, latitude, longitude, radius_km, urgency_capacity, availability, availability_note, response_time, profile_photo_url, cover_photo_url, projects, specialties, abn, license_key, credentials',
+        'id, business_name, trade_category, suburb, postcode, bio, latitude, longitude, radius_km, urgency_capacity, availability, availability_note, response_time, profile_photo_url, cover_photo_url, projects, specialties, abn, license_key, credentials, credentials_verified',
       )
       .eq('approved', true);
 
@@ -644,7 +661,7 @@ export default function ResultsScreen() {
     const urgencyOrder = params.urgency ? URGENCY_PRIORITY[params.urgency] : null;
     const maxDist = Math.max(...results.map((b) => b._distance ?? 0), 1);
     results = results.map((b) => {
-      const { score, label } = computeMatchScore(b, searchKeywords, urgencyOrder, maxDist);
+      const { score, label } = computeMatchScore(b, searchKeywords, urgencyOrder, maxDist, params.trade, params.urgency);
       return { ...b, _matchScore: score, _matchLabel: label };
     });
 
