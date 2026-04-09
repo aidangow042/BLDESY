@@ -267,6 +267,12 @@ export default function PortalScreen() {
       onPress: () => router.push('/messages'),
     },
     {
+      icon: 'star-outline',
+      title: 'Subscribe',
+      description: 'Upgrade to BLDESY Pro for full access',
+      onPress: () => router.push('/subscribe' as any),
+    },
+    {
       icon: 'card-outline',
       title: 'Billing',
       description: 'Manage subscription and payment details',

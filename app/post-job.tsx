@@ -112,7 +112,15 @@ type State = {
   contactPhone: string;
   contactEmail: string;
   aiDescLoading: boolean;
+  // Enterprise fields
+  budget: string;
+  workersNeeded: string;
+  dayRate: string;
+  contractDuration: string;
+  startDate: string;
+  siteRequirements: string;
   // Meta
+  isEnterprise: boolean;
   draftId: string | null;
   submitting: boolean;
   aiAssisted: boolean;
@@ -146,6 +154,13 @@ const initialState: State = {
   contactPhone: '',
   contactEmail: '',
   aiDescLoading: false,
+  budget: '',
+  workersNeeded: '1',
+  dayRate: '',
+  contractDuration: '',
+  startDate: '',
+  siteRequirements: '',
+  isEnterprise: false,
   draftId: null,
   submitting: false,
   aiAssisted: false,
@@ -237,6 +252,22 @@ export default function PostJobScreen() {
       });
     }
   }, [isEditMode]);
+
+  // Check if user is enterprise
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('enterprise_profiles')
+        .select('status')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (data && ((data as any).status === 'approved' || (data as any).status === 'active')) {
+        dispatch({ type: 'SET', field: 'isEnterprise', value: true });
+      }
+    })();
+  }, []);
 
   // Animations
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -515,6 +546,15 @@ export default function PostJobScreen() {
         postcode: s.postcode.trim(),
         contact_phone: s.contactPhone.trim() || null,
         contact_email: s.contactEmail.trim() || null,
+        budget: s.budget.trim() || null,
+        poster_type: s.isEnterprise ? 'enterprise' : 'customer',
+        ...(s.isEnterprise ? {
+          workers_needed: parseInt(s.workersNeeded) || 1,
+          day_rate: s.dayRate.trim() || null,
+          contract_duration: s.contractDuration.trim() || null,
+          start_date: s.startDate.trim() || null,
+          site_requirements: s.siteRequirements.trim() || null,
+        } : {}),
       };
 
       let jobId: string | null = null;
@@ -1214,6 +1254,67 @@ export default function PostJobScreen() {
             />
           </View>
         </View>
+
+        {/* Enterprise-only fields */}
+        {s.isEnterprise && (
+          <View style={styles.fieldGroup}>
+            <ThemedText style={[styles.label, { color: colors.textSecondary }]}>
+              PROJECT DETAILS
+            </ThemedText>
+            <View style={[styles.locationInputWrap, { backgroundColor: '#fff', borderColor: colors.border }]}>
+              <Ionicons name="cash-outline" size={18} color={colors.textSecondary} />
+              <TextInput
+                style={[styles.locationInput, { color: colors.text }]}
+                placeholder="Budget (e.g. $5,000 - $10,000)"
+                placeholderTextColor={colors.textSecondary}
+                value={s.budget}
+                onChangeText={(t) => dispatch({ type: 'SET', field: 'budget', value: t })}
+              />
+            </View>
+            <View style={[styles.locationInputWrap, { backgroundColor: '#fff', borderColor: colors.border }]}>
+              <Ionicons name="people-outline" size={18} color={colors.textSecondary} />
+              <TextInput
+                style={[styles.locationInput, { color: colors.text }]}
+                placeholder="Workers needed"
+                placeholderTextColor={colors.textSecondary}
+                value={s.workersNeeded}
+                onChangeText={(t) => dispatch({ type: 'SET', field: 'workersNeeded', value: t })}
+                keyboardType="number-pad"
+                maxLength={3}
+              />
+            </View>
+            <View style={[styles.locationInputWrap, { backgroundColor: '#fff', borderColor: colors.border }]}>
+              <Ionicons name="wallet-outline" size={18} color={colors.textSecondary} />
+              <TextInput
+                style={[styles.locationInput, { color: colors.text }]}
+                placeholder="Day rate (e.g. $450/day)"
+                placeholderTextColor={colors.textSecondary}
+                value={s.dayRate}
+                onChangeText={(t) => dispatch({ type: 'SET', field: 'dayRate', value: t })}
+              />
+            </View>
+            <View style={[styles.locationInputWrap, { backgroundColor: '#fff', borderColor: colors.border }]}>
+              <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} />
+              <TextInput
+                style={[styles.locationInput, { color: colors.text }]}
+                placeholder="Contract duration (e.g. 3 months)"
+                placeholderTextColor={colors.textSecondary}
+                value={s.contractDuration}
+                onChangeText={(t) => dispatch({ type: 'SET', field: 'contractDuration', value: t })}
+              />
+            </View>
+            <View style={[styles.locationInputWrap, { backgroundColor: '#fff', borderColor: colors.border }]}>
+              <Ionicons name="shield-checkmark-outline" size={18} color={colors.textSecondary} />
+              <TextInput
+                style={[styles.locationInput, { color: colors.text }]}
+                placeholder="Site requirements (e.g. White card required)"
+                placeholderTextColor={colors.textSecondary}
+                value={s.siteRequirements}
+                onChangeText={(t) => dispatch({ type: 'SET', field: 'siteRequirements', value: t })}
+              />
+            </View>
+          </View>
+        )}
       </View>
     );
   }

@@ -141,7 +141,7 @@ export default function AllTradesScreen() {
   })).filter((cat) => cat.trades.length > 0);
 
   function selectTrade(tradeName: string) {
-    router.navigate({ pathname: '/(tabs)/map', params: { selectedTrade: tradeName.toLowerCase() } });
+    router.push({ pathname: '/results', params: { trade_category: tradeName.toLowerCase(), trade: tradeName } } as any);
   }
 
   function renderIcon(trade: TradeEntry) {
