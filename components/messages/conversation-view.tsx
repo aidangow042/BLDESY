@@ -107,16 +107,48 @@ export function ConversationView({ conversation, currentUserId, onBack }: Props)
     other_user.avatar_url ||
     `https://ui-avatars.com/api/?name=${encodeURIComponent(other_user.name)}&background=0d9488&color=fff&size=96`;
 
-  function renderItem({ item }: { item: Message }) {
+  function renderItem({ item, index }: { item: Message; index: number }) {
+    const prev = index > 0 ? messages[index - 1] : null;
+    const isGrouped = prev ? prev.sender_id === item.sender_id && (new Date(item.created_at).getTime() - new Date(prev.created_at).getTime() < 120_000) : false;
+
+    // Date divider
+    const itemDate = item.created_at.slice(0, 10);
+    const prevDate = prev?.created_at.slice(0, 10);
+    const showDate = !prev || itemDate !== prevDate;
+
     return (
-      <MessageBubble
-        body={item.body}
-        isMine={item.sender_id === currentUserId}
-        timestamp={item.created_at}
-        attachmentUrl={item.attachment_url}
-        attachmentType={item.attachment_type}
-      />
+      <>
+        {showDate && (
+          <View style={styles.dateDivider}>
+            <View style={[styles.dateLine, { backgroundColor: colors.border }]} />
+            <View style={[styles.datePill, { backgroundColor: isDark ? colors.surface : '#f1f5f9' }]}>
+              <Text style={[styles.dateText, { color: colors.textSecondary }]}>
+                {formatDateLabel(item.created_at)}
+              </Text>
+            </View>
+            <View style={[styles.dateLine, { backgroundColor: colors.border }]} />
+          </View>
+        )}
+        <MessageBubble
+          body={item.body}
+          isMine={item.sender_id === currentUserId}
+          timestamp={item.created_at}
+          attachmentUrl={item.attachment_url}
+          attachmentType={item.attachment_type}
+          isGrouped={isGrouped}
+        />
+      </>
     );
+  }
+
+  function formatDateLabel(iso: string) {
+    const d = new Date(iso);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (d.toDateString() === today.toDateString()) return 'Today';
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
   function renderDateDivider(date: string) {
@@ -249,8 +281,13 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 1,
   },
+  datePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
   dateText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
 });
