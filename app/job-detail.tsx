@@ -85,6 +85,26 @@ type Job = {
   status: string;
   created_at: string;
   customer_id: string;
+  poster_type: string | null;
+  workers_needed: number | null;
+  day_rate: string | null;
+  contract_duration: string | null;
+  start_date: string | null;
+  site_requirements: string | null;
+  photo_urls: string[] | null;
+};
+
+type Applicant = {
+  id: string;
+  builder_id: string;
+  status: string;
+  message: string | null;
+  created_at: string;
+  business_name: string;
+  trade_category: string;
+  suburb: string;
+  profile_photo_url: string | null;
+  phone: string | null;
 };
 
 type JobPhoto = { id: string; file_path: string; is_cover: boolean };
@@ -113,6 +133,10 @@ export default function JobDetailScreen() {
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [isOwner, setIsOwner] = useState(false);
+  const [applicants, setApplicants] = useState<Applicant[]>([]);
+  const [showApplicants, setShowApplicants] = useState(false);
+  const [updatingAppId, setUpdatingAppId] = useState<string | null>(null);
 
   const sheetRef = useRef<BottomSheet>(null);
   const sheetSnaps = useMemo(() => ['45%'], []);
@@ -129,7 +153,7 @@ export default function JobDetailScreen() {
     setLoading(true);
 
     const [jobRes, photoRes, docRes] = await Promise.all([
-      supabase.from('jobs').select('id, title, description, trade_category, suburb, postcode, urgency, budget, status, created_at, customer_id').eq('id', id).single(),
+      supabase.from('jobs').select('id, title, description, trade_category, suburb, postcode, urgency, budget, status, created_at, customer_id, poster_type, workers_needed, day_rate, contract_duration, start_date, site_requirements, photo_urls').eq('id', id).single(),
       supabase.from('job_photos').select('id, file_path, is_cover').eq('job_id', id).order('is_cover', { ascending: false }),
       supabase.from('job_documents').select('id, file_path, file_name').eq('job_id', id),
     ]);
@@ -164,9 +188,58 @@ export default function JobDetailScreen() {
       // Fetch contact info via server-side RPC (only returns data for job owner or accepted applicant)
       const { data: contact } = await supabase.rpc('get_job_contact', { p_job_id: id });
       if (contact) setContactInfo(contact);
+
+      // If owner, fetch applicants
+      if (jobRes.data && userData.user.id === jobRes.data.customer_id) {
+        setIsOwner(true);
+        const { data: apps } = await supabase
+          .from('applications')
+          .select('id, builder_id, status, message, created_at, builder_profiles(business_name, trade_category, suburb, profile_photo_url, phone)')
+          .eq('job_id', id)
+          .order('created_at', { ascending: false });
+        setApplicants((apps ?? []).map((a: any) => ({
+          id: a.id, builder_id: a.builder_id, status: a.status, message: a.message, created_at: a.created_at,
+          business_name: a.builder_profiles?.business_name ?? 'Unknown',
+          trade_category: a.builder_profiles?.trade_category ?? '',
+          suburb: a.builder_profiles?.suburb ?? '',
+          profile_photo_url: a.builder_profiles?.profile_photo_url ?? null,
+          phone: a.builder_profiles?.phone ?? null,
+        })));
+      }
     }
 
     setLoading(false);
+  }
+
+  async function handleUpdateApp(appId: string, newStatus: 'accepted' | 'rejected') {
+    setUpdatingAppId(appId);
+    await supabase.from('applications').update({ status: newStatus }).eq('id', appId);
+    // Refresh
+    const { data: apps } = await supabase
+      .from('applications')
+      .select('id, builder_id, status, message, created_at, builder_profiles(business_name, trade_category, suburb, profile_photo_url, phone)')
+      .eq('job_id', id)
+      .order('created_at', { ascending: false });
+    setApplicants((apps ?? []).map((a: any) => ({
+      id: a.id, builder_id: a.builder_id, status: a.status, message: a.message, created_at: a.created_at,
+      business_name: a.builder_profiles?.business_name ?? 'Unknown',
+      trade_category: a.builder_profiles?.trade_category ?? '',
+      suburb: a.builder_profiles?.suburb ?? '',
+      profile_photo_url: a.builder_profiles?.profile_photo_url ?? null,
+      phone: a.builder_profiles?.phone ?? null,
+    })));
+    setUpdatingAppId(null);
+  }
+
+  async function handleCloseJob() {
+    if (!job) return;
+    Alert.alert('Close Job', 'Are you sure? This will stop builders from applying.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Close Job', style: 'destructive', onPress: async () => {
+        await supabase.from('jobs').update({ status: 'closed' }).eq('id', job.id);
+        setJob({ ...job, status: 'closed' });
+      }},
+    ]);
   }
 
   /* ─── Apply flow ─────────────────────────────────────────── */
@@ -365,6 +438,27 @@ export default function JobDetailScreen() {
               {job.description || 'No description provided.'}
             </Text>
 
+            {/* Enterprise job details */}
+            {(job.day_rate || job.workers_needed || job.contract_duration || job.start_date || job.site_requirements) && (
+              <>
+                <View style={styles.descriptionDivider} />
+                <Text style={[styles.sectionTitle, { marginTop: 4 }]}>Job Details</Text>
+                <View style={styles.detailsGrid}>
+                  {job.day_rate && <View style={styles.detailItem}><Text style={styles.detailLabel}>Day Rate</Text><Text style={styles.detailValue}>{job.day_rate}</Text></View>}
+                  {job.budget && <View style={styles.detailItem}><Text style={styles.detailLabel}>Budget</Text><Text style={styles.detailValue}>{job.budget}</Text></View>}
+                  {job.contract_duration && <View style={styles.detailItem}><Text style={styles.detailLabel}>Duration</Text><Text style={styles.detailValue}>{job.contract_duration}</Text></View>}
+                  {job.start_date && <View style={styles.detailItem}><Text style={styles.detailLabel}>Start Date</Text><Text style={styles.detailValue}>{new Date(job.start_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</Text></View>}
+                  {job.workers_needed && job.workers_needed > 1 && <View style={styles.detailItem}><Text style={styles.detailLabel}>Workers Needed</Text><Text style={styles.detailValue}>{job.workers_needed}</Text></View>}
+                </View>
+                {job.site_requirements && (
+                  <View style={{ marginTop: 8 }}>
+                    <Text style={styles.detailLabel}>Site Requirements</Text>
+                    <Text style={[styles.descriptionText, { marginTop: 4 }]}>{job.site_requirements}</Text>
+                  </View>
+                )}
+              </>
+            )}
+
             {/* Posted by inline */}
             <View style={styles.postedByInline}>
               {customer?.avatar_url ? (
@@ -442,6 +536,109 @@ export default function JobDetailScreen() {
                     </View>
                     <MaterialIcons name="open-in-new" size={18} color="#94A3B8" />
                   </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          {/* ── Owner: Edit/Close buttons ─── */}
+          {isOwner && (
+            <View style={[styles.card, Shadows.sm, { flexDirection: 'row', gap: 10 }]}>
+              <Pressable
+                onPress={() => router.push({ pathname: '/post-job', params: { editId: job.id, editTitle: job.title, editTrade: job.trade_category, editUrgency: job.urgency, editDescription: job.description || '', editSuburb: job.suburb, editPostcode: job.postcode } } as any)}
+                style={[styles.ownerBtn, { borderColor: '#4f46e5' }]}
+              >
+                <Ionicons name="create-outline" size={16} color="#4f46e5" />
+                <Text style={[styles.ownerBtnText, { color: '#4f46e5' }]}>Edit Job</Text>
+              </Pressable>
+              {job.status === 'open' && (
+                <Pressable onPress={handleCloseJob} style={[styles.ownerBtn, { borderColor: '#dc2626' }]}>
+                  <Ionicons name="close-circle-outline" size={16} color="#dc2626" />
+                  <Text style={[styles.ownerBtnText, { color: '#dc2626' }]}>Close Job</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+
+          {/* ── Owner: Application stats ─── */}
+          {isOwner && applicants.length > 0 && (
+            <View style={[styles.card, Shadows.sm]}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {[
+                  { label: 'Pending', count: applicants.filter(a => a.status === 'pending').length, color: '#d97706' },
+                  { label: 'Accepted', count: applicants.filter(a => a.status === 'accepted').length, color: '#059669' },
+                  { label: 'Rejected', count: applicants.filter(a => a.status === 'rejected').length, color: '#dc2626' },
+                ].map(s => (
+                  <View key={s.label} style={[styles.statBox, { borderColor: colors.border }]}>
+                    <Text style={[styles.statNumber, { color: colors.text }]}>{s.count}</Text>
+                    <Text style={[styles.statLabel, { color: s.color }]}>{s.label}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* ── Owner: Applicants list ─── */}
+          {isOwner && applicants.length > 0 && (
+            <View style={[styles.card, Shadows.sm]}>
+              <Pressable onPress={() => setShowApplicants(!showApplicants)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="people-outline" size={18} color="#4f46e5" />
+                <Text style={[styles.sectionTitle, { flex: 1, marginBottom: 0 }]}>View Applicants</Text>
+                <View style={{ backgroundColor: '#eef2ff', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                  <Text style={{ color: '#4f46e5', fontSize: 12, fontWeight: '700' }}>{applicants.length}</Text>
+                </View>
+                <Ionicons name={showApplicants ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
+              </Pressable>
+
+              {showApplicants && applicants.map(app => {
+                const avatarUri = app.profile_photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(app.business_name)}&background=4f46e5&color=fff&size=80`;
+                const statusColor = app.status === 'accepted' ? '#059669' : app.status === 'rejected' ? '#dc2626' : '#d97706';
+                return (
+                  <View key={app.id} style={[styles.applicantCard, { borderColor: colors.border }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <Image source={{ uri: avatarUri }} style={{ width: 44, height: 44, borderRadius: 22 }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 15, fontWeight: '600', color: colors.text }}>{app.business_name}</Text>
+                        <Text style={{ fontSize: 12, color: colors.textSecondary }}>{app.trade_category} · {app.suburb} · Applied {getRelativeTime(app.created_at)}</Text>
+                      </View>
+                      <View style={{ backgroundColor: statusColor + '15', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 }}>
+                        <Text style={{ color: statusColor, fontSize: 12, fontWeight: '600', textTransform: 'capitalize' }}>{app.status}</Text>
+                      </View>
+                    </View>
+                    {app.message && (
+                      <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc', padding: 10, borderRadius: 8, marginTop: 8 }}>
+                        <Text style={{ fontSize: 13, color: colors.text, fontStyle: 'italic' }}>"{app.message}"</Text>
+                      </View>
+                    )}
+                    {app.status === 'accepted' && app.phone && (
+                      <Text style={{ color: '#059669', fontSize: 13, fontWeight: '600', marginTop: 6 }}>Phone: {app.phone}</Text>
+                    )}
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                      {app.status === 'pending' ? (
+                        <>
+                          <Pressable onPress={() => handleUpdateApp(app.id, 'accepted')} style={[styles.appActionBtn, { backgroundColor: '#059669' }]} disabled={!!updatingAppId}>
+                            <Ionicons name="checkmark" size={14} color="#fff" />
+                            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Accept</Text>
+                          </Pressable>
+                          <Pressable onPress={() => handleUpdateApp(app.id, 'rejected')} style={[styles.appActionBtn, { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca' }]} disabled={!!updatingAppId}>
+                            <Ionicons name="close" size={14} color="#dc2626" />
+                            <Text style={{ color: '#dc2626', fontSize: 13, fontWeight: '600' }}>Reject</Text>
+                          </Pressable>
+                        </>
+                      ) : (
+                        <>
+                          <Pressable onPress={() => router.push({ pathname: '/builder-profile', params: { id: app.builder_id } } as any)} style={[styles.appActionBtn, { borderWidth: 1, borderColor: colors.border }]}>
+                            <Ionicons name="person-outline" size={14} color={colors.text} />
+                            <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>View Profile</Text>
+                          </Pressable>
+                          <Pressable onPress={() => router.push({ pathname: '/messages', params: { recipientId: app.builder_id } } as any)} style={[styles.appActionBtn, { borderWidth: 1, borderColor: colors.border }]}>
+                            <Ionicons name="mail-outline" size={14} color={colors.text} />
+                            <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>Message</Text>
+                          </Pressable>
+                        </>
+                      )}
+                    </View>
+                  </View>
                 );
               })}
             </View>
@@ -1087,4 +1284,23 @@ const styles = StyleSheet.create({
     padding: 24,
     gap: 8,
   },
+
+  /* Enterprise details grid */
+  detailsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 4 },
+  detailItem: { width: '45%' as any },
+  detailLabel: { fontSize: 12, fontWeight: '500', color: '#64748b', letterSpacing: 0.2 },
+  detailValue: { fontSize: 15, fontWeight: '700', color: '#0f172a', marginTop: 2 },
+
+  /* Owner buttons */
+  ownerBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 40, borderRadius: 10, borderWidth: 1.5 },
+  ownerBtnText: { fontSize: 14, fontWeight: '600' },
+
+  /* Application stats */
+  statBox: { flex: 1, alignItems: 'center', paddingVertical: 12, borderWidth: 1, borderRadius: 12 },
+  statNumber: { fontSize: 24, fontWeight: '800' },
+  statLabel: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+
+  /* Applicant cards */
+  applicantCard: { borderWidth: 1, borderRadius: 12, padding: 14, marginTop: 12 },
+  appActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
 });
