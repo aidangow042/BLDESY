@@ -159,6 +159,7 @@ export default function TabLayout() {
         name="saved"
         options={{
           title: 'Saved',
+          swipeEnabled: false,
           tabBarIcon: ({ color }: { color: string }) => (
             <IconSymbol size={26} name="bookmark" color={color} />
           ),
