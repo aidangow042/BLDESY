@@ -67,11 +67,15 @@ export default function MessagesScreen() {
     })();
   }, [userId, params.recipientId]);
 
-  // Poll for new conversations
+  // Real-time conversation updates (replaces polling)
   useEffect(() => {
     if (!userId) return;
-    const interval = setInterval(loadConversations, 15_000);
-    return () => clearInterval(interval);
+    const channel = supabase
+      .channel('conversations-list')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => loadConversations())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => loadConversations())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [userId, loadConversations]);
 
   async function handleRefresh() {

@@ -98,15 +98,16 @@ export default function EnterpriseDashboardScreen() {
     if (!ep) { setLoading(false); router.replace('/enterprise-signup' as any); return; }
     setProfile(ep as any);
 
-    const [jobsRes, appsRes] = await Promise.all([
-      supabase.from('jobs').select('id, status').eq('customer_id', user.id),
-      supabase.from('applications').select('id, status, job_id').in('job_id',
-        (await supabase.from('jobs').select('id').eq('customer_id', user.id)).data?.map((j: any) => j.id) || []
-      ),
-    ]);
+    // Fetch jobs first, then use IDs for applications (avoids duplicate query)
+    const { data: jobsData } = await supabase.from('jobs').select('id, status').eq('customer_id', user.id);
+    const jobs = jobsData || [];
+    const jobIds = jobs.map((j: any) => j.id);
 
-    const jobs = jobsRes.data || [];
-    const apps = appsRes.data || [];
+    let apps: any[] = [];
+    if (jobIds.length > 0) {
+      const { data: appsData } = await supabase.from('applications').select('id, status, job_id').in('job_id', jobIds);
+      apps = appsData || [];
+    }
 
     setMetrics({
       activeJobs: jobs.filter((j: any) => j.status === 'open' || j.status === 'in_progress').length,

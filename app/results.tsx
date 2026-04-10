@@ -571,8 +571,7 @@ export default function ResultsScreen() {
   // ─── Fetch builders ──────────────────────────────────────────────────
 
   useEffect(() => {
-    fetchBuilders();
-    fetchSavedBuilders();
+    Promise.all([fetchBuilders(), fetchSavedBuilders()]);
   }, [params.suburb, params.trade_category, params.urgency, params.keywords]);
 
   async function fetchSavedBuilders() {
