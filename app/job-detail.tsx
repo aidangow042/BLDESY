@@ -168,7 +168,12 @@ export default function JobDetailScreen() {
       setCustomer(prof);
     }
 
-    if (photoRes.data) setPhotos(photoRes.data);
+    // Photos: use job_photos table first, fall back to photo_urls on jobs table
+    if (photoRes.data && photoRes.data.length > 0) {
+      setPhotos(photoRes.data);
+    } else if (jobRes.data && Array.isArray(jobRes.data.photo_urls) && jobRes.data.photo_urls.length > 0) {
+      setPhotos(jobRes.data.photo_urls.map((url: string, i: number) => ({ id: `url-${i}`, file_path: url, is_cover: i === 0 })));
+    }
     if (docRes.data) setDocuments(docRes.data);
 
     const { data: userData } = await supabase.auth.getUser();
@@ -657,8 +662,8 @@ export default function JobDetailScreen() {
         </Animated.View>
       </ScrollView>
 
-      {/* ── Sticky Footer — Apply + Quick Contact ──────────── */}
-      {job.status === 'open' && (
+      {/* ── Sticky Footer — Apply + Quick Contact (builders only, not owners) ── */}
+      {job.status === 'open' && !isOwner && (
         <View style={[styles.stickyFooter, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.footerRow}>
             {/* Copy contact icons */}
@@ -851,9 +856,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  /* Header — slim green bar */
+  /* Header */
   header: {
-    backgroundColor: '#0F6E56',
+    backgroundColor: '#4338ca',
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
