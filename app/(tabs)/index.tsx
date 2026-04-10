@@ -20,7 +20,7 @@ import * as Haptics from 'expo-haptics';
 
 import { ThemedText } from '@/components/themed-text';
 import { SideDrawer } from '@/components/side-drawer';
-import { Colors, Shadows, Spacing, Type } from '@/constants/theme';
+import { Colors, Radius, Shadows, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 import { getSuburbSuggestions } from '@/lib/geo';
