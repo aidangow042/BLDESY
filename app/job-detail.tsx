@@ -405,6 +405,46 @@ export default function JobDetailScreen() {
 
         <View style={styles.cardsContainer}>
 
+          {/* ── Photos (top, under banner) ── */}
+          {photos.length > 0 && (
+            <View style={[styles.card, Shadows.sm]}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={PHOTO_WIDTH}
+                decelerationRate="fast"
+                onMomentumScrollEnd={(e) => {
+                  const idx = Math.round(e.nativeEvent.contentOffset.x / PHOTO_WIDTH);
+                  setActivePhotoIndex(idx);
+                }}
+                style={[styles.photoCarousel, { width: PHOTO_WIDTH }]}
+              >
+                {photos.map((photo, i) => (
+                  <Pressable
+                    key={photo.id}
+                    onPress={() => { setLightboxIndex(i); setLightboxVisible(true); }}
+                  >
+                    <Image
+                      source={{ uri: photo.file_path }}
+                      style={styles.photoImage}
+                      resizeMode="cover"
+                    />
+                  </Pressable>
+                ))}
+              </ScrollView>
+              {photos.length > 1 && (
+                <View style={styles.photoDots}>
+                  {photos.map((_, i) => (
+                    <View
+                      key={i}
+                      style={[styles.photoDot, { backgroundColor: i === activePhotoIndex ? '#0F6E56' : '#CBD5E1' }]}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+
           {/* ── 2. Project Details — everything about the job in one card ── */}
           <View style={[styles.card, Shadows.sm]}>
             <Text style={styles.sectionTitle}>Project Details</Text>
@@ -478,47 +518,6 @@ export default function JobDetailScreen() {
               </Text>
             </View>
           </View>
-
-          {/* ── 3. Photos ──────────────────────────────────── */}
-          {photos.length > 0 && (
-            <View style={[styles.card, Shadows.sm]}>
-              <Text style={styles.sectionTitle}>Photos ({photos.length})</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                snapToInterval={PHOTO_WIDTH}
-                decelerationRate="fast"
-                onMomentumScrollEnd={(e) => {
-                  const idx = Math.round(e.nativeEvent.contentOffset.x / PHOTO_WIDTH);
-                  setActivePhotoIndex(idx);
-                }}
-                style={[styles.photoCarousel, { width: PHOTO_WIDTH }]}
-              >
-                {photos.map((photo, i) => (
-                  <Pressable
-                    key={photo.id}
-                    onPress={() => { setLightboxIndex(i); setLightboxVisible(true); }}
-                  >
-                    <Image
-                      source={{ uri: photo.file_path }}
-                      style={styles.photoImage}
-                      resizeMode="cover"
-                    />
-                  </Pressable>
-                ))}
-              </ScrollView>
-              {photos.length > 1 && (
-                <View style={styles.photoDots}>
-                  {photos.map((_, i) => (
-                    <View
-                      key={i}
-                      style={[styles.photoDot, { backgroundColor: i === activePhotoIndex ? '#0F6E56' : '#CBD5E1' }]}
-                    />
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
 
           {/* ── 4. Plans & Documents — at the bottom ─────── */}
           {documents.length > 0 && (
