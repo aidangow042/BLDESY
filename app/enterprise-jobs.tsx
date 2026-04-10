@@ -99,7 +99,7 @@ export default function EnterpriseJobsScreen() {
     // Fetch jobs posted by this enterprise user
     const { data: jobsData, error: jobsErr } = await supabase
       .from('jobs')
-      .select('id, title, trade_category, suburb, urgency, status, workers_needed, created_at')
+      .select('id, title, trade_category, suburb, urgency, status, workers_needed, created_at, photo_urls')
       .eq('customer_id', user.id)
       .order('created_at', { ascending: false });
 
@@ -134,10 +134,12 @@ export default function EnterpriseJobsScreen() {
     }
 
     setJobs(
-      jobsData.map((j) => ({
+      jobsData.map((j: any) => ({
         ...j,
         applicant_count: countMap[j.id] || 0,
-        photos: photoMap[j.id] || [],
+        photos: photoMap[j.id]?.length
+          ? photoMap[j.id]
+          : Array.isArray(j.photo_urls) ? j.photo_urls : [],
       })),
     );
     setLoading(false);
