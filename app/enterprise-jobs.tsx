@@ -6,7 +6,9 @@
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Dimensions,
   FlatList,
+  Image,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -35,7 +37,10 @@ type Job = {
   workers_needed: number | null;
   created_at: string;
   applicant_count: number;
+  photos: string[];
 };
+
+const CARD_IMAGE_HEIGHT = 140;
 
 /* ─── Helpers ──────────────────────────────────────────────── */
 
@@ -110,22 +115,29 @@ export default function EnterpriseJobsScreen() {
       return;
     }
 
-    // Fetch application counts per job
+    // Fetch application counts and photos per job
     const jobIds = jobsData.map((j) => j.id);
-    const { data: appsData } = await supabase
-      .from('applications')
-      .select('job_id')
-      .in('job_id', jobIds);
+    const [appsRes, photosRes] = await Promise.all([
+      supabase.from('applications').select('job_id').in('job_id', jobIds),
+      supabase.from('job_photos').select('job_id, file_path').in('job_id', jobIds).order('is_cover', { ascending: false }),
+    ]);
 
     const countMap: Record<string, number> = {};
-    for (const app of appsData ?? []) {
+    for (const app of appsRes.data ?? []) {
       countMap[app.job_id] = (countMap[app.job_id] || 0) + 1;
+    }
+
+    const photoMap: Record<string, string[]> = {};
+    for (const photo of photosRes.data ?? []) {
+      if (!photoMap[photo.job_id]) photoMap[photo.job_id] = [];
+      photoMap[photo.job_id].push(photo.file_path);
     }
 
     setJobs(
       jobsData.map((j) => ({
         ...j,
         applicant_count: countMap[j.id] || 0,
+        photos: photoMap[j.id] || [],
       })),
     );
     setLoading(false);
@@ -176,6 +188,22 @@ export default function EnterpriseJobsScreen() {
           accessibilityRole="button"
           accessibilityLabel={`View ${item.title}`}
         >
+          {/* Cover photo */}
+          {item.photos.length > 0 ? (
+            <Image
+              source={{ uri: item.photos[0] }}
+              style={styles.cardImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <LinearGradient
+              colors={isDark ? ['#312e81', '#1e1b4b'] : ['#e0e7ff', '#c7d2fe']}
+              style={styles.cardImagePlaceholder}
+            >
+              <Ionicons name="image-outline" size={28} color={isDark ? '#6366f1' : '#a5b4fc'} />
+            </LinearGradient>
+          )}
+
           {/* Top row: trade pill + urgency pill + time */}
           <View style={styles.cardTopRow}>
             <View style={[styles.tradePill, { backgroundColor: indigoBg }]}>
@@ -385,7 +413,17 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: Radius.lg,
     borderWidth: 1,
-    padding: Spacing.lg,
+    overflow: 'hidden',
+  },
+  cardImage: {
+    width: '100%',
+    height: CARD_IMAGE_HEIGHT,
+  },
+  cardImagePlaceholder: {
+    width: '100%',
+    height: CARD_IMAGE_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   /* Card top row */
@@ -395,6 +433,8 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     flexWrap: 'wrap',
     marginBottom: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
   },
   tradePill: {
     borderRadius: Radius.full,
@@ -428,6 +468,7 @@ const styles = StyleSheet.create({
     ...Type.h3,
     fontWeight: '700',
     marginBottom: 4,
+    paddingHorizontal: Spacing.lg,
   },
 
   /* Location */
@@ -436,6 +477,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.lg,
   },
   locationText: {
     ...Type.caption,
@@ -446,6 +488,7 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     marginBottom: Spacing.md,
+    marginHorizontal: Spacing.lg,
   },
 
   /* Card bottom row */
@@ -454,6 +497,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
     flexWrap: 'wrap',
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.lg,
   },
   statusBadge: {
     flexDirection: 'row',
