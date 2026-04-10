@@ -139,6 +139,7 @@ export default function RootLayout() {
           <Stack.Screen name="enterprise-analytics" />
           <Stack.Screen name="enterprise-billing" />
           <Stack.Screen name="enterprise-settings" />
+          <Stack.Screen name="enterprise-job-detail" />
           <Stack.Screen name="admin" />
           <Stack.Screen name="subscribe" />
           <Stack.Screen name="messages" />

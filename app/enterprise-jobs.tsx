@@ -256,7 +256,7 @@ export default function EnterpriseJobsScreen() {
             },
             Shadows.sm,
           ]}
-          onPress={() => router.push({ pathname: '/job-detail', params: { id: item.id } } as any)}
+          onPress={() => router.push({ pathname: '/enterprise-job-detail', params: { id: item.id } } as any)}
           accessibilityRole="button"
           accessibilityLabel={`View ${item.title}`}
         >

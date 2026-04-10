@@ -546,109 +546,6 @@ export default function JobDetailScreen() {
             </View>
           )}
 
-          {/* ── Owner: Edit/Close buttons ─── */}
-          {isOwner && (
-            <View style={[styles.card, Shadows.sm, { flexDirection: 'row', gap: 10 }]}>
-              <Pressable
-                onPress={() => router.push({ pathname: '/post-job', params: { editId: job.id, editTitle: job.title, editTrade: job.trade_category, editUrgency: job.urgency, editDescription: job.description || '', editSuburb: job.suburb, editPostcode: job.postcode } } as any)}
-                style={[styles.ownerBtn, { borderColor: '#4f46e5' }]}
-              >
-                <Ionicons name="create-outline" size={16} color="#4f46e5" />
-                <Text style={[styles.ownerBtnText, { color: '#4f46e5' }]}>Edit Job</Text>
-              </Pressable>
-              {job.status === 'open' && (
-                <Pressable onPress={handleCloseJob} style={[styles.ownerBtn, { borderColor: '#dc2626' }]}>
-                  <Ionicons name="close-circle-outline" size={16} color="#dc2626" />
-                  <Text style={[styles.ownerBtnText, { color: '#dc2626' }]}>Close Job</Text>
-                </Pressable>
-              )}
-            </View>
-          )}
-
-          {/* ── Owner: Application stats ─── */}
-          {isOwner && applicants.length > 0 && (
-            <View style={[styles.card, Shadows.sm]}>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                {[
-                  { label: 'Pending', count: applicants.filter(a => a.status === 'pending').length, color: '#d97706' },
-                  { label: 'Accepted', count: applicants.filter(a => a.status === 'accepted').length, color: '#059669' },
-                  { label: 'Rejected', count: applicants.filter(a => a.status === 'rejected').length, color: '#dc2626' },
-                ].map(s => (
-                  <View key={s.label} style={[styles.statBox, { borderColor: colors.border }]}>
-                    <Text style={[styles.statNumber, { color: colors.text }]}>{s.count}</Text>
-                    <Text style={[styles.statLabel, { color: s.color }]}>{s.label}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* ── Owner: Applicants list ─── */}
-          {isOwner && applicants.length > 0 && (
-            <View style={[styles.card, Shadows.sm]}>
-              <Pressable onPress={() => setShowApplicants(!showApplicants)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Ionicons name="people-outline" size={18} color="#4f46e5" />
-                <Text style={[styles.sectionTitle, { flex: 1, marginBottom: 0 }]}>View Applicants</Text>
-                <View style={{ backgroundColor: '#eef2ff', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
-                  <Text style={{ color: '#4f46e5', fontSize: 12, fontWeight: '700' }}>{applicants.length}</Text>
-                </View>
-                <Ionicons name={showApplicants ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
-              </Pressable>
-
-              {showApplicants && applicants.map(app => {
-                const avatarUri = app.profile_photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(app.business_name)}&background=4f46e5&color=fff&size=80`;
-                const statusColor = app.status === 'accepted' ? '#059669' : app.status === 'rejected' ? '#dc2626' : '#d97706';
-                return (
-                  <View key={app.id} style={[styles.applicantCard, { borderColor: colors.border }]}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                      <Image source={{ uri: avatarUri }} style={{ width: 44, height: 44, borderRadius: 22 }} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 15, fontWeight: '600', color: colors.text }}>{app.business_name}</Text>
-                        <Text style={{ fontSize: 12, color: colors.textSecondary }}>{app.trade_category} · {app.suburb} · Applied {getRelativeTime(app.created_at)}</Text>
-                      </View>
-                      <View style={{ backgroundColor: statusColor + '15', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 }}>
-                        <Text style={{ color: statusColor, fontSize: 12, fontWeight: '600', textTransform: 'capitalize' }}>{app.status}</Text>
-                      </View>
-                    </View>
-                    {app.message && (
-                      <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc', padding: 10, borderRadius: 8, marginTop: 8 }}>
-                        <Text style={{ fontSize: 13, color: colors.text, fontStyle: 'italic' }}>"{app.message}"</Text>
-                      </View>
-                    )}
-                    {app.status === 'accepted' && app.phone && (
-                      <Text style={{ color: '#059669', fontSize: 13, fontWeight: '600', marginTop: 6 }}>Phone: {app.phone}</Text>
-                    )}
-                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                      {app.status === 'pending' ? (
-                        <>
-                          <Pressable onPress={() => handleUpdateApp(app.id, 'accepted')} style={[styles.appActionBtn, { backgroundColor: '#059669' }]} disabled={!!updatingAppId}>
-                            <Ionicons name="checkmark" size={14} color="#fff" />
-                            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Accept</Text>
-                          </Pressable>
-                          <Pressable onPress={() => handleUpdateApp(app.id, 'rejected')} style={[styles.appActionBtn, { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca' }]} disabled={!!updatingAppId}>
-                            <Ionicons name="close" size={14} color="#dc2626" />
-                            <Text style={{ color: '#dc2626', fontSize: 13, fontWeight: '600' }}>Reject</Text>
-                          </Pressable>
-                        </>
-                      ) : (
-                        <>
-                          <Pressable onPress={() => router.push({ pathname: '/builder-profile', params: { id: app.builder_id } } as any)} style={[styles.appActionBtn, { borderWidth: 1, borderColor: colors.border }]}>
-                            <Ionicons name="person-outline" size={14} color={colors.text} />
-                            <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>View Profile</Text>
-                          </Pressable>
-                          <Pressable onPress={() => router.push({ pathname: '/messages', params: { recipientId: app.builder_id } } as any)} style={[styles.appActionBtn, { borderWidth: 1, borderColor: colors.border }]}>
-                            <Ionicons name="mail-outline" size={14} color={colors.text} />
-                            <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>Message</Text>
-                          </Pressable>
-                        </>
-                      )}
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-
           {/* Job closed banner */}
           {job.status !== 'open' && (
             <View style={[styles.card, { backgroundColor: '#FEF2F2' }]}>
@@ -662,8 +559,8 @@ export default function JobDetailScreen() {
         </Animated.View>
       </ScrollView>
 
-      {/* ── Sticky Footer — Apply + Quick Contact (builders only, not owners) ── */}
-      {job.status === 'open' && !isOwner && (
+      {/* ── Sticky Footer — Apply + Quick Contact ── */}
+      {job.status === 'open' && (
         <View style={[styles.stickyFooter, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.footerRow}>
             {/* Copy contact icons */}
@@ -858,7 +755,7 @@ const styles = StyleSheet.create({
 
   /* Header */
   header: {
-    backgroundColor: '#4338ca',
+    backgroundColor: '#0F6E56',
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
