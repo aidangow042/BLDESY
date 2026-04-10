@@ -210,8 +210,17 @@ export const legalDocuments = {
   <p>10.1. Certain features of the Platform, including Builder subscriptions, may require payment. All fees are quoted in Australian Dollars (AUD) and are inclusive of GST unless otherwise stated.</p>
   <p>10.2. Payment processing is handled by our third-party payment processor, Stripe. By making a payment, you agree to Stripe's terms of service and privacy policy. BLDESY! does not store your full credit card details.</p>
   <p>10.3. Subscription Fees are charged on a recurring basis as specified at the time of purchase. You authorise us to charge your nominated payment method for all applicable fees.</p>
-  <p>10.4. You may cancel your subscription at any time through the Platform. Cancellation takes effect at the end of the current billing period. No partial refunds are provided for the remaining portion of a billing period, except as required by the Australian Consumer Law.</p>
-  <p>10.5. We reserve the right to modify our fees at any time. Any fee changes will take effect at the start of the next billing period following notice to you.</p>
+  <p>10.4. <strong>Auto-Renewal:</strong> Subscriptions automatically renew at the end of each billing period unless cancelled. You will be charged the then-current subscription fee at the start of each renewal period.</p>
+  <p>10.5. <strong>How to Cancel:</strong> You may cancel your subscription at any time through:</p>
+  <ol type="a">
+    <li>The BLDESY! app (Settings &gt; Billing &gt; Cancel Subscription);</li>
+    <li>Apple App Store: Settings &gt; [your name] &gt; Subscriptions &gt; BLDESY! &gt; Cancel (for iOS subscribers);</li>
+    <li>Google Play Store: Google Play &gt; Payments &amp; subscriptions &gt; Subscriptions &gt; BLDESY! &gt; Cancel (for Android subscribers);</li>
+    <li>Contacting us at support@bldesy.com.au.</li>
+  </ol>
+  <p>Cancellation takes effect at the end of the current billing period. No partial refunds are provided for the remaining portion of a billing period, except as required by the Australian Consumer Law.</p>
+  <p>10.6. <strong>Free Trials:</strong> If we offer a free trial, you will not be charged during the trial period. At the end of the trial, your subscription will automatically convert to a paid subscription unless you cancel before the trial expires.</p>
+  <p>10.7. We reserve the right to modify our fees at any time. Any fee changes will take effect at the start of the next billing period following notice to you.</p>
 
   <h2>11. Disclaimers</h2>
   <p>11.1. To the maximum extent permitted by law, the Platform is provided on an "as is" and "as available" basis, without warranties of any kind, either express or implied, including but not limited to implied warranties of merchantability, fitness for a particular purpose, non-infringement, or course of performance.</p>
@@ -286,12 +295,43 @@ export const legalDocuments = {
   <p>19.1. You may not assign, transfer, or sublicense any of your rights or obligations under these Terms without our prior written consent.</p>
   <p>19.2. BLDESY! may assign, transfer, or sublicense its rights and obligations under these Terms without restriction and without notice to you, including in connection with a merger, acquisition, reorganisation, or sale of assets.</p>
 
-  <h2>20. Contact Details</h2>
+  <h2>20. Mobile Application Terms</h2>
+  <p>20.1. <strong>Apple App Store:</strong> If you download or use the BLDESY! app from the Apple App Store, you acknowledge and agree that:</p>
+  <ol type="a">
+    <li>These Terms are between you and BLDESY! only, and not with Apple Inc. ("Apple"). Apple is not responsible for the app or its content;</li>
+    <li>Apple has no obligation to provide any maintenance or support services for the app;</li>
+    <li>In the event of any failure of the app to conform to any applicable warranty, you may notify Apple and Apple will refund the purchase price (if any). To the maximum extent permitted by law, Apple has no other warranty obligation;</li>
+    <li>Apple is not responsible for addressing any claims by you or any third party relating to the app;</li>
+    <li>In the event of any third-party claim that the app infringes that third party's intellectual property rights, Apple is not responsible for the investigation, defence, settlement, or discharge of such claim;</li>
+    <li>Apple and its subsidiaries are third-party beneficiaries of these Terms, and Apple will have the right to enforce these Terms against you as a third-party beneficiary.</li>
+  </ol>
+  <p>20.2. <strong>Google Play Store:</strong> If you download or use the BLDESY! app from the Google Play Store, you acknowledge that Google LLC is not responsible for the app, its content, or any claims arising from its use. Google's terms of service apply in addition to these Terms.</p>
+  <p>20.3. <strong>Device permissions:</strong> The app may request access to device features including camera (for photo uploads), photo library (for selecting images), location services (for suburb-based search), and push notifications (for job alerts and messages). You can manage these permissions through your device settings at any time.</p>
+  <p>20.4. <strong>Push notifications:</strong> By enabling push notifications, you consent to receive alerts about new job matches, application updates, messages, and promotional communications. You can disable push notifications at any time through your device settings.</p>
+
+  <h2>21. Account Deletion</h2>
+  <p>21.1. You may request deletion of your account at any time by:</p>
+  <ol type="a">
+    <li>Using the "Delete Account" option in the app (Settings &gt; Account &gt; Delete Account);</li>
+    <li>Emailing us at <a href="mailto:hello@bldesy.com.au">hello@bldesy.com.au</a> with the subject line "Account Deletion Request".</li>
+  </ol>
+  <p>21.2. Upon receiving a deletion request, we will:</p>
+  <ol type="a">
+    <li>Confirm your identity;</li>
+    <li>Deactivate your account within 48 hours;</li>
+    <li>Permanently delete your personal data within 30 days, except where retention is required by law (e.g., financial records for 7 years under Australian tax law);</li>
+    <li>Remove your public profile from search results immediately;</li>
+    <li>Cancel any active subscriptions (you will not be charged after the current billing period).</li>
+  </ol>
+  <p>21.3. Account deletion is irreversible. You will lose access to your profile, job history, reviews, messages, and all associated data.</p>
+
+  <h2>22. Contact Details</h2>
   <div class="contact-box">
     <p><strong>BLDESY Pty Ltd</strong></p>
-    <p>ABN 00 000 000 000</p>
+    <p>ABN: Pending Registration</p>
     <p>Email: <a href="mailto:hello@bldesy.com.au">hello@bldesy.com.au</a></p>
     <p>For legal enquiries, please include "Legal" in the subject line.</p>
+    <p>For account deletion requests, please include "Account Deletion Request" in the subject line.</p>
   </div>
 
   ${footer}
@@ -305,11 +345,13 @@ export const legalDocuments = {
       { heading: '5. Customer Obligations', body: 'Job postings must be accurate. You may not solicit builders off-platform to avoid fees, post fake jobs, or collect builder information for marketing purposes.' },
       { heading: '6. User Content & Conduct', body: 'No defamation, spam, harassment, fake reviews, or illegal activity. You retain ownership of your content but grant BLDESY! a licence to display it on the platform.' },
       { heading: '7. Intellectual Property', body: 'BLDESY! owns all platform IP including the name, logo, design, and code. You may not copy, reverse-engineer, or create derivative works from the platform.' },
-      { heading: '8. Payments & Fees', body: 'Builder subscriptions are processed via Stripe. All fees are in AUD and non-refundable unless required by Australian Consumer Law. We may change pricing with 30 days notice.' },
+      { heading: '8. Payments & Fees', body: 'Subscriptions auto-renew and are processed via Stripe. Cancel anytime via the app, App Store, or Play Store. All fees in AUD, non-refundable unless required by Australian Consumer Law.' },
       { heading: '9. Disclaimers & Liability', body: 'The platform is provided "as is". To the maximum extent permitted by Australian Consumer Law, our liability is capped at fees paid in the last 12 months or AU$100, whichever is greater. We exclude indirect, consequential, and special damages.' },
       { heading: '10. Disputes & Governing Law', body: 'Disputes follow a 3-step process: (1) good-faith negotiation, (2) mediation via ACCC or approved mediator, (3) courts of New South Wales. Governed by the laws of NSW, Australia.' },
       { heading: '11. Modifications', body: 'We may update these Terms with 30 days written notice via email or in-app notification. Continued use after the notice period constitutes acceptance.' },
-      { heading: '12. Contact', body: 'BLDESY Pty Ltd — ABN 00 000 000 000\nhello@bldesy.com.au' },
+      { heading: '12. Mobile App Terms', body: 'Apple and Google are not responsible for the app. Device permissions (camera, photos, location, notifications) can be managed in your device settings. Push notifications can be disabled anytime.' },
+      { heading: '13. Account Deletion', body: 'Delete your account anytime via Settings > Account > Delete Account, or email hello@bldesy.com.au. Profile removed from search immediately, data deleted within 30 days.' },
+      { heading: '14. Contact', body: 'BLDESY Pty Ltd — ABN: Pending Registration\nhello@bldesy.com.au' },
     ],
   },
 
@@ -434,8 +476,11 @@ export const legalDocuments = {
     <li><strong>Right of correction:</strong> You have the right to request that we correct any personal information that is inaccurate, out of date, incomplete, irrelevant, or misleading. You can update most of your information directly through the Platform. For other corrections, please contact us;</li>
     <li><strong>Right of deletion:</strong> You may request deletion of your account and associated personal information by contacting us at hello@bldesy.com.au or through the account settings in the Platform. Deletion will be processed in accordance with Section 5 above;</li>
     <li><strong>Right to withdraw consent:</strong> Where we rely on your consent to process personal information, you may withdraw that consent at any time. Withdrawal of consent does not affect the lawfulness of processing based on consent before its withdrawal;</li>
-    <li><strong>Right to complain:</strong> If you believe we have breached the Australian Privacy Principles, you may lodge a complaint with us at hello@bldesy.com.au. We will investigate and respond to your complaint within thirty (30) days. If you are not satisfied with our response, you may lodge a complaint with the Office of the Australian Information Commissioner (OAIC) at <a href="https://www.oaic.gov.au">www.oaic.gov.au</a> or by phone at 1300 363 992.</li>
+    <li><strong>Right to complain:</strong> If you believe we have breached the Australian Privacy Principles, you may lodge a complaint with us at hello@bldesy.com.au. We will investigate and respond to your complaint within thirty (30) days. If you are not satisfied with our response, you may lodge a complaint with the Office of the Australian Information Commissioner (OAIC) at <a href="https://www.oaic.gov.au">www.oaic.gov.au</a> or by phone at 1300 363 992;</li>
+    <li><strong>Right to data portability:</strong> You may request a copy of your personal data in a structured, commonly used, machine-readable format (JSON or CSV). We will provide the export within thirty (30) days of your request. To request a data export, contact us at hello@bldesy.com.au with the subject line "Data Export Request";</li>
+    <li><strong>Right to restrict processing:</strong> In certain circumstances, you may request that we restrict the processing of your personal information (for example, while we verify the accuracy of your data or investigate a complaint).</li>
   </ol>
+  <p>7.2. <strong>How to delete your account:</strong> You can delete your account directly in the BLDESY! app by going to Settings &gt; Account &gt; Delete Account. Alternatively, email hello@bldesy.com.au with the subject "Account Deletion Request". Your profile will be removed from public search immediately, and all personal data will be permanently deleted within 30 days (see our Terms of Service, Section 21 for full details).</p>
 
   <h2>8. Children's Privacy</h2>
   <p>8.1. The Platform is not directed at children under the age of eighteen (18). We do not knowingly collect personal information from children under eighteen (18) without the consent of a parent or legal guardian.</p>
@@ -483,7 +528,7 @@ export const legalDocuments = {
       { heading: '4. Data Sharing', body: 'We never sell your data. We share with: Supabase (hosting, Sydney region), Stripe (payment processing), Anthropic (AI Assist — anonymised queries only), and law enforcement if legally required.' },
       { heading: '5. Data Retention', body: 'Active accounts: data retained while account exists. Deleted accounts: data purged within 30 days. Anonymised analytics: retained indefinitely. Backups: retained for 90 days, then destroyed.' },
       { heading: '6. Data Security', body: 'Encryption in transit (TLS 1.2+), at rest (AES-256). Hosted exclusively in Sydney ap-southeast-2 region. Role-based access controls. Regular security audits.' },
-      { heading: '7. Your Rights', body: 'Under the Australian Privacy Act 1988, you can: access your data, correct inaccuracies, request deletion, withdraw consent, and lodge a complaint with the Office of the Australian Information Commissioner (OAIC).' },
+      { heading: '7. Your Rights', body: 'Under the Australian Privacy Act 1988, you can: access your data, correct inaccuracies, request deletion, request data export (JSON/CSV), withdraw consent, restrict processing, and lodge a complaint with the OAIC. Delete your account anytime via Settings > Account > Delete Account.' },
       { heading: '8. Children & International', body: 'Not intended for under 18 without guardian consent. Data is stored in Australia (Sydney). No offshore transfer unless disclosed and consented to.' },
       { heading: '9. Policy Changes', body: '14 days email notice for material changes. Continued use after the notice period constitutes acceptance.' },
       { heading: '10. Contact', body: 'Privacy Officer — BLDESY Pty Ltd\nhello@bldesy.com.au\nOAIC: www.oaic.gov.au | 1300 363 992' },
