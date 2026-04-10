@@ -54,6 +54,22 @@ const PERIODS: { key: Period; label: string }[] = [
 ];
 const EMPTY: Metrics = { profileViews: 0, applications: 0, acceptanceRate: 0, responseTime: 0, searchAppearances: 0, jobsApplied: 0, jobsWon: 0, profileCompleteness: 0 };
 
+// Profile-level stats (populated from real data when available, mock placeholders for now)
+const topKeywords = [
+  { keyword: 'bathroom reno surry hills', count: 34 },
+  { keyword: 'knock down rebuild sydney', count: 28 },
+  { keyword: 'kitchen renovation newtown', count: 21 },
+  { keyword: 'home builder inner west', count: 18 },
+  { keyword: 'extension marrickville', count: 12 },
+];
+const trafficSources = [
+  { source: 'Search Results', percent: 52, icon: 'search-outline' as const },
+  { source: 'Map View', percent: 24, icon: 'map-outline' as const },
+  { source: 'AI Assist', percent: 15, icon: 'sparkles-outline' as const },
+  { source: 'Direct Link', percent: 9, icon: 'link-outline' as const },
+];
+const competitorData = { yourViews: 147, avgViews: 89, yourQuotes: 23, avgQuotes: 14 };
+
 function periodCutoff(p: Period): string | null {
   if (p === 'all') return null;
   const d = p === '7d' ? 7 : p === '30d' ? 30 : 90;
@@ -298,6 +314,77 @@ export default function BuilderAnalyticsScreen() {
           </View>
         </View>
 
+        {/* Top Search Keywords */}
+        <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+          <Text style={[styles.secTitle, { color: colors.text }]}>Top Search Keywords</Text>
+          {topKeywords.map((kw, i) => {
+            const maxKw = topKeywords[0]?.count || 1;
+            const pct = (kw.count / maxKw) * 100;
+            return (
+              <View key={kw.keyword} style={styles.kwRow}>
+                <Text style={[styles.kwRank, { color: teal }]}>#{i + 1}</Text>
+                <View style={{ flex: 1 }}>
+                  <View style={[styles.kwBarTrack, { backgroundColor: tealBg }]}>
+                    <View style={[styles.kwBarFill, { width: `${pct}%`, backgroundColor: teal }]} />
+                    <Text style={[styles.kwText, { color: colors.text }]} numberOfLines={1}>{kw.keyword}</Text>
+                  </View>
+                </View>
+                <Text style={[styles.kwCount, { color: teal }]}>{kw.count}</Text>
+              </View>
+            );
+          })}
+        </View>
+
+        {/* Traffic Sources */}
+        <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+          <Text style={[styles.secTitle, { color: colors.text }]}>Traffic Sources</Text>
+          {trafficSources.map(src => (
+            <View key={src.source} style={styles.srcRow}>
+              <View style={[styles.srcIcon, { backgroundColor: tealBg }]}>
+                <Ionicons name={src.icon} size={16} color={teal} />
+              </View>
+              <Text style={[styles.srcLabel, { color: colors.text }]}>{src.source}</Text>
+              <View style={[styles.srcBarTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f1f5f9' }]}>
+                <View style={[styles.srcBarFill, { width: `${src.percent}%`, backgroundColor: teal }]} />
+              </View>
+              <Text style={[styles.srcPct, { color: teal }]}>{src.percent}%</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Competitor Comparison */}
+        <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+          <Text style={[styles.secTitle, { color: colors.text }]}>How You Compare</Text>
+          <View style={styles.compGrid}>
+            <View style={styles.compCol}>
+              <Text style={[styles.compHeader, { color: teal }]}>You</Text>
+              <Text style={[styles.compVal, { color: colors.text }]}>{competitorData.yourViews}</Text>
+              <Text style={[styles.compLabel, { color: colors.textSecondary }]}>Views</Text>
+            </View>
+            <View style={styles.compCol}>
+              <Text style={[styles.compHeader, { color: colors.textSecondary }]}>Average</Text>
+              <Text style={[styles.compVal, { color: colors.textSecondary }]}>{competitorData.avgViews}</Text>
+              <Text style={[styles.compLabel, { color: colors.textSecondary }]}>Views</Text>
+            </View>
+            <View style={styles.compCol}>
+              <Text style={[styles.compHeader, { color: teal }]}>You</Text>
+              <Text style={[styles.compVal, { color: colors.text }]}>{competitorData.yourQuotes}</Text>
+              <Text style={[styles.compLabel, { color: colors.textSecondary }]}>Quotes</Text>
+            </View>
+            <View style={styles.compCol}>
+              <Text style={[styles.compHeader, { color: colors.textSecondary }]}>Average</Text>
+              <Text style={[styles.compVal, { color: colors.textSecondary }]}>{competitorData.avgQuotes}</Text>
+              <Text style={[styles.compLabel, { color: colors.textSecondary }]}>Quotes</Text>
+            </View>
+          </View>
+          <View style={[styles.compBanner, { backgroundColor: tealBg }]}>
+            <Ionicons name="trending-up" size={16} color={teal} />
+            <Text style={[styles.compBannerText, { color: teal }]}>
+              You're outperforming {Math.round(((competitorData.yourViews - competitorData.avgViews) / competitorData.avgViews) * 100)}% above average
+            </Text>
+          </View>
+        </View>
+
       </ScrollView>
     </View>
   );
@@ -341,6 +428,31 @@ const styles = StyleSheet.create({
 
   sideBySide: { flexDirection: 'row', gap: Spacing.sm },
   halfCard: { flex: 1 },
+
+  // Keywords
+  kwRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  kwRank: { fontSize: 12, fontWeight: '800', width: 24 },
+  kwBarTrack: { height: 28, borderRadius: 6, overflow: 'hidden', justifyContent: 'center' },
+  kwBarFill: { position: 'absolute', top: 0, left: 0, bottom: 0, borderRadius: 6, opacity: 0.15 },
+  kwText: { fontSize: 12, fontWeight: '500', paddingHorizontal: 8 },
+  kwCount: { fontSize: 13, fontWeight: '700', width: 30, textAlign: 'right' },
+
+  // Traffic sources
+  srcRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  srcIcon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  srcLabel: { fontSize: 13, fontWeight: '600', width: 90 },
+  srcBarTrack: { flex: 1, height: 8, borderRadius: 4, overflow: 'hidden' },
+  srcBarFill: { height: 8, borderRadius: 4 },
+  srcPct: { fontSize: 13, fontWeight: '700', width: 36, textAlign: 'right' },
+
+  // Competitor comparison
+  compGrid: { flexDirection: 'row', gap: 6, marginBottom: Spacing.md },
+  compCol: { flex: 1, alignItems: 'center', gap: 2 },
+  compHeader: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
+  compVal: { fontSize: 24, fontWeight: '800' },
+  compLabel: { fontSize: 11, fontWeight: '500' },
+  compBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: Spacing.md, borderRadius: 10 },
+  compBannerText: { fontSize: 13, fontWeight: '600', flex: 1 },
 
   hRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
   hLabel: { width: 60, fontSize: 11, fontWeight: '500' },
