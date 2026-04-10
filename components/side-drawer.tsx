@@ -45,6 +45,7 @@ type UserInfo = {
   avatar: string | null;
   isBuilder: boolean;
   isEnterprise: boolean;
+  isAdmin: boolean;
   isGuest: boolean;
   // Builder entity info
   businessName: string | null;
@@ -110,7 +111,7 @@ export function SideDrawer({ visible, onClose, builderMode = false, enterpriseMo
   async function fetchUserInfo() {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData?.user) {
-      setUserInfo({ name: 'Guest', email: null, avatar: null, isBuilder: false, isEnterprise: false, isGuest: true, businessName: null, tradeCategory: null, profilePhoto: null });
+      setUserInfo({ name: 'Guest', email: null, avatar: null, isBuilder: false, isEnterprise: false, isAdmin: false, isGuest: true, businessName: null, tradeCategory: null, profilePhoto: null });
       hasFetched.current = true;
       return;
     }
@@ -120,7 +121,7 @@ export function SideDrawer({ visible, onClose, builderMode = false, enterpriseMo
     const [{ data: profile }, { data: builderProfile }, { data: enterpriseProfile }] = await Promise.all([
       supabase
         .from('profiles')
-        .select('name, avatar_url, role')
+        .select('name, avatar_url, role, is_admin')
         .eq('id', userData.user.id)
         .maybeSingle(),
       supabase
@@ -144,6 +145,7 @@ export function SideDrawer({ visible, onClose, builderMode = false, enterpriseMo
       avatar: (profile as any)?.avatar_url ?? null,
       isBuilder: !!(builderProfile as any)?.approved,
       isEnterprise,
+      isAdmin: !!(profile as any)?.is_admin,
       isGuest: false,
       businessName: (builderProfile as any)?.business_name ?? (enterpriseProfile as any)?.company_name ?? null,
       tradeCategory: (builderProfile as any)?.trade_category ?? null,
@@ -224,6 +226,12 @@ export function SideDrawer({ visible, onClose, builderMode = false, enterpriseMo
   // ─── Drawer items ─────────────────────────────────────────────────
 
   const mainItems: DrawerItem[] = [
+    ...(userInfo.isAdmin ? [{
+      key: 'admin',
+      label: 'Admin Panel',
+      icon: <MaterialIcons name="admin-panel-settings" size={20} color={colors.error} />,
+      onPress: () => navigate('/admin'),
+    }] : []),
     ...(!userInfo.isGuest ? [{
       key: 'messages',
       label: 'Messages',

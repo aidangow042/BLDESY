@@ -22,6 +22,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { ReviewForm } from '@/components/reviews/review-form';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PHOTO_WIDTH = SCREEN_WIDTH - 68;
@@ -97,6 +98,7 @@ export default function MyJobsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [reviewingApp, setReviewingApp] = useState<{ jobId: string; builderId: string; builderName: string } | null>(null);
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [loadingApplicants, setLoadingApplicants] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -493,6 +495,27 @@ export default function MyJobsScreen() {
                           </Pressable>
                         </View>
                       )}
+
+                      {/* Leave Review */}
+                      {app.status === 'accepted' && (
+                        reviewingApp?.jobId === item.id && reviewingApp?.builderId === app.builder_id ? (
+                          <ReviewForm
+                            jobId={item.id}
+                            builderId={app.builder_id}
+                            builderName={app.builder_profiles?.business_name ?? 'Builder'}
+                            onSubmitted={() => setReviewingApp(null)}
+                            onCancel={() => setReviewingApp(null)}
+                          />
+                        ) : (
+                          <Pressable
+                            style={({ pressed }) => [styles.reviewBtn, pressed && { opacity: 0.7 }]}
+                            onPress={() => setReviewingApp({ jobId: item.id, builderId: app.builder_id, builderName: app.builder_profiles?.business_name ?? 'Builder' })}
+                          >
+                            <Ionicons name="star-outline" size={16} color={colors.teal} />
+                            <Text style={[styles.reviewBtnText, { color: colors.teal }]}>Leave Review</Text>
+                          </Pressable>
+                        )
+                      )}
                     </View>
                   );
                 })
@@ -859,6 +882,16 @@ const styles = StyleSheet.create({
     ...Type.btnSecondary,
     color: '#DC2626',
     fontWeight: '700',
+  },
+  reviewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  reviewBtnText: {
+    ...Type.captionSemiBold,
   },
 
   /* Empty state */

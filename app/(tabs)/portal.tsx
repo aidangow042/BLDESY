@@ -20,6 +20,7 @@ import { AICoachCard } from '@/components/dashboard/ai-coach-card';
 import { ActivityFeed } from '@/components/dashboard/activity-feed';
 import { NotificationsPanel } from '@/components/dashboard/notifications-panel';
 import type BottomSheet from '@gorhom/bottom-sheet';
+import { useUnreadCount } from '@/hooks/use-unread-count';
 
 type BuilderStatus = 'loading' | 'none' | 'pending' | 'approved';
 
@@ -73,9 +74,11 @@ export default function PortalScreen() {
 
   const [status, setStatus] = useState<BuilderStatus>('loading');
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const notificationsRef = useRef<BottomSheet>(null);
+  const { count: unreadMessages } = useUnreadCount(userId);
 
   useFocusEffect(
     useCallback(() => {
@@ -89,6 +92,7 @@ export default function PortalScreen() {
       setStatus('none');
       return;
     }
+    setUserId(userData.user.id);
 
     const { data, error } = await supabase
       .from('builder_profiles')
@@ -310,7 +314,7 @@ export default function PortalScreen() {
         <DashboardHeader
           businessName={profile?.business_name || 'Builder'}
           profilePhotoUrl={profile?.profile_photo_url ?? null}
-          notificationCount={3}
+          notificationCount={unreadMessages}
           isAvailable={profile?.availability === 'available'}
           onBellPress={() => notificationsRef.current?.expand()}
           onHamburgerPress={() => setDrawerOpen(true)}
