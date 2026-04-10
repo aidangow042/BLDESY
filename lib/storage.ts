@@ -1,9 +1,53 @@
 import { File } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system';
 import { supabase } from './supabase';
+
+// ── Size limits ──────────────────────────────────────────────────────────────
+
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024; // 10MB
+const ALLOWED_IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'];
+const ALLOWED_VIDEO_EXTS = ['mp4', 'mov', 'avi', 'webm'];
+const ALLOWED_DOC_EXTS = ['pdf', 'doc', 'docx', 'xls', 'xlsx'];
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+async function getFileSize(uri: string): Promise<number> {
+  try {
+    const info = await FileSystem.getInfoAsync(uri);
+    return (info as any)?.size ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+function getExt(uri: string): string {
+  return (uri.split('.').pop()?.toLowerCase() ?? 'jpg').split('?')[0];
+}
+
+function isAllowedImage(ext: string): boolean {
+  return ALLOWED_IMAGE_EXTS.includes(ext) || ALLOWED_VIDEO_EXTS.includes(ext);
+}
+
+function getContentType(ext: string): string {
+  if (ALLOWED_VIDEO_EXTS.includes(ext)) return `video/${ext === 'mov' ? 'quicktime' : ext}`;
+  if (ext === 'pdf') return 'application/pdf';
+  if (ext === 'doc' || ext === 'docx') return 'application/msword';
+  return `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+}
+
+/**
+ * Check if a URI is a local file (needs uploading) or already a remote URL.
+ */
+export function isLocalUri(uri: string): boolean {
+  return uri.startsWith('file://') || uri.startsWith('ph://') || uri.startsWith('/');
+}
+
+// ── Upload functions ─────────────────────────────────────────────────────────
 
 /**
  * Upload a local file URI to Supabase Storage and return the public URL.
- * Uses expo-file-system's File.arrayBuffer() for reliable React Native uploads.
+ * Validates file size (10MB max) and MIME type.
  */
 export async function uploadImage(
   localUri: string,
@@ -11,35 +55,34 @@ export async function uploadImage(
   folder: 'cover' | 'profile' | 'projects' | 'team',
 ): Promise<string | null> {
   try {
-    // Get file extension from URI
-    const ext = localUri.split('.').pop()?.toLowerCase() ?? 'jpg';
-    const fileName = `${userId}/${folder}/${Date.now()}.${ext}`;
-    const videoExts = ['mp4', 'mov', 'avi', 'webm', 'mkv'];
-    const contentType = videoExts.includes(ext)
-      ? `video/${ext === 'mov' ? 'quicktime' : ext}`
-      : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+    const ext = getExt(localUri);
+    if (!isAllowedImage(ext)) {
+      console.error(`Upload rejected: .${ext} is not an allowed image type`);
+      return null;
+    }
 
-    // Read local file as ArrayBuffer using expo-file-system File API
+    const size = await getFileSize(localUri);
+    if (size > MAX_IMAGE_SIZE) {
+      console.error(`Upload rejected: ${(size / 1024 / 1024).toFixed(1)}MB exceeds ${MAX_IMAGE_SIZE / 1024 / 1024}MB limit`);
+      return null;
+    }
+
+    const fileName = `${userId}/${folder}/${Date.now()}.${ext}`;
+    const contentType = getContentType(ext);
+
     const file = new File(localUri);
     const arrayBuffer = await file.arrayBuffer();
 
     const { error } = await supabase.storage
       .from('builder-media')
-      .upload(fileName, arrayBuffer, {
-        contentType,
-        upsert: true,
-      });
+      .upload(fileName, arrayBuffer, { contentType, upsert: true });
 
     if (error) {
       console.error('Upload error:', error.message);
       return null;
     }
 
-    // Get public URL
-    const { data } = supabase.storage
-      .from('builder-media')
-      .getPublicUrl(fileName);
-
+    const { data } = supabase.storage.from('builder-media').getPublicUrl(fileName);
     return data.publicUrl;
   } catch (err) {
     console.error('Upload failed:', err);
@@ -62,14 +105,7 @@ export async function uploadImages(
 }
 
 /**
- * Check if a URI is a local file (needs uploading) or already a remote URL.
- */
-export function isLocalUri(uri: string): boolean {
-  return uri.startsWith('file://') || uri.startsWith('ph://') || uri.startsWith('/');
-}
-
-/**
- * Upload a job photo to the job-photos bucket. Returns the public URL or null.
+ * Upload a job photo. Validates size + type.
  */
 export async function uploadJobPhoto(
   localUri: string,
@@ -77,9 +113,20 @@ export async function uploadJobPhoto(
   jobId: string,
 ): Promise<string | null> {
   try {
-    const ext = localUri.split('.').pop()?.toLowerCase() ?? 'jpg';
+    const ext = getExt(localUri);
+    if (!isAllowedImage(ext)) {
+      console.error(`Job photo rejected: .${ext} not allowed`);
+      return null;
+    }
+
+    const size = await getFileSize(localUri);
+    if (size > MAX_IMAGE_SIZE) {
+      console.error(`Job photo rejected: exceeds ${MAX_IMAGE_SIZE / 1024 / 1024}MB limit`);
+      return null;
+    }
+
     const fileName = `${userId}/${jobId}/${Date.now()}.${ext}`;
-    const contentType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+    const contentType = getContentType(ext);
 
     const file = new File(localUri);
     const arrayBuffer = await file.arrayBuffer();
@@ -102,7 +149,8 @@ export async function uploadJobPhoto(
 }
 
 /**
- * Upload a job document (PDF) to the job-documents bucket. Returns the public URL or null.
+ * Upload a job document (PDF, Word). Returns a SIGNED URL (1 hour expiry) for private access.
+ * Documents are stored in a private bucket.
  */
 export async function uploadJobDocument(
   localUri: string,
@@ -111,10 +159,21 @@ export async function uploadJobDocument(
   originalName: string,
 ): Promise<string | null> {
   try {
-    const ext = localUri.split('.').pop()?.toLowerCase() ?? 'pdf';
+    const ext = getExt(localUri);
+    if (!ALLOWED_DOC_EXTS.includes(ext)) {
+      console.error(`Document rejected: .${ext} not allowed`);
+      return null;
+    }
+
+    const size = await getFileSize(localUri);
+    if (size > MAX_DOCUMENT_SIZE) {
+      console.error(`Document rejected: exceeds ${MAX_DOCUMENT_SIZE / 1024 / 1024}MB limit`);
+      return null;
+    }
+
     const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const fileName = `${userId}/${jobId}/${Date.now()}_${safeName}`;
-    const contentType = ext === 'pdf' ? 'application/pdf' : 'application/octet-stream';
+    const contentType = getContentType(ext);
 
     const file = new File(localUri);
     const arrayBuffer = await file.arrayBuffer();
@@ -128,8 +187,12 @@ export async function uploadJobDocument(
       return null;
     }
 
-    const { data } = supabase.storage.from('job-documents').getPublicUrl(fileName);
-    return data.publicUrl;
+    // Use signed URL for private documents (1 hour expiry)
+    const { data: signedData } = await supabase.storage
+      .from('job-documents')
+      .createSignedUrl(fileName, 3600);
+
+    return signedData?.signedUrl ?? null;
   } catch (err) {
     console.error('Job document upload failed:', err);
     return null;

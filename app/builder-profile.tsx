@@ -1002,6 +1002,9 @@ export default function BuilderProfileScreen() {
         {builder.credentials_verified && (
           <View style={[styles.sectionContainer, { marginTop: Spacing.sm }]}>
             <CredentialBadges credentials={builder.credentials_verified} variant="pills" />
+            <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 6, lineHeight: 14 }}>
+              Credentials displayed as provided by the builder. BLDESY! verifies against government registers where available but does not guarantee accuracy. Verify independently before hiring.
+            </Text>
           </View>
         )}
 
