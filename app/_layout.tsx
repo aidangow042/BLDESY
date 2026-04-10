@@ -118,7 +118,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', gestureEnabled: true, fullScreenGestureEnabled: true }}>
-          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
           <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
           <Stack.Screen name="results" />
           <Stack.Screen name="post-job" />
@@ -133,7 +133,7 @@ export default function RootLayout() {
           <Stack.Screen name="my-jobs" />
           <Stack.Screen name="all-trades" />
           <Stack.Screen name="enterprise-signup" />
-          <Stack.Screen name="enterprise-dashboard" />
+          <Stack.Screen name="enterprise-dashboard" options={{ gestureEnabled: false }} />
           <Stack.Screen name="enterprise-jobs" />
           <Stack.Screen name="enterprise-edit-profile" options={{ fullScreenGestureEnabled: false }} />
           <Stack.Screen name="enterprise-analytics" />
