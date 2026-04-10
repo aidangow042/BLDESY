@@ -265,12 +265,6 @@ export default function PortalScreen() {
       onPress: () => router.push('/builder-analytics'),
     },
     {
-      icon: 'chatbubble-outline',
-      title: 'Messages',
-      description: 'Conversations with customers and builders',
-      onPress: () => router.push('/messages'),
-    },
-    {
       icon: 'star-outline',
       title: 'Subscribe',
       description: 'Upgrade to BLDESY Pro for full access',

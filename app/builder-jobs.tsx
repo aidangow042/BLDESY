@@ -441,7 +441,7 @@ export default function BuilderJobsFeed() {
       // Build query: show matching trade first, then all other open jobs
       let query = supabase
         .from('jobs')
-        .select('id, title, description, trade_category, suburb, postcode, urgency, budget, status, created_at, customer_id')
+        .select('id, title, description, trade_category, suburb, postcode, urgency, budget, status, created_at, customer_id, photo_urls')
         .eq('status', 'open')
         .order('created_at', { ascending: false });
 
@@ -477,7 +477,12 @@ export default function BuilderJobsFeed() {
           photoMap.set(photo.job_id, arr);
         }
 
-        const allJobs = jobsData.map((j: any) => ({ ...j, photos: photoMap.get(j.id) ?? [] }));
+        const allJobs = jobsData.map((j: any) => ({
+          ...j,
+          photos: (photoMap.get(j.id) ?? []).length > 0
+            ? photoMap.get(j.id)!
+            : Array.isArray(j.photo_urls) ? j.photo_urls : [],
+        }));
         // Sort: matching trade jobs first, then the rest
         if (trade) {
           const tradeLower = trade.toLowerCase();
