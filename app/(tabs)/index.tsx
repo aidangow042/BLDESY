@@ -48,15 +48,15 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 /* ───────────────────────── Trade Category Config ───────────────────────── */
 
-const TRADE_CONFIG: Record<string, { icon: string; iconSet: 'material' | 'ionicon'; bg: string; fg: string }> = {
-  Builder:     { icon: 'construction',       iconSet: 'material',  bg: '#E8F5F3', fg: '#0D7C66' },
-  Electrician: { icon: 'flash',              iconSet: 'ionicon',   bg: '#FFF7ED', fg: '#EA580C' },
-  Plumber:     { icon: 'water',              iconSet: 'ionicon',   bg: '#EFF6FF', fg: '#2563EB' },
-  Carpenter:   { icon: 'hammer',             iconSet: 'ionicon',   bg: '#ECFDF5', fg: '#059669' },
-  Painter:     { icon: 'format-paint',       iconSet: 'material',  bg: '#FFF1F2', fg: '#E11D48' },
-  Landscaper:  { icon: 'leaf',               iconSet: 'ionicon',   bg: '#F0FDF4', fg: '#16A34A' },
-  Roofer:      { icon: 'home-outline',       iconSet: 'ionicon',   bg: '#FFFBEB', fg: '#D97706' },
-  Tiler:       { icon: 'grid-outline',        iconSet: 'ionicon',   bg: '#F3E8FF', fg: '#7C3AED' },
+const TRADE_CONFIG: Record<string, { icon: string; iconSet: 'material' | 'ionicon'; bg: string; fg: string; desc: string }> = {
+  Builder:     { icon: 'construction',       iconSet: 'material',  bg: '#E8F5F3', fg: '#0D7C66', desc: 'New builds, renovations & extensions' },
+  Electrician: { icon: 'flash',              iconSet: 'ionicon',   bg: '#FFF7ED', fg: '#EA580C', desc: 'Wiring, lighting & power points' },
+  Plumber:     { icon: 'water',              iconSet: 'ionicon',   bg: '#EFF6FF', fg: '#2563EB', desc: 'Pipes, taps, hot water & gas' },
+  Carpenter:   { icon: 'hammer',             iconSet: 'ionicon',   bg: '#ECFDF5', fg: '#059669', desc: 'Framing, decks, pergolas & joinery' },
+  Painter:     { icon: 'format-paint',       iconSet: 'material',  bg: '#FFF1F2', fg: '#E11D48', desc: 'Interior, exterior & spray painting' },
+  Landscaper:  { icon: 'leaf',               iconSet: 'ionicon',   bg: '#F0FDF4', fg: '#16A34A', desc: 'Gardens, retaining walls & turf' },
+  Roofer:      { icon: 'home-outline',       iconSet: 'ionicon',   bg: '#FFFBEB', fg: '#D97706', desc: 'Roof repairs, gutters & restoration' },
+  Tiler:       { icon: 'grid-outline',        iconSet: 'ionicon',   bg: '#F3E8FF', fg: '#7C3AED', desc: 'Bathrooms, kitchens & floor tiling' },
 };
 
 /* ───────────────────────── Hero image ───────────────────────── */
@@ -403,12 +403,19 @@ export default function HomeScreen() {
                     <View style={[styles.tradeListIconBox, { backgroundColor: isDark ? colors.borderLight : 'rgba(255,255,255,0.7)' }]}>
                       {renderTradeIcon(trade)}
                     </View>
-                    <ThemedText
-                      style={[styles.tradeListLabel, { color: isDark ? colors.text : (cfg?.fg ?? '#444444') }]}
-                      numberOfLines={1}
-                    >
-                      {trade}
-                    </ThemedText>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText
+                        style={[styles.tradeListLabel, { color: isDark ? colors.text : (cfg?.fg ?? '#444444') }]}
+                        numberOfLines={1}
+                      >
+                        {trade}
+                      </ThemedText>
+                      {cfg?.desc && (
+                        <Text style={[styles.tradeListDesc, { color: colors.textSecondary }]} numberOfLines={1}>
+                          {cfg.desc}
+                        </Text>
+                      )}
+                    </View>
                     <MaterialIcons name="chevron-right" size={16} color={isDark ? colors.icon : 'rgba(0,0,0,0.25)'} style={styles.tradeListChevron} />
                   </Pressable>
                 );
@@ -518,6 +525,106 @@ export default function HomeScreen() {
                 <ThemedText style={[styles.aiCardLink, { color: colors.teal }]}>
                   Chat with AI →
                 </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* ─── 5. HOW IT WORKS ─── */}
+          <View style={[styles.section, { marginTop: Spacing['2xl'] }]}>
+            <ThemedText style={[styles.sectionHeading, { color: colors.text }]}>
+              How it works
+            </ThemedText>
+            <View style={styles.howItWorksRow}>
+              {[
+                { step: '1', icon: 'search' as const, title: 'Search', desc: 'Tell us what you need and where you are' },
+                { step: '2', icon: 'person-search' as const, title: 'Browse', desc: 'Compare verified tradies, reviews & portfolios' },
+                { step: '3', icon: 'handshake' as const, title: 'Connect', desc: 'Contact your tradie directly — no middleman' },
+              ].map((item) => (
+                <View key={item.step} style={[styles.howCard, { backgroundColor: isDark ? colors.surface : '#fff', borderColor: colors.border }]}>
+                  <View style={[styles.howStepCircle, { backgroundColor: colors.tealBg }]}>
+                    <MaterialIcons name={item.icon} size={22} color={colors.teal} />
+                  </View>
+                  <ThemedText style={[styles.howTitle, { color: colors.text }]}>{item.title}</ThemedText>
+                  <ThemedText style={[styles.howDesc, { color: colors.textSecondary }]}>{item.desc}</ThemedText>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* ─── 6. VALUE PROPS ─── */}
+          <View style={[styles.section, { marginTop: Spacing.xl }]}>
+            {[
+              { icon: 'money-off' as const, title: 'No Per-Lead Fees', desc: 'Builders pay a flat subscription — no commission, no bidding wars' },
+              { icon: 'verified' as const, title: 'Verified Credentials', desc: 'ABN, licence & insurance verified against government registers' },
+              { icon: 'thumb-up' as const, title: 'Free for Homeowners', desc: 'Search, browse profiles & post jobs at zero cost' },
+            ].map((item) => (
+              <View key={item.title} style={[styles.valuePropRow, { borderBottomColor: colors.border }]}>
+                <View style={[styles.valuePropIcon, { backgroundColor: colors.tealBg }]}>
+                  <MaterialIcons name={item.icon} size={20} color={colors.teal} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={[styles.valuePropTitle, { color: colors.text }]}>{item.title}</ThemedText>
+                  <ThemedText style={[styles.valuePropDesc, { color: colors.textSecondary }]}>{item.desc}</ThemedText>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          {/* ─── 7. JOIN CTA (For Tradies) ─── */}
+          <View style={[styles.section, { marginTop: Spacing['2xl'] }]}>
+            <LinearGradient
+              colors={isDark ? ['#134E4A', '#0D3B3B'] : ['#0f172a', '#1e293b']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.joinCard}
+            >
+              <ThemedText style={styles.joinTitle}>Are you a tradie?</ThemedText>
+              <ThemedText style={styles.joinSubtitle}>
+                No commission. No bidding wars.{'\n'}Just customers who need you.
+              </ThemedText>
+
+              <View style={styles.joinFeatures}>
+                {[
+                  'Flat monthly subscription',
+                  'Verified trust badges',
+                  'Analytics dashboard',
+                  'AI-powered job matching',
+                ].map((f) => (
+                  <View key={f} style={styles.joinFeatureRow}>
+                    <Ionicons name="checkmark-circle" size={16} color="#2dd4bf" />
+                    <Text style={styles.joinFeatureText}>{f}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <Pressable
+                onPress={() => router.push('/builder-signup' as any)}
+                style={({ pressed }) => [styles.joinBtn, pressed && { opacity: 0.85 }]}
+              >
+                <Text style={styles.joinBtnText}>Join BLDESY!</Text>
+                <MaterialIcons name="arrow-forward" size={18} color="#0f172a" />
+              </Pressable>
+            </LinearGradient>
+          </View>
+
+          {/* ─── 8. DUAL CTA ─── */}
+          <View style={[styles.section, { marginTop: Spacing.xl }]}>
+            <View style={styles.dualCtaRow}>
+              <Pressable
+                style={[styles.dualCtaCard, { backgroundColor: colors.tealBg, borderColor: colors.tealLight }]}
+                onPress={() => router.push('/post-job' as any)}
+              >
+                <MaterialIcons name="search" size={28} color={colors.teal} />
+                <ThemedText style={[styles.dualCtaTitle, { color: colors.text }]}>Need a tradie?</ThemedText>
+                <ThemedText style={[styles.dualCtaDesc, { color: colors.textSecondary }]}>Post a job for free</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.dualCtaCard, { backgroundColor: isDark ? '#1e1b4b' : '#eef2ff', borderColor: isDark ? '#312e81' : '#c7d2fe' }]}
+                onPress={() => router.push('/enterprise-signup' as any)}
+              >
+                <MaterialIcons name="business" size={28} color={isDark ? '#818cf8' : '#4f46e5'} />
+                <ThemedText style={[styles.dualCtaTitle, { color: colors.text }]}>Hiring builders?</ThemedText>
+                <ThemedText style={[styles.dualCtaDesc, { color: colors.textSecondary }]}>Enterprise portal</ThemedText>
               </Pressable>
             </View>
           </View>
@@ -1087,7 +1194,11 @@ const styles = StyleSheet.create({
   },
   tradeListLabel: {
     ...Type.captionSemiBold,
-    flex: 1,
+  },
+  tradeListDesc: {
+    fontSize: 11,
+    lineHeight: 14,
+    marginTop: 1,
   },
   tradeListChevron: {
     flexShrink: 0,
@@ -1220,6 +1331,35 @@ const styles = StyleSheet.create({
 
   /* Bottom pad */
   bottomPad: { height: 32 },
+
+  /* ─── How It Works ─── */
+  howItWorksRow: { flexDirection: 'row', gap: Spacing.sm },
+  howCard: { flex: 1, borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.md, alignItems: 'center', gap: Spacing.xs },
+  howStepCircle: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  howTitle: { fontSize: 14, fontWeight: '700', textAlign: 'center' },
+  howDesc: { fontSize: 11, lineHeight: 15, textAlign: 'center' },
+
+  /* ─── Value Props ─── */
+  valuePropRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.md, borderBottomWidth: StyleSheet.hairlineWidth },
+  valuePropIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  valuePropTitle: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  valuePropDesc: { fontSize: 13, lineHeight: 18 },
+
+  /* ─── Join CTA ─── */
+  joinCard: { borderRadius: Radius.xl, padding: Spacing.xl, gap: Spacing.md },
+  joinTitle: { color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  joinSubtitle: { color: 'rgba(255,255,255,0.7)', fontSize: 15, lineHeight: 22 },
+  joinFeatures: { gap: Spacing.sm, marginTop: Spacing.xs },
+  joinFeatureRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  joinFeatureText: { color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '500' },
+  joinBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: '#2dd4bf', height: 48, borderRadius: Radius.lg, marginTop: Spacing.sm },
+  joinBtnText: { color: '#0f172a', fontSize: 16, fontWeight: '800' },
+
+  /* ─── Dual CTA ─── */
+  dualCtaRow: { flexDirection: 'row', gap: Spacing.md },
+  dualCtaCard: { flex: 1, borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.lg, alignItems: 'center', gap: Spacing.sm },
+  dualCtaTitle: { fontSize: 15, fontWeight: '700', textAlign: 'center' },
+  dualCtaDesc: { fontSize: 12, textAlign: 'center' },
 
   /* ─── Overlay ─── */
   overlayPanel: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
