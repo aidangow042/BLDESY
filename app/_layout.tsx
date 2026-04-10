@@ -15,6 +15,7 @@ import 'react-native-reanimated';
 import { supabase } from '@/lib/supabase';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { CookieBanner } from '@/components/ui/cookie-banner';
+import { AuthProvider } from '@/lib/auth-context';
 import type { Session } from '@supabase/supabase-js';
 
 export const unstable_settings = {
@@ -116,6 +117,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', gestureEnabled: true, fullScreenGestureEnabled: true }}>
           <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
@@ -152,6 +154,7 @@ export default function RootLayout() {
         <StatusBar style="auto" translucent />
         <CookieBanner />
       </ThemeProvider>
+      </AuthProvider>
     </GestureHandlerRootView>
   );
 }

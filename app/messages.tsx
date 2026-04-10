@@ -21,6 +21,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ConversationList } from '@/components/messages/conversation-list';
 import { ConversationView } from '@/components/messages/conversation-view';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import { fetchConversations, getOrCreateConversation } from '@/lib/messaging';
 import type { Conversation } from '@/lib/messaging';
 
@@ -31,18 +32,12 @@ export default function MessagesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams<{ recipientId?: string }>();
+  const { userId } = useUser();
 
-  const [userId, setUserId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUserId(user?.id ?? null);
-    });
-  }, []);
 
   const loadConversations = useCallback(async () => {
     const convos = await fetchConversations();

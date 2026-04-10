@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -12,6 +12,7 @@ import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { DashboardColors, DashboardShadows } from '@/constants/dashboard-theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import { PageHeader, HeaderIcon } from '@/components/page-header';
 import { DashboardHeader } from '@/components/dashboard/dashboard-header';
 import { MetricsGrid } from '@/components/dashboard/metrics-grid';
@@ -72,9 +73,13 @@ export default function PortalScreen() {
   const bgCanvas = colors.canvas;
   const router = useRouter();
 
+  const { userId: ctxUserId } = useUser();
   const [status, setStatus] = useState<BuilderStatus>('loading');
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+
+  // Sync auth context userId
+  useEffect(() => { if (ctxUserId) setUserId(ctxUserId); }, [ctxUserId]);
   const [refreshing, setRefreshing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const notificationsRef = useRef<BottomSheet>(null);

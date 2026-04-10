@@ -28,6 +28,7 @@ import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { geocode, distanceKm } from '@/lib/geo';
 import { supabase } from '@/lib/supabase';
+import { getCached, setCache } from '@/lib/query-cache';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PAGE_SIZE = 10;
@@ -587,6 +588,15 @@ export default function ResultsScreen() {
   }
 
   async function fetchBuilders() {
+    // Check cache first
+    const cacheKey = `search:${params.trade_category}:${params.suburb}:${params.urgency}:${params.keywords}`;
+    const cached = getCached<any[]>(cacheKey);
+    if (cached) {
+      setAllBuilders(cached);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -603,7 +613,7 @@ export default function ResultsScreen() {
     let query = supabase
       .from('builder_profiles')
       .select(
-        'id, business_name, trade_category, suburb, postcode, bio, latitude, longitude, radius_km, urgency_capacity, availability, availability_note, response_time, profile_photo_url, cover_photo_url, projects, specialties, abn, license_key, credentials, credentials_verified',
+        'id, business_name, trade_category, suburb, postcode, latitude, longitude, radius_km, availability, availability_note, response_time, profile_photo_url, specialties, abn, license_key, credentials_verified',
       )
       .eq('approved', true);
 
@@ -667,6 +677,7 @@ export default function ResultsScreen() {
     results.sort((a, b) => b._matchScore - a._matchScore);
 
     setAllBuilders(results);
+    setCache(cacheKey, results); // Cache for 5 minutes
     setDisplayedBuilders(results.slice(0, PAGE_SIZE));
     setPage(1);
     setLoading(false);

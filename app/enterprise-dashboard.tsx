@@ -24,6 +24,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Radius, Spacing, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import { SideDrawer } from '@/components/side-drawer';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -85,9 +86,11 @@ export default function EnterpriseDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  const { userId: ctxUserId } = useUser();
+
   const loadDashboard = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
+    if (!ctxUserId) { setLoading(false); return; }
+    const user = { id: ctxUserId };
 
     const { data: ep } = await supabase
       .from('enterprise_profiles')
