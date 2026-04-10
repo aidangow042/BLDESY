@@ -12,6 +12,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -84,6 +85,8 @@ export function SideDrawer({ visible, onClose, builderMode = false, enterpriseMo
     email: null,
     avatar: null,
     isBuilder: false,
+    isEnterprise: false,
+    isAdmin: false,
     isGuest: true,
     businessName: null,
     tradeCategory: null,
@@ -346,6 +349,7 @@ export function SideDrawer({ visible, onClose, builderMode = false, enterpriseMo
           )}
         </LinearGradient>
 
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} bounces={false}>
         {/* ─── Main menu items ─── */}
         <View style={styles.menuSection}>
           {mainItems.map((item) => (
@@ -439,28 +443,10 @@ export function SideDrawer({ visible, onClose, builderMode = false, enterpriseMo
                 <MaterialIcons name="chevron-right" size={18} color={colors.icon} />
               </Pressable>
             )}
-            {!userInfo.isEnterprise && !userInfo.isGuest && (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.menuItem,
-                  { backgroundColor: pressed ? (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)') : 'transparent' },
-                ]}
-                onPress={() => navigate('/enterprise-signup')}
-                accessibilityRole="button"
-                accessibilityLabel="Register as Enterprise"
-              >
-                <View style={[styles.menuIconWrap, { backgroundColor: isDark ? '#1e1b4b' : '#eef2ff' }]}>
-                  <Ionicons name="business-outline" size={20} color={isDark ? '#818cf8' : '#4f46e5'} />
-                </View>
-                <Text style={[styles.menuLabel, { color: colors.text }]}>Enterprise Portal</Text>
-                <MaterialIcons name="chevron-right" size={18} color={colors.icon} />
-              </Pressable>
-            )}
           </View>
         )}
 
-        {/* ─── Spacer pushes logout to the bottom ─── */}
-        <View style={{ flex: 1 }} />
+        </ScrollView>
 
         {/* ─── Sign In / Logout ─── */}
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
