@@ -144,10 +144,8 @@ export default function EnterpriseDashboardScreen() {
   const navItems: { icon: React.ComponentProps<typeof Ionicons>['name']; title: string; description: string; onPress: () => void }[] = [
     { icon: 'add-circle-outline', title: 'Post a Job', description: 'Create a new job listing', onPress: () => router.push('/post-job' as any) },
     { icon: 'briefcase-outline', title: 'My Job Posts', description: 'Manage your posted jobs', onPress: () => router.push('/enterprise-jobs' as any) },
-    { icon: 'document-text-outline', title: 'Applications', description: 'Review builder applications', onPress: () => router.push('/enterprise-jobs' as any) },
     { icon: 'bar-chart-outline', title: 'Analytics', description: 'Performance insights & metrics', onPress: () => router.push('/enterprise-analytics' as any) },
     { icon: 'create-outline', title: 'Edit Profile', description: 'Update company details', onPress: () => router.push('/enterprise-edit-profile' as any) },
-    { icon: 'chatbubble-outline', title: 'Messages', description: 'Conversations with builders', onPress: () => router.push('/messages' as any) },
     { icon: 'card-outline', title: 'Billing & Plans', description: 'Subscription & payments', onPress: () => router.push('/enterprise-billing' as any) },
     { icon: 'settings-outline', title: 'Settings', description: 'Account preferences', onPress: () => router.push('/enterprise-settings' as any) },
   ];
