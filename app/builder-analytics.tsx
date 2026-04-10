@@ -252,10 +252,106 @@ export default function BuilderAnalyticsScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={teal} />}>
 
-        {/* 8 Metric Cards */}
+        {/* ═══ PROFILE ANALYTICS ═══ */}
+        <Text style={[styles.sectionHeading, { color: colors.text }]}>Profile Analytics</Text>
+
+        {/* Profile metric cards */}
         <View style={styles.mGrid}>
-          {metricCards.map(m => (
-            <View key={m.label} style={[styles.mCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+          {([
+            { label: 'PROFILE', value: metrics.profileCompleteness, icon: 'person-outline' as const, accent: teal, suffix: '%' },
+            { label: 'VIEWS', value: metrics.profileViews, icon: 'eye-outline' as const, accent: '#8b5cf6', suffix: '' },
+            { label: 'SEARCHES', value: metrics.searchAppearances, icon: 'search-outline' as const, accent: '#d97706', suffix: '' },
+            { label: 'WIN RATE', value: metrics.acceptanceRate, icon: 'trending-up-outline' as const, accent: '#059669', suffix: '%' },
+          ]).map(m => (
+            <View key={m.label} style={[styles.mCard, styles.mCardWide, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+              <View style={[styles.mAccent, { backgroundColor: m.accent }]} />
+              <View style={[styles.mIconWrap, { backgroundColor: m.accent + '10' }]}>
+                <Ionicons name={m.icon} size={14} color={m.accent} />
+              </View>
+              <Text style={[styles.mLabel, { color: colors.textSecondary }]}>{m.label}</Text>
+              <CountUp to={m.value} color={isDark ? colors.text : '#0f172a'} suffix={m.suffix} />
+            </View>
+          ))}
+        </View>
+
+        {/* Top Search Keywords */}
+        <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+          <Text style={[styles.secTitle, { color: colors.text }]}>Top Search Keywords</Text>
+          {topKeywords.map((kw, i) => {
+            const maxKw = topKeywords[0]?.count || 1;
+            const pct = (kw.count / maxKw) * 100;
+            return (
+              <View key={kw.keyword} style={styles.kwRow}>
+                <Text style={[styles.kwRank, { color: teal }]}>#{i + 1}</Text>
+                <View style={{ flex: 1 }}>
+                  <View style={[styles.kwBarTrack, { backgroundColor: tealBg }]}>
+                    <View style={[styles.kwBarFill, { width: `${pct}%`, backgroundColor: teal }]} />
+                    <Text style={[styles.kwText, { color: colors.text }]} numberOfLines={1}>{kw.keyword}</Text>
+                  </View>
+                </View>
+                <Text style={[styles.kwCount, { color: teal }]}>{kw.count}</Text>
+              </View>
+            );
+          })}
+        </View>
+
+        {/* Traffic Sources */}
+        <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+          <Text style={[styles.secTitle, { color: colors.text }]}>Traffic Sources</Text>
+          {trafficSources.map(src => (
+            <View key={src.source} style={styles.srcRow}>
+              <View style={[styles.srcIcon, { backgroundColor: tealBg }]}>
+                <Ionicons name={src.icon} size={16} color={teal} />
+              </View>
+              <Text style={[styles.srcLabel, { color: colors.text }]}>{src.source}</Text>
+              <View style={[styles.srcBarTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f1f5f9' }]}>
+                <View style={[styles.srcBarFill, { width: `${src.percent}%`, backgroundColor: teal }]} />
+              </View>
+              <Text style={[styles.srcPct, { color: teal }]}>{src.percent}%</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Competitor Comparison */}
+        <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+          <Text style={[styles.secTitle, { color: colors.text }]}>How You Compare</Text>
+          <View style={styles.compGrid}>
+            {[
+              { header: 'You', value: competitorData.yourViews, label: 'Views', highlight: true },
+              { header: 'Average', value: competitorData.avgViews, label: 'Views', highlight: false },
+              { header: 'You', value: competitorData.yourQuotes, label: 'Quotes', highlight: true },
+              { header: 'Average', value: competitorData.avgQuotes, label: 'Quotes', highlight: false },
+            ].map((c, i) => (
+              <View key={i} style={styles.compCol}>
+                <Text style={[styles.compHeader, { color: c.highlight ? teal : colors.textSecondary }]}>{c.header}</Text>
+                <Text style={[styles.compVal, { color: c.highlight ? colors.text : colors.textSecondary }]}>{c.value}</Text>
+                <Text style={[styles.compLabel, { color: colors.textSecondary }]}>{c.label}</Text>
+              </View>
+            ))}
+          </View>
+          <View style={[styles.compBanner, { backgroundColor: tealBg }]}>
+            <Ionicons name="trending-up" size={16} color={teal} />
+            <Text style={[styles.compBannerText, { color: teal }]}>
+              You're outperforming {Math.round(((competitorData.yourViews - competitorData.avgViews) / competitorData.avgViews) * 100)}% above average
+            </Text>
+          </View>
+        </View>
+
+        {/* ═══ DIVIDER ═══ */}
+        <View style={[styles.divider, { borderColor: cardBorder }]} />
+
+        {/* ═══ JOB ANALYTICS ═══ */}
+        <Text style={[styles.sectionHeading, { color: colors.text }]}>Job Analytics</Text>
+
+        {/* Job metric cards */}
+        <View style={styles.mGrid}>
+          {([
+            { label: 'APPLIED', value: metrics.jobsApplied, icon: 'briefcase-outline' as const, accent: teal, suffix: '' },
+            { label: 'WON', value: metrics.jobsWon, icon: 'trophy-outline' as const, accent: '#059669', suffix: '' },
+            { label: 'PENDING', value: metrics.applications - metrics.jobsWon, icon: 'time-outline' as const, accent: '#d97706', suffix: '' },
+            { label: 'ACCEPTED', value: metrics.jobsWon, icon: 'checkmark-circle-outline' as const, accent: '#059669', suffix: '' },
+          ]).map(m => (
+            <View key={m.label} style={[styles.mCard, styles.mCardWide, { backgroundColor: cardBg, borderColor: cardBorder }]}>
               <View style={[styles.mAccent, { backgroundColor: m.accent }]} />
               <View style={[styles.mIconWrap, { backgroundColor: m.accent + '10' }]}>
                 <Ionicons name={m.icon} size={14} color={m.accent} />
@@ -314,77 +410,6 @@ export default function BuilderAnalyticsScreen() {
           </View>
         </View>
 
-        {/* Top Search Keywords */}
-        <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
-          <Text style={[styles.secTitle, { color: colors.text }]}>Top Search Keywords</Text>
-          {topKeywords.map((kw, i) => {
-            const maxKw = topKeywords[0]?.count || 1;
-            const pct = (kw.count / maxKw) * 100;
-            return (
-              <View key={kw.keyword} style={styles.kwRow}>
-                <Text style={[styles.kwRank, { color: teal }]}>#{i + 1}</Text>
-                <View style={{ flex: 1 }}>
-                  <View style={[styles.kwBarTrack, { backgroundColor: tealBg }]}>
-                    <View style={[styles.kwBarFill, { width: `${pct}%`, backgroundColor: teal }]} />
-                    <Text style={[styles.kwText, { color: colors.text }]} numberOfLines={1}>{kw.keyword}</Text>
-                  </View>
-                </View>
-                <Text style={[styles.kwCount, { color: teal }]}>{kw.count}</Text>
-              </View>
-            );
-          })}
-        </View>
-
-        {/* Traffic Sources */}
-        <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
-          <Text style={[styles.secTitle, { color: colors.text }]}>Traffic Sources</Text>
-          {trafficSources.map(src => (
-            <View key={src.source} style={styles.srcRow}>
-              <View style={[styles.srcIcon, { backgroundColor: tealBg }]}>
-                <Ionicons name={src.icon} size={16} color={teal} />
-              </View>
-              <Text style={[styles.srcLabel, { color: colors.text }]}>{src.source}</Text>
-              <View style={[styles.srcBarTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f1f5f9' }]}>
-                <View style={[styles.srcBarFill, { width: `${src.percent}%`, backgroundColor: teal }]} />
-              </View>
-              <Text style={[styles.srcPct, { color: teal }]}>{src.percent}%</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Competitor Comparison */}
-        <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
-          <Text style={[styles.secTitle, { color: colors.text }]}>How You Compare</Text>
-          <View style={styles.compGrid}>
-            <View style={styles.compCol}>
-              <Text style={[styles.compHeader, { color: teal }]}>You</Text>
-              <Text style={[styles.compVal, { color: colors.text }]}>{competitorData.yourViews}</Text>
-              <Text style={[styles.compLabel, { color: colors.textSecondary }]}>Views</Text>
-            </View>
-            <View style={styles.compCol}>
-              <Text style={[styles.compHeader, { color: colors.textSecondary }]}>Average</Text>
-              <Text style={[styles.compVal, { color: colors.textSecondary }]}>{competitorData.avgViews}</Text>
-              <Text style={[styles.compLabel, { color: colors.textSecondary }]}>Views</Text>
-            </View>
-            <View style={styles.compCol}>
-              <Text style={[styles.compHeader, { color: teal }]}>You</Text>
-              <Text style={[styles.compVal, { color: colors.text }]}>{competitorData.yourQuotes}</Text>
-              <Text style={[styles.compLabel, { color: colors.textSecondary }]}>Quotes</Text>
-            </View>
-            <View style={styles.compCol}>
-              <Text style={[styles.compHeader, { color: colors.textSecondary }]}>Average</Text>
-              <Text style={[styles.compVal, { color: colors.textSecondary }]}>{competitorData.avgQuotes}</Text>
-              <Text style={[styles.compLabel, { color: colors.textSecondary }]}>Quotes</Text>
-            </View>
-          </View>
-          <View style={[styles.compBanner, { backgroundColor: tealBg }]}>
-            <Ionicons name="trending-up" size={16} color={teal} />
-            <Text style={[styles.compBannerText, { color: teal }]}>
-              You're outperforming {Math.round(((competitorData.yourViews - competitorData.avgViews) / competitorData.avgViews) * 100)}% above average
-            </Text>
-          </View>
-        </View>
-
       </ScrollView>
     </View>
   );
@@ -412,8 +437,11 @@ const styles = StyleSheet.create({
   periodTextActive: { color: '#fff' },
   scroll: { padding: Spacing.lg, gap: Spacing.lg, paddingBottom: 100 },
 
+  sectionHeading: { fontSize: 18, fontWeight: '800', letterSpacing: -0.3, marginBottom: Spacing.xs },
+  divider: { borderTopWidth: 1, marginVertical: Spacing.sm },
   mGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   mCard: { width: (SCREEN_WIDTH - 32 - 18) / 4, borderWidth: 1, borderRadius: 12, padding: 8, gap: 3, overflow: 'hidden', ...CARD_SHADOW },
+  mCardWide: { width: (SCREEN_WIDTH - 32 - 6) / 2 - 3 },
   mAccent: { position: 'absolute', top: 0, left: 0, right: 0, height: 3, borderTopLeftRadius: 12, borderTopRightRadius: 12 },
   mIconWrap: { width: 24, height: 24, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   mLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
