@@ -1,17 +1,19 @@
 {
   "expo": {
-    "name": "myApp",
-    "slug": "myApp",
+    "name": "BLDESY",
+    "slug": "bldesy",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "bldesy",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bldesy.app"
     },
     "android": {
+      "package": "com.bldesy.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

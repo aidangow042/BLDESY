@@ -127,8 +127,13 @@ export default function EnterpriseSignupScreen() {
       return;
     }
 
-    // Update profile role to enterprise
-    await supabase.from('profiles').update({ role: 'enterprise' }).eq('id', user.id);
+    // Update profile role to enterprise (via SECURITY DEFINER RPC — client can't set role directly)
+    const { error: roleError } = await supabase.rpc('set_role_enterprise');
+    if (roleError) {
+      setSaving(false);
+      Alert.alert('Error', 'Failed to set enterprise role. Please try again.');
+      return;
+    }
 
     setSaving(false);
     router.replace('/pending-approval' as any);

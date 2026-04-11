@@ -113,8 +113,8 @@ Deno.serve(async (req) => {
       JSON.stringify({ message: `Geocoded ${updated}/${builders.length} builders`, results }),
       { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
     );
-  } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
+  } catch (_err) {
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500,
       headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     });

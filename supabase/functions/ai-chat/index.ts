@@ -1,5 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk@0.39.0';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { aiChatLimiter, checkRateLimit } from '../_shared/rate-limit.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').filter(Boolean);
 
@@ -10,20 +11,6 @@ function getCorsHeaders(req: Request) {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   };
-}
-
-/* ── Rate limiter: 10 requests/hour per user ── */
-const rateLimitMap = new Map<string, number[]>();
-const RATE_LIMIT = 10;
-const RATE_WINDOW_MS = 3_600_000;
-
-function checkRateLimit(userId: string): boolean {
-  const now = Date.now();
-  const timestamps = (rateLimitMap.get(userId) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
-  if (timestamps.length >= RATE_LIMIT) return false;
-  timestamps.push(now);
-  rateLimitMap.set(userId, timestamps);
-  return true;
 }
 
 type BuilderRec = {
@@ -64,8 +51,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── Rate limit: 20 requests/minute per user ──
-    if (!checkRateLimit(user.id)) {
+    // ── Rate limit: 10 requests/hour per user (persistent via Upstash Redis) ──
+    const { allowed } = await checkRateLimit(aiChatLimiter, user.id);
+    if (!allowed) {
       return new Response(
         JSON.stringify({ error: 'Too many requests — please wait a moment before trying again' }),
         { status: 429, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json', 'Retry-After': '60' } },

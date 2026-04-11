@@ -61,7 +61,6 @@ export function VerifyCredentialsForm({ tradeCategory, existingCredentials, onVe
           licence_number: licenceNumber || undefined,
           state,
           trade_category: tradeCategory,
-          existing_credentials: credentials,
         },
       });
 

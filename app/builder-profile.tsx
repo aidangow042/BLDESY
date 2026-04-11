@@ -49,9 +49,7 @@ type BuilderProfile = {
   trade_category: string;
   suburb: string;
   postcode: string;
-  phone: string | null;
   website: string | null;
-  email?: string | null;
   radius_km?: number | null;
   abn?: string | null;
   license_key?: string | null;
@@ -644,7 +642,7 @@ export default function BuilderProfileScreen() {
 
     const { data, error: fetchError } = await supabase
       .from('builder_profiles')
-      .select('id, user_id, business_name, trade_category, suburb, postcode, bio, phone, website, profile_photo_url, cover_photo_url, projects, specialties, credentials, credentials_verified, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km, faqs, team_members')
+      .select('id, user_id, business_name, trade_category, suburb, postcode, bio, website, profile_photo_url, cover_photo_url, projects, specialties, credentials, credentials_verified, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km, faqs, team_members')
       .eq('id', id)
       .single();
 

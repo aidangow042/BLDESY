@@ -6,22 +6,21 @@
  */
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { verifyCredentialsLimiter, checkRateLimit } from '../_shared/rate-limit.ts';
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Content-Type': 'application/json',
-};
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').filter(Boolean);
 
-// ── Rate limiter ──
-const rateLimitMap = new Map<string, number[]>();
-function checkRateLimit(userId: string, limit = 10, windowMs = 60_000): boolean {
-  const now = Date.now();
-  const timestamps = (rateLimitMap.get(userId) ?? []).filter((t) => now - t < windowMs);
-  if (timestamps.length >= limit) return false;
-  timestamps.push(now);
-  rateLimitMap.set(userId, timestamps);
-  return true;
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('Origin') ?? '';
+  const allowedOrigin =
+    ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin)
+      ? origin
+      : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Content-Type': 'application/json',
+  };
 }
 
 // ── NSW OAuth token cache ──
@@ -158,15 +157,17 @@ function getLicenceReq(trade: string, state: string) {
 
 // ── Main handler ──
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: CORS_HEADERS });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
     // Auth
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization' }), { status: 401, headers: CORS_HEADERS });
+      return new Response(JSON.stringify({ error: 'Missing authorization' }), { status: 401, headers: corsHeaders });
     }
 
     const supabase = createClient(
@@ -177,21 +178,33 @@ Deno.serve(async (req) => {
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: CORS_HEADERS });
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
     }
 
-    if (!checkRateLimit(user.id)) {
-      return new Response(JSON.stringify({ error: 'Too many requests' }), { status: 429, headers: CORS_HEADERS });
+    const { allowed } = await checkRateLimit(verifyCredentialsLimiter, user.id);
+    if (!allowed) {
+      return new Response(JSON.stringify({ error: 'Too many requests' }), { status: 429, headers: corsHeaders });
     }
 
     const body = await req.json();
-    const { abn, licence_number, state, trade_category, existing_credentials } = body;
+    const { abn, licence_number, state, trade_category } = body;
 
     if (!abn && !licence_number && !trade_category) {
-      return new Response(JSON.stringify({ error: 'Provide ABN, licence number, or trade category' }), { status: 400, headers: CORS_HEADERS });
+      return new Response(JSON.stringify({ error: 'Provide ABN, licence number, or trade category' }), { status: 400, headers: corsHeaders });
     }
 
-    const existing = existing_credentials || {};
+    // Fetch current credentials from DB — never trust client-supplied credentials object
+    const adminClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
+    const { data: currentProfile } = await adminClient
+      .from('builder_profiles')
+      .select('credentials_verified')
+      .eq('user_id', user.id)
+      .single();
+
+    const existing: Record<string, any> = (currentProfile?.credentials_verified as Record<string, any>) || {};
     const now = new Date().toISOString();
     const errors: string[] = [];
     let abn_verified = false;
@@ -263,56 +276,32 @@ Deno.serve(async (req) => {
           licence_verified = true;
         }
       } else if (builderState.toUpperCase() === 'QLD' && requirement.source === 'qbcc_register') {
-        const { data: qbccRow } = await supabase
-          .from('qbcc_licence_register')
-          .select('licence_number, licensee_name, licence_class')
-          .eq('licence_number', licence_number)
-          .single();
-
-        if (!qbccRow) {
-          errors.push('Licence not found in the QBCC register');
-        } else {
-          existing.licences = [
-            ...(existing.licences || []).filter((l: any) => l.type !== tradeCategory),
-            {
-              type: tradeCategory,
-              licence_number,
-              verified: true,
-              verified_at: now,
-              status: 'Current',
-              category: (qbccRow as any).licence_class || '',
-              display_label: requirement.display_label,
-              source: 'qbcc_register',
-              verification_method: 'api',
-            },
-          ];
-          licence_verified = true;
-        }
+        // QBCC register lookup is not yet available — flag for admin review
+        existing.licences = [
+          ...(existing.licences || []).filter((l: any) => l.type !== tradeCategory),
+          { type: tradeCategory, licence_number, verified: false, status: 'Pending Admin Review', display_label: requirement.display_label, source: 'qbcc_register', verification_method: 'admin' },
+        ];
+        errors.push('QLD licence verification is not yet automated — your licence will be reviewed manually.');
       }
     }
 
     existing.state = builderState || existing.state;
 
-    // Persist with service role key
-    const admin = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-    );
-
-    const { error: persistError } = await admin
+    // Persist with service role client (already created above)
+    const { error: persistError } = await adminClient
       .from('builder_profiles')
       .update({ credentials_verified: existing })
       .eq('user_id', user.id);
 
     if (persistError) {
-      return new Response(JSON.stringify({ error: 'Failed to save credentials' }), { status: 500, headers: CORS_HEADERS });
+      return new Response(JSON.stringify({ error: 'Failed to save credentials' }), { status: 500, headers: corsHeaders });
     }
 
     return new Response(
       JSON.stringify({ success: true, abn_verified, licence_verified, errors, credentials_verified: existing }),
-      { headers: CORS_HEADERS },
+      { headers: corsHeaders },
     );
-  } catch (err) {
-    return new Response(JSON.stringify({ error: (err as Error).message }), { status: 500, headers: CORS_HEADERS });
+  } catch (_err) {
+    return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500, headers: corsHeaders });
   }
 });

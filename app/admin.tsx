@@ -125,9 +125,11 @@ export default function AdminScreen() {
   async function handleApprove(app: Application) {
     setActionId(app.id);
     if (app.type === 'builder') {
-      await supabase.from('builder_profiles').update({ approved: true } as any).eq('id', app.id);
+      const { error } = await supabase.rpc('admin_set_builder_approved', { p_builder_id: app.id, p_approved: true });
+      if (error) { Alert.alert('Error', error.message); setActionId(null); return; }
     } else {
-      await supabase.from('enterprise_profiles').update({ status: 'approved', approved: true } as any).eq('id', app.id);
+      const { error } = await supabase.rpc('admin_set_enterprise_status', { p_enterprise_id: app.id, p_status: 'approved' });
+      if (error) { Alert.alert('Error', error.message); setActionId(null); return; }
     }
     setActionId(null);
     loadApplications();
@@ -137,9 +139,15 @@ export default function AdminScreen() {
   async function handleReject(app: Application) {
     setActionId(app.id);
     if (app.type === 'builder') {
-      await supabase.from('builder_profiles').update({ approved: false } as any).eq('id', app.id);
+      const { error } = await supabase.rpc('admin_set_builder_approved', { p_builder_id: app.id, p_approved: false });
+      if (error) { Alert.alert('Error', error.message); setActionId(null); return; }
     } else {
-      await supabase.from('enterprise_profiles').update({ status: 'rejected', rejection_reason: rejectReason || null } as any).eq('id', app.id);
+      const { error } = await supabase.rpc('admin_set_enterprise_status', {
+        p_enterprise_id: app.id,
+        p_status: 'rejected',
+        p_rejection_reason: rejectReason || null,
+      });
+      if (error) { Alert.alert('Error', error.message); setActionId(null); return; }
     }
     setActionId(null);
     setRejectingId(null);

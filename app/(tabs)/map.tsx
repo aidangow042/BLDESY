@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   FlatList,
   Image,
@@ -310,7 +311,7 @@ export default function MapScreen() {
     const { data, error } = await supabase
       .from('builder_profiles')
       .select(
-        'id, business_name, trade_category, suburb, bio, phone, latitude, longitude, radius_km, availability, availability_note, profile_photo_url, abn, license_key, specialties, established_year, projects',
+        'id, business_name, trade_category, suburb, bio, latitude, longitude, radius_km, availability, availability_note, profile_photo_url, abn, license_key, specialties, established_year, projects',
       )
       .eq('approved', true)
       .not('latitude', 'is', null)
@@ -1184,28 +1185,31 @@ export default function MapScreen() {
 
             {/* ─── Action buttons ─── */}
             <View style={styles.actionRow}>
-              {selectedTradie.phone && (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.actionBtn,
-                    styles.actionBtnOutline,
-                    {
-                      borderColor: colors.border,
-                      opacity: pressed ? 0.7 : 1,
-                    },
-                  ]}
-                  onPress={() =>
-                    Linking.openURL(`tel:${selectedTradie.phone}`)
+              <Pressable
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  styles.actionBtnOutline,
+                  {
+                    borderColor: colors.border,
+                    opacity: pressed ? 0.7 : 1,
+                  },
+                ]}
+                onPress={async () => {
+                  const { data } = await supabase.rpc('get_builder_contact', { p_builder_id: selectedTradie.id });
+                  if (data?.phone) {
+                    Linking.openURL(`tel:${data.phone}`);
+                  } else {
+                    Alert.alert('No phone', 'This builder has not listed a phone number.');
                   }
-                  accessibilityRole="button"
-                  accessibilityLabel={`Call ${selectedTradie.business_name}`}
-                >
-                  <MaterialIcons name="phone" size={16} color={colors.text} />
-                  <Text style={[styles.actionBtnText, { color: colors.text }]}>
-                    Call
-                  </Text>
-                </Pressable>
-              )}
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Call ${selectedTradie.business_name}`}
+              >
+                <MaterialIcons name="phone" size={16} color={colors.text} />
+                <Text style={[styles.actionBtnText, { color: colors.text }]}>
+                  Call
+                </Text>
+              </Pressable>
 
               <Pressable
                 style={({ pressed }) => [
