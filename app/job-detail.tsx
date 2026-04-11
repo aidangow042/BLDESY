@@ -529,7 +529,18 @@ export default function JobDetailScreen() {
                   <Pressable
                     key={doc.id}
                     style={({ pressed }) => [styles.docRow, pressed && { opacity: 0.7 }]}
-                    onPress={() => Linking.openURL(doc.file_path)}
+                    onPress={async () => {
+                      // file_path is a storage path — generate a fresh signed URL
+                      if (doc.file_path.startsWith('http')) {
+                        Linking.openURL(doc.file_path);
+                      } else {
+                        const { data } = await supabase.storage
+                          .from('job-documents')
+                          .createSignedUrl(doc.file_path, 3600);
+                        if (data?.signedUrl) Linking.openURL(data.signedUrl);
+                        else Alert.alert('Error', 'Could not open document');
+                      }
+                    }}
                   >
                     <View style={styles.docIconWrap}>
                       <MaterialIcons name="insert-drive-file" size={22} color="#0F6E56" />

@@ -187,12 +187,8 @@ export async function uploadJobDocument(
       return null;
     }
 
-    // Use signed URL for private documents (1 hour expiry)
-    const { data: signedData } = await supabase.storage
-      .from('job-documents')
-      .createSignedUrl(fileName, 3600);
-
-    return signedData?.signedUrl ?? null;
+    // Return the storage path — signed URLs are generated at read time
+    return fileName;
   } catch (err) {
     console.error('Job document upload failed:', err);
     return null;
