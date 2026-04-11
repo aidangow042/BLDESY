@@ -168,7 +168,6 @@ export default function TabLayout() {
 
       {/* Hidden screens — keep in route tree but not in tab bar */}
       <TopTabs.Screen name="portal" options={{ href: null, swipeEnabled: false }} />
-      <TopTabs.Screen name="explore" options={{ href: null, swipeEnabled: false }} />
     </TopTabs>
   );
 }

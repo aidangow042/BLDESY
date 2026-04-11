@@ -149,7 +149,6 @@ export default function RootLayout() {
           <Stack.Screen name="settings" />
           <Stack.Screen name="help" />
           <Stack.Screen name="legal" />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <StatusBar style="auto" translucent />
         <CookieBanner />

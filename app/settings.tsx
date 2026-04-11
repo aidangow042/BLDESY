@@ -1,11 +1,13 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -49,22 +51,26 @@ export default function SettingsScreen() {
     }, []),
   );
 
+  const [emailModalVisible, setEmailModalVisible] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [emailSaving, setEmailSaving] = useState(false);
+
   const handleChangeEmail = () => {
-    Alert.prompt(
-      'Change Email',
-      'Enter your new email address. We\'ll send a confirmation link.',
-      async (newEmail) => {
-        if (!newEmail?.trim()) return;
-        const { error } = await supabase.auth.updateUser({ email: newEmail.trim() });
-        if (error) {
-          Alert.alert('Error', error.message);
-        } else {
-          Alert.alert('Check Your Email', 'We\'ve sent a confirmation link to your new email address.');
-        }
-      },
-      'plain-text',
-      userEmail ?? '',
-    );
+    setNewEmail(userEmail ?? '');
+    setEmailModalVisible(true);
+  };
+
+  const submitEmailChange = async () => {
+    if (!newEmail?.trim()) return;
+    setEmailSaving(true);
+    const { error } = await supabase.auth.updateUser({ email: newEmail.trim() });
+    setEmailSaving(false);
+    setEmailModalVisible(false);
+    if (error) {
+      Alert.alert('Error', error.message);
+    } else {
+      Alert.alert('Check Your Email', 'We\'ve sent a confirmation link to your new email address.');
+    }
   };
 
   const handleChangePassword = () => {
@@ -400,6 +406,40 @@ export default function SettingsScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Change Email Modal — cross-platform replacement for Alert.prompt */}
+      <Modal visible={emailModalVisible} transparent animationType="fade" onRequestClose={() => setEmailModalVisible(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setEmailModalVisible(false)}>
+          <Pressable style={[styles.modalCard, { backgroundColor: isDark ? colors.surface : '#fff' }]} onPress={() => {}}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Change Email</Text>
+            <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
+              Enter your new email address. We'll send a confirmation link.
+            </Text>
+            <TextInput
+              style={[styles.modalInput, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#f8fafc', borderColor: colors.border, color: colors.text }]}
+              value={newEmail}
+              onChangeText={setNewEmail}
+              placeholder="Email address"
+              placeholderTextColor={colors.textSecondary}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoFocus
+            />
+            <View style={styles.modalActions}>
+              <Pressable style={[styles.modalBtn, { borderColor: colors.border, borderWidth: 1 }]} onPress={() => setEmailModalVisible(false)}>
+                <Text style={[styles.modalBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalBtn, { backgroundColor: colors.teal, opacity: emailSaving ? 0.7 : 1 }]}
+                onPress={submitEmailChange}
+                disabled={emailSaving}
+              >
+                <Text style={[styles.modalBtnText, { color: '#fff' }]}>{emailSaving ? 'Saving...' : 'Update'}</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -475,6 +515,51 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 12,
     textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing['2xl'],
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: Radius.lg,
+    padding: Spacing.xl,
+    gap: Spacing.md,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    fontSize: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    justifyContent: 'flex-end',
+    marginTop: Spacing.xs,
+  },
+  modalBtn: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+  },
+  modalBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 
