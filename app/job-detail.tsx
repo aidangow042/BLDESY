@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  Image,
   Linking,
   Modal,
   Platform,
@@ -13,6 +12,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -26,48 +26,11 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { getRelativeTime, getDisplayName, getInitials, URGENCY_CONFIG } from '@/lib/trade-utils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PHOTO_WIDTH = SCREEN_WIDTH - 48;
 const PHOTO_HEIGHT = 240;
-
-/* ─── Helpers ──────────────────────────────────────────────── */
-
-function getRelativeTime(dateStr: string): string {
-  const now = Date.now();
-  const posted = new Date(dateStr).getTime();
-  const diffMs = now - posted;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays} days ago`;
-  return new Date(dateStr).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
-}
-
-function getDisplayName(fullName: string | null): string {
-  if (!fullName) return 'Customer';
-  const parts = fullName.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0];
-  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
-}
-
-function getInitials(fullName: string | null): string {
-  if (!fullName) return 'C';
-  const parts = fullName.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-const URGENCY_CONFIG: Record<string, { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; color: string; bg: string }> = {
-  asap: { label: 'ASAP', icon: 'alarm', color: '#DC2626', bg: '#FEF2F2' },
-  this_week: { label: 'This Week', icon: 'time-outline', color: '#D97706', bg: '#FFFBEB' },
-  flexible: { label: 'Flexible', icon: 'calendar-outline', color: '#059669', bg: '#ECFDF5' },
-};
 
 /* ─── Types ────────────────────────────────────────────────── */
 
@@ -363,7 +326,7 @@ export default function JobDetailScreen() {
               <Text style={styles.headerTradePillText}>{job.trade_category}</Text>
             </View>
             <View style={[styles.headerUrgencyPill, { backgroundColor: urg.bg }]}>
-              <Ionicons name={urg.icon} size={12} color={urg.color} />
+              <Ionicons name={urg.icon as any} size={12} color={urg.color} />
               <Text style={[styles.headerUrgencyText, { color: urg.color }]}>{urg.label}</Text>
             </View>
             <Text style={styles.headerSubText}>{getRelativeTime(job.created_at)}</Text>
@@ -427,7 +390,9 @@ export default function JobDetailScreen() {
                     <Image
                       source={{ uri: photo.file_path }}
                       style={styles.photoImage}
-                      resizeMode="cover"
+                      contentFit="cover"
+                      cachePolicy="disk"
+                      placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }}
                     />
                   </Pressable>
                 ))}
@@ -462,7 +427,7 @@ export default function JobDetailScreen() {
                 </View>
               )}
               <View style={[styles.factChip, { backgroundColor: urg.bg }]}>
-                <Ionicons name={urg.icon} size={14} color={urg.color} />
+                <Ionicons name={urg.icon as any} size={14} color={urg.color} />
                 <Text style={[styles.factChipText, { color: urg.color }]}>{urg.label}</Text>
               </View>
               <View style={[styles.factChip, { backgroundColor: job.status === 'open' ? '#ECFDF5' : '#FEF2F2' }]}>
@@ -507,7 +472,7 @@ export default function JobDetailScreen() {
             {/* Posted by inline */}
             <View style={styles.postedByInline}>
               {customer?.avatar_url ? (
-                <Image source={{ uri: customer.avatar_url }} style={styles.postedByAvatarTiny} />
+                <Image source={{ uri: customer.avatar_url }} style={styles.postedByAvatarTiny} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
               ) : (
                 <View style={styles.postedByInitialsTiny}>
                   <Text style={styles.postedByInitialsTinyText}>{initials}</Text>
@@ -645,7 +610,9 @@ export default function JobDetailScreen() {
                 key={photo.id}
                 source={{ uri: photo.file_path }}
                 style={{ width: SCREEN_WIDTH, height: '100%' }}
-                resizeMode="contain"
+                contentFit="contain"
+                cachePolicy="disk"
+                placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }}
               />
             ))}
           </ScrollView>
@@ -676,7 +643,7 @@ export default function JobDetailScreen() {
 
               <View style={styles.sheetCustomerRow}>
                 {customer?.avatar_url ? (
-                  <Image source={{ uri: customer.avatar_url }} style={styles.sheetAvatar} />
+                  <Image source={{ uri: customer.avatar_url }} style={styles.sheetAvatar} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
                 ) : (
                   <View style={styles.sheetInitials}>
                     <Text style={styles.sheetInitialsText}>{initials}</Text>

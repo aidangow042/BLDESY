@@ -5,7 +5,6 @@ import {
   Animated,
   Dimensions,
   FlatList,
-  Image,
   Modal,
   Platform,
   Pressable,
@@ -15,6 +14,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -29,50 +29,12 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { geocode, distanceKm } from '@/lib/geo';
 import { supabase } from '@/lib/supabase';
 import { getCached, setCache } from '@/lib/query-cache';
+import { TRADE_ICONS, getTradeIcon, getCarouselImages } from '@/lib/trade-utils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PAGE_SIZE = 10;
 const CARD_WIDTH = SCREEN_WIDTH - Spacing.lg * 2;
 const CAROUSEL_HEIGHT = 180;
-
-// ─── Trade icons for placeholders ────────────────────────────────────────────
-
-const TRADE_ICONS: Record<string, string> = {
-  builder: '🏗️', plumber: '🔧', electrician: '⚡', carpenter: '🪚',
-  painter: '🎨', landscaper: '🌿', roofer: '🏠', tiler: '🧱',
-  concreter: '🏢', fencer: '🪵', default: '🔨',
-};
-
-function getTradeIcon(trade: string): string {
-  const key = trade.toLowerCase();
-  for (const [k, v] of Object.entries(TRADE_ICONS)) {
-    if (key.includes(k)) return v;
-  }
-  return TRADE_ICONS.default;
-}
-
-// ─── Extract carousel images from builder data ──────────────────────────────
-
-function getCarouselImages(builder: { projects?: any[] | null; cover_photo_url?: string | null }): string[] {
-  const images: string[] = [];
-  if (builder.projects?.length) {
-    for (const proj of builder.projects) {
-      if (proj.media?.length) {
-        for (const m of proj.media) {
-          if (m.type === 'image' && m.uri) images.push(m.uri);
-        }
-      } else if (proj.images?.length) {
-        images.push(...proj.images);
-      } else if (proj.image_url) {
-        images.push(proj.image_url);
-      }
-    }
-  }
-  if (images.length === 0 && builder.cover_photo_url) {
-    images.push(builder.cover_photo_url);
-  }
-  return images.slice(0, 5);
-}
 
 // ─── Urgency mapping ─────────────────────────────────────────────────────────
 
@@ -278,6 +240,8 @@ function PhotoCarousel({
           <Image
             source={{ uri: item }}
             style={[styles.carouselImage, { width: imageWidth }]}
+            cachePolicy="disk"
+            placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }}
           />
         )}
       />
@@ -895,7 +859,7 @@ export default function ResultsScreen() {
           <View style={styles.profileSection}>
             {/* Avatar */}
             <View style={styles.avatarRing}>
-              <Image source={{ uri: avatarUri }} style={styles.avatar} />
+              <Image source={{ uri: avatarUri }} style={styles.avatar} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
             </View>
 
             {/* Name + trade + verified + location */}

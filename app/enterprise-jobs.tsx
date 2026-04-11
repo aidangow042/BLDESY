@@ -8,13 +8,13 @@ import {
   ActivityIndicator,
   Dimensions,
   FlatList,
-  Image,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,6 +24,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors, Radius, Spacing, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { getRelativeTime, URGENCY_CONFIG } from '@/lib/trade-utils';
 
 /* ─── Types ────────────────────────────────────────────────── */
 
@@ -54,30 +55,6 @@ type Job = {
 };
 
 const CARD_IMAGE_HEIGHT = 140;
-
-/* ─── Helpers ──────────────────────────────────────────────── */
-
-function getRelativeTime(dateStr: string): string {
-  const now = Date.now();
-  const posted = new Date(dateStr).getTime();
-  const diffMs = now - posted;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays} days ago`;
-  return new Date(dateStr).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
-}
-
-const URGENCY_CONFIG: Record<string, { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; color: string; bg: string }> = {
-  asap:      { label: 'ASAP',      icon: 'alarm',            color: '#DC2626', bg: '#FEF2F2' },
-  this_week: { label: 'This Week', icon: 'time-outline',     color: '#D97706', bg: '#FFFBEB' },
-  flexible:  { label: 'Flexible',  icon: 'calendar-outline', color: '#059669', bg: '#ECFDF5' },
-};
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; color: string; bg: string }> = {
   open:        { label: 'Open',        icon: 'checkmark-circle', color: '#059669', bg: '#ECFDF5' },
@@ -265,7 +242,9 @@ export default function EnterpriseJobsScreen() {
             <Image
               source={{ uri: item.photos[0] }}
               style={styles.cardImage}
-              resizeMode="cover"
+              contentFit="cover"
+              cachePolicy="disk"
+              placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }}
             />
           ) : (
             <LinearGradient
@@ -282,7 +261,7 @@ export default function EnterpriseJobsScreen() {
               <Text style={[styles.tradePillText, { color: indigo }]}>{item.trade_category}</Text>
             </View>
             <View style={[styles.urgencyPill, { backgroundColor: urg.bg }]}>
-              <Ionicons name={urg.icon} size={11} color={urg.color} />
+              <Ionicons name={urg.icon as any} size={11} color={urg.color} />
               <Text style={[styles.urgencyPillText, { color: urg.color }]}>{urg.label}</Text>
             </View>
             <View style={{ flex: 1 }} />
@@ -363,7 +342,7 @@ export default function EnterpriseJobsScreen() {
 
                   return (
                     <View key={app.id} style={[styles.applicantRow, { borderBottomColor: colors.borderLight }]}>
-                      <Image source={{ uri: appAvatarUri }} style={styles.applicantAvatar} />
+                      <Image source={{ uri: appAvatarUri }} style={styles.applicantAvatar} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.applicantName, { color: colors.text }]}>{app.business_name}</Text>
                         <Text style={[styles.applicantMeta, { color: colors.textSecondary }]}>{app.trade_category} — {app.suburb}</Text>

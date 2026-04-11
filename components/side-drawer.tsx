@@ -8,7 +8,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
-  Image,
   Modal,
   Platform,
   Pressable,
@@ -18,6 +17,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import Animated, {
   interpolate,
   useAnimatedStyle,
@@ -324,7 +324,7 @@ export function SideDrawer({ visible, onClose, builderMode = false, enterpriseMo
           style={[styles.userHeader, { paddingTop: insets.top + Spacing.lg }]}
         >
           <View style={styles.avatarWrap}>
-            <Image source={{ uri: avatarUri }} style={styles.avatar} />
+            <Image source={{ uri: avatarUri }} style={styles.avatar} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
           </View>
 
           <Text style={styles.userName} numberOfLines={1}>

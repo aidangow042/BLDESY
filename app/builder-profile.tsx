@@ -5,7 +5,6 @@ import {
   Animated as RNAnimated,
   Dimensions,
   FlatList,
-  Image,
   Linking,
   Modal,
 
@@ -17,6 +16,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -252,7 +252,9 @@ function GalleryLightbox({
                 <Image
                   source={{ uri: item.uri }}
                   style={lightboxStyles.image}
-                  resizeMode="contain"
+                  contentFit="contain"
+                  cachePolicy="disk"
+                  placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }}
                 />
               )}
             </View>
@@ -337,7 +339,7 @@ function BeforeAfterCompare({ beforeUri, afterUri, onPress }: { beforeUri: strin
           onPress={() => onPress?.(0)}
           style={({ pressed }) => [baStyles.half, pressed && { opacity: 0.9 }]}
         >
-          <Image source={{ uri: beforeUri }} style={[baStyles.image, { width: halfWidth }]} />
+          <Image source={{ uri: beforeUri }} style={[baStyles.image, { width: halfWidth }]} cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} />
           <View style={baStyles.label}>
             <Text style={baStyles.labelText}>BEFORE</Text>
           </View>
@@ -347,7 +349,7 @@ function BeforeAfterCompare({ beforeUri, afterUri, onPress }: { beforeUri: strin
           onPress={() => onPress?.(1)}
           style={({ pressed }) => [baStyles.half, pressed && { opacity: 0.9 }]}
         >
-          <Image source={{ uri: afterUri }} style={[baStyles.image, { width: halfWidth }]} />
+          <Image source={{ uri: afterUri }} style={[baStyles.image, { width: halfWidth }]} cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} />
           <View style={[baStyles.label, baStyles.labelAfter]}>
             <Text style={baStyles.labelText}>AFTER</Text>
           </View>
@@ -431,7 +433,7 @@ function ProjectCarousel({ media, onPress }: { media: { uri: string; type: 'imag
     return (
       <Pressable onPress={() => onPress(0)} style={({ pressed }) => pressed && { opacity: 0.9 }}>
         <View style={{ height: CAROUSEL_HEIGHT, overflow: 'hidden' }}>
-          <Image source={{ uri: media[0].uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+          <Image source={{ uri: media[0].uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} />
           {media[0].type === 'video' && (
             <View style={carouselStyles.playOverlay}>
               <View style={carouselStyles.playCircle}>
@@ -462,7 +464,7 @@ function ProjectCarousel({ media, onPress }: { media: { uri: string; type: 'imag
             style={({ pressed }) => pressed && { opacity: 0.9 }}
           >
             <View style={{ width: CAROUSEL_WIDTH, height: CAROUSEL_HEIGHT }}>
-              <Image source={{ uri: m.uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+              <Image source={{ uri: m.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} />
               {m.type === 'video' && (
                 <View style={carouselStyles.playOverlay}>
                   <View style={carouselStyles.playCircle}>
@@ -895,7 +897,7 @@ export default function BuilderProfileScreen() {
         {/* ─── COVER PHOTO + HEADER ─── */}
         <View style={{ height: COVER_HEIGHT + AVATAR_SIZE / 2 }}>
           {coverUri ? (
-            <Image source={{ uri: coverUri }} style={styles.coverImage} />
+            <Image source={{ uri: coverUri }} style={styles.coverImage} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
           ) : (
             <LinearGradient
               colors={colorScheme === 'dark' ? ['#042f2e', '#0f3d3a', '#134E4A'] : ['#0d9488', '#0f766e', '#115e59']}
@@ -924,7 +926,7 @@ export default function BuilderProfileScreen() {
           {/* Profile photo + info overlay */}
           <View style={styles.headerInfoContainer}>
             <View style={[styles.avatarContainer, { borderColor: '#ffffff' }]}>
-              <Image source={{ uri: avatarUri }} style={styles.avatar} />
+              <Image source={{ uri: avatarUri }} style={styles.avatar} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
             </View>
             <View style={styles.headerTextContainer}>
               <Text style={styles.businessNameOverlay} numberOfLines={2}>
@@ -1211,7 +1213,7 @@ export default function BuilderProfileScreen() {
                 return (
                   <View key={member.id} style={styles.teamCard}>
                     {member.photoUri ? (
-                      <Image source={{ uri: member.photoUri }} style={styles.teamPhoto} />
+                      <Image source={{ uri: member.photoUri }} style={styles.teamPhoto} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
                     ) : (
                       <View style={[styles.teamPhoto, styles.teamInitials, { backgroundColor: tealBg }]}>
                         <Text style={{ color: teal, fontSize: 18, fontWeight: '700' }}>{initials}</Text>

@@ -23,7 +23,7 @@ import { NotificationsPanel } from '@/components/dashboard/notifications-panel';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import { useUnreadCount } from '@/hooks/use-unread-count';
 
-type BuilderStatus = 'loading' | 'none' | 'pending' | 'approved';
+type BuilderStatus = 'loading' | 'none' | 'pending' | 'approved' | 'error';
 
 type ProfileData = {
   business_name: string | null;
@@ -77,6 +77,7 @@ export default function PortalScreen() {
   const [status, setStatus] = useState<BuilderStatus>('loading');
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Sync auth context userId
   useEffect(() => { if (ctxUserId) setUserId(ctxUserId); }, [ctxUserId]);
@@ -92,6 +93,7 @@ export default function PortalScreen() {
   );
 
   async function checkBuilderStatus() {
+    setErrorMessage(null);
     const { data: userData } = await supabase.auth.getUser();
     if (!userData?.user) {
       setStatus('none');
@@ -105,7 +107,11 @@ export default function PortalScreen() {
       .eq('user_id', userData.user.id)
       .maybeSingle();
 
-    if (error || !data) {
+    if (error) {
+      console.error('[Portal] fetch error:', error.message);
+      setErrorMessage(error.message);
+      setStatus('error');
+    } else if (!data) {
       setStatus('none');
     } else if (data.approved) {
       setStatus('approved');
@@ -125,6 +131,32 @@ export default function PortalScreen() {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: bgCanvas }]}>
         <ActivityIndicator color={teal} style={{ marginTop: 60 }} />
+      </SafeAreaView>
+    );
+  }
+
+  // Fetch error — show user-facing error state
+  if (status === 'error') {
+    return (
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: bgCanvas }]}>
+        <View style={styles.ctaContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.textSecondary} />
+          <ThemedText type="title" style={styles.ctaTitle}>Something went wrong</ThemedText>
+          <ThemedText style={[styles.ctaBody, { color: colors.textSecondary }]}>
+            {errorMessage ?? 'Failed to load your builder profile. Please try again.'}
+          </ThemedText>
+          <Pressable
+            style={({ pressed }) => [
+              styles.primaryButton,
+              { backgroundColor: teal, opacity: pressed ? 0.85 : 1 },
+            ]}
+            onPress={checkBuilderStatus}
+            accessibilityRole="button"
+            accessibilityLabel="Try again"
+          >
+            <Text style={styles.primaryButtonText}>Try Again</Text>
+          </Pressable>
+        </View>
       </SafeAreaView>
     );
   }
@@ -291,7 +323,7 @@ export default function PortalScreen() {
 
 
   return (
-    <View style={[styles.safeArea, { backgroundColor: '#D4DCCE' }]}>
+    <View style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
       {/* Subtle grain texture */}
       <View style={styles.grainOverlay} pointerEvents="none">
         {Array.from({ length: 12 }).map((_, row) => (

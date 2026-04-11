@@ -5,7 +5,6 @@ import {
   Animated,
   Dimensions,
   FlatList,
-  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -13,6 +12,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,25 +24,12 @@ import ReAnimated, { FadeInUp } from 'react-native-reanimated';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { TRADE_ICONS, getTradeIcon } from '@/lib/trade-utils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CAROUSEL_HEIGHT = 160;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
-
-const TRADE_ICONS: Record<string, string> = {
-  builder: '🏗️', plumber: '🔧', electrician: '⚡', carpenter: '🪚',
-  painter: '🎨', landscaper: '🌿', roofer: '🏠', tiler: '🧱',
-  concreter: '🏢', fencer: '🪵', default: '🔨',
-};
-
-function getTradeIcon(trade: string): string {
-  const key = trade.toLowerCase();
-  for (const [k, v] of Object.entries(TRADE_ICONS)) {
-    if (key.includes(k)) return v;
-  }
-  return TRADE_ICONS.default;
-}
 
 const URGENCY_CONFIG: Record<string, {
   label: string;
@@ -220,7 +207,9 @@ function PhotoCarousel({ images, urgency }: { images: string[]; urgency: typeof 
             key={i}
             source={{ uri }}
             style={styles.carouselImage}
-            resizeMode="cover"
+            contentFit="cover"
+            cachePolicy="disk"
+            placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }}
           />
         ))}
       </ScrollView>
@@ -405,6 +394,7 @@ export default function BuilderJobsFeed() {
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [builderTrade, setBuilderTrade] = useState<string | null>(null);
   const [filterUrgency, setFilterUrgency] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -422,6 +412,7 @@ export default function BuilderJobsFeed() {
   async function loadJobs() {
     try {
       setLoading(true);
+      setError(null);
 
       const { data: userData } = await supabase.auth.getUser();
       if (!userData?.user) {
@@ -456,11 +447,18 @@ export default function BuilderJobsFeed() {
         query = query.eq('urgency', filterUrgency);
       }
 
-      const { data: jobsData, error } = await query;
+      const { data: jobsData, error: fetchError } = await query;
 
       // RLS filters to open jobs visible to approved builders
 
-      if (!error && jobsData?.length) {
+      if (fetchError) {
+        console.error('[BuilderJobs] fetch error:', fetchError.message);
+        setError(fetchError.message);
+        setJobs([]);
+        return;
+      }
+
+      if (jobsData?.length) {
         // Fetch photos for all jobs in one query
         const jobIds = jobsData.map((j: any) => j.id);
         const { data: photosData } = await supabase
@@ -495,8 +493,9 @@ export default function BuilderJobsFeed() {
       } else {
         setJobs([]);
       }
-    } catch {
-      // silently handle
+    } catch (err: any) {
+      console.error('[BuilderJobs] unexpected error:', err);
+      setError(err?.message ?? 'Failed to load jobs');
     } finally {
       setLoading(false);
     }
@@ -642,6 +641,27 @@ export default function BuilderJobsFeed() {
             <SkeletonCard key={i} colors={colors} delay={i * 150} />
           ))}
         </ScrollView>
+      ) : error ? (
+        <View style={styles.centeredState}>
+          <View style={[styles.stateIconWrap, { backgroundColor: colors.errorLight }]}>
+            <Ionicons name="alert-circle-outline" size={36} color={colors.textSecondary} />
+          </View>
+          <Text style={[styles.stateTitle, { color: colors.text }]}>Something went wrong</Text>
+          <Text style={[styles.stateSubtext, { color: colors.textSecondary }]}>{error}</Text>
+          <Pressable
+            onPress={loadJobs}
+            style={({ pressed }) => [
+              styles.stateCta,
+              { backgroundColor: teal },
+              pressed && { opacity: 0.85 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Try again"
+          >
+            <MaterialIcons name="refresh" size={18} color="#fff" />
+            <Text style={styles.stateCtaText}>Try Again</Text>
+          </Pressable>
+        </View>
       ) : jobs.length === 0 ? (
         <View style={styles.centeredState}>
           <View style={[styles.stateIconWrap, { backgroundColor: colors.tealBg }]}>

@@ -4,7 +4,6 @@ import {
   Alert,
   Dimensions,
   FlatList,
-  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,6 +11,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -23,34 +23,11 @@ import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { ReviewForm } from '@/components/reviews/review-form';
+import { getRelativeTime, URGENCY_CONFIG } from '@/lib/trade-utils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PHOTO_WIDTH = SCREEN_WIDTH - 68;
 const PHOTO_HEIGHT = 180;
-
-/* ─── Helpers (matching job-detail) ───────────────────────── */
-
-function getRelativeTime(dateStr: string): string {
-  const now = Date.now();
-  const posted = new Date(dateStr).getTime();
-  const diffMs = now - posted;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays} days ago`;
-  return new Date(dateStr).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
-}
-
-const URGENCY_CONFIG: Record<string, { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; color: string; bg: string }> = {
-  asap: { label: 'ASAP', icon: 'alarm', color: '#DC2626', bg: '#FEF2F2' },
-  this_week: { label: 'This Week', icon: 'time-outline', color: '#D97706', bg: '#FFFBEB' },
-  flexible: { label: 'Flexible', icon: 'calendar-outline', color: '#059669', bg: '#ECFDF5' },
-};
 
 /* ─── Types ────────────────────────────────────────────────── */
 
@@ -96,6 +73,7 @@ export default function MyJobsScreen() {
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [reviewingApp, setReviewingApp] = useState<{ jobId: string; builderId: string; builderName: string } | null>(null);
@@ -111,19 +89,27 @@ export default function MyJobsScreen() {
 
   async function fetchJobs() {
     setLoading(true);
+    setError(null);
     const { data: userData } = await supabase.auth.getUser();
     if (!userData?.user) {
       setLoading(false);
       return;
     }
 
-    const { data, error } = await supabase
+    const { data, error: fetchError } = await supabase
       .from('jobs')
       .select('id, title, trade_category, description, urgency, status, suburb, postcode, budget, contact_phone, contact_email, created_at')
       .eq('customer_id', userData.user.id)
       .order('created_at', { ascending: false });
 
-    if (!error && data) {
+    if (fetchError) {
+      console.error('[MyJobs] fetch error:', fetchError.message);
+      setError(fetchError.message);
+      setLoading(false);
+      return;
+    }
+
+    if (data) {
       setJobs(data);
       fetchPhotosForJobs(data.map((j) => j.id));
     }
@@ -326,7 +312,9 @@ export default function MyJobsScreen() {
                     key={photo.id}
                     source={{ uri: photo.file_path }}
                     style={styles.photoImage}
-                    resizeMode="cover"
+                    contentFit="cover"
+                    cachePolicy="disk"
+                    placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }}
                   />
                 ))}
               </ScrollView>
@@ -349,7 +337,7 @@ export default function MyJobsScreen() {
               <Text style={styles.tradePillText}>{item.trade_category}</Text>
             </View>
             <View style={[styles.urgencyPill, { backgroundColor: urg.bg }]}>
-              <Ionicons name={urg.icon} size={12} color={urg.color} />
+              <Ionicons name={urg.icon as any} size={12} color={urg.color} />
               <Text style={[styles.urgencyPillText, { color: urg.color }]}>{urg.label}</Text>
             </View>
             <Text style={styles.timeText}>{getRelativeTime(item.created_at)}</Text>
@@ -446,6 +434,8 @@ export default function MyJobsScreen() {
                           <Image
                             source={{ uri: app.builder_profiles.profile_photo_url }}
                             style={styles.applicantAvatar}
+                            cachePolicy="disk"
+                            placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
                           />
                         ) : (
                           <View style={styles.applicantInitials}>
@@ -548,6 +538,24 @@ export default function MyJobsScreen() {
       <Animated.View entering={FadeInUp.duration(300).delay(100)} style={{ flex: 1 }}>
       {loading ? (
         <ActivityIndicator color="#0F6E56" style={{ marginTop: 60 }} />
+      ) : error ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.textSecondary} />
+          <Text style={styles.emptyTitle}>Something went wrong</Text>
+          <Text style={[styles.emptySubtitle, { textAlign: 'center' }]}>{error}</Text>
+          <Pressable
+            onPress={fetchJobs}
+            style={({ pressed }) => [
+              styles.emptyOutlineCta,
+              { borderColor: '#0d9488', backgroundColor: '#0d9488' },
+              pressed && { opacity: 0.85 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Try again"
+          >
+            <Text style={[styles.emptyOutlineCtaText, { color: '#fff' }]}>Try Again</Text>
+          </Pressable>
+        </View>
       ) : jobs.length === 0 ? (
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIconCircle}>

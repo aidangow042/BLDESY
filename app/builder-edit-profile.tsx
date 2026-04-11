@@ -5,7 +5,6 @@ import {
   Alert,
   Animated,
   Dimensions,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,6 +14,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -838,7 +838,7 @@ export default function EditProfileScreen() {
             accessibilityLabel="Change cover photo"
           >
             {coverPhoto ? (
-              <Image source={{ uri: coverPhoto }} style={[styles.coverImage, { backgroundColor: colors.border }]} />
+              <Image source={{ uri: coverPhoto }} style={[styles.coverImage, { backgroundColor: colors.border }]} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
             ) : (
               <View style={[styles.coverPlaceholder, { backgroundColor: colors.surface }]}>
                 <Text style={{ fontSize: 28 }}>📷</Text>
@@ -873,7 +873,7 @@ export default function EditProfileScreen() {
               accessibilityLabel="Change profile photo"
             >
               {profilePhoto ? (
-                <Image source={{ uri: profilePhoto }} style={styles.avatar} />
+                <Image source={{ uri: profilePhoto }} style={styles.avatar} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
               ) : (
                 <View style={[styles.avatarPlaceholder, { backgroundColor: colors.surface }]}>
                   <Text style={{ fontSize: 28 }}>👤</Text>
@@ -1360,7 +1360,7 @@ export default function EditProfileScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageRow}>
                 {project.images.map((uri, imgIdx) => (
                   <View key={imgIdx} style={styles.projectImageThumb}>
-                    <Image source={{ uri }} style={[styles.projectImageFill, { backgroundColor: colors.border }]} />
+                    <Image source={{ uri }} style={[styles.projectImageFill, { backgroundColor: colors.border }]} cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} />
                     <Pressable
                       onPress={() => removeProjectImage(project.id, imgIdx)}
                       style={styles.removeImageBtn}
@@ -1400,7 +1400,7 @@ export default function EditProfileScreen() {
                 >
                   {project.beforeImage ? (
                     <View style={styles.baThumb}>
-                      <Image source={{ uri: project.beforeImage }} style={[styles.projectImageFill, { backgroundColor: colors.border }]} />
+                      <Image source={{ uri: project.beforeImage }} style={[styles.projectImageFill, { backgroundColor: colors.border }]} cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} />
                       <View style={[styles.baLabel, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
                         <Text style={styles.baLabelText}>BEFORE</Text>
                       </View>
@@ -1429,7 +1429,7 @@ export default function EditProfileScreen() {
                 >
                   {project.afterImage ? (
                     <View style={styles.baThumb}>
-                      <Image source={{ uri: project.afterImage }} style={[styles.projectImageFill, { backgroundColor: colors.border }]} />
+                      <Image source={{ uri: project.afterImage }} style={[styles.projectImageFill, { backgroundColor: colors.border }]} cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} />
                       <View style={[styles.baLabel, { backgroundColor: teal }]}>
                         <Text style={styles.baLabelText}>AFTER</Text>
                       </View>
@@ -1589,6 +1589,8 @@ export default function EditProfileScreen() {
                     <Image
                       source={{ uri: member.photoUri }}
                       style={[styles.teamMemberPhoto, { backgroundColor: colors.border }]}
+                      cachePolicy="disk"
+                      placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
                     />
                   ) : (
                     <View style={[styles.teamMemberPhotoPlaceholder, { backgroundColor: colors.background, borderColor: colors.border }]}>

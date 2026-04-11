@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -13,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -1095,7 +1095,7 @@ export default function PostJobScreen() {
           >
             {s.photos.map((photo, i) => (
               <View key={i} style={styles.photoThumb}>
-                <Image source={{ uri: photo.uri }} style={styles.photoImg} />
+                <Image source={{ uri: photo.uri }} style={styles.photoImg} cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} />
                 {photo.isCover && (
                   <View style={styles.coverBadge}>
                     <Text style={styles.coverBadgeText}>Cover</Text>
@@ -1367,7 +1367,7 @@ export default function PostJobScreen() {
           {s.photos.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
               {s.photos.map((p, i) => (
-                <Image key={i} source={{ uri: p.uri }} style={styles.previewThumb} />
+                <Image key={i} source={{ uri: p.uri }} style={styles.previewThumb} cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} />
               ))}
             </ScrollView>
           )}

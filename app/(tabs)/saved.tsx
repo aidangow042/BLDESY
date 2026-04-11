@@ -4,7 +4,6 @@ import {
   Animated,
   Dimensions,
   FlatList,
-  Image,
   Platform,
   Pressable,
   RefreshControl,
@@ -12,6 +11,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,6 +25,7 @@ import * as Haptics from 'expo-haptics';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { TRADE_ICONS, getTradeIcon, getCarouselImages } from '@/lib/trade-utils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_PADDING = Spacing.xl;
@@ -32,22 +33,6 @@ const CARD_WIDTH = SCREEN_WIDTH - CARD_PADDING * 2;
 const CAROUSEL_HEIGHT = 190;
 const AVATAR_SIZE = 60;
 const AVATAR_OVERLAP = AVATAR_SIZE / 2;
-
-// ─── Trade icons for placeholders ────────────────────────────────────────────
-
-const TRADE_ICONS: Record<string, string> = {
-  builder: '🏗️', plumber: '🔧', electrician: '⚡', carpenter: '🪚',
-  painter: '🎨', landscaper: '🌿', roofer: '🏠', tiler: '🧱',
-  concreter: '🏢', fencer: '🪵', default: '🔨',
-};
-
-function getTradeIcon(trade: string): string {
-  const key = trade.toLowerCase();
-  for (const [k, v] of Object.entries(TRADE_ICONS)) {
-    if (key.includes(k)) return v;
-  }
-  return TRADE_ICONS.default;
-}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -135,6 +120,8 @@ function PhotoCarousel({
           <Image
             source={{ uri: item }}
             style={[styles.carouselImage, { width: imageWidth }]}
+            cachePolicy="disk"
+            placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }}
           />
         )}
       />
@@ -313,6 +300,7 @@ export default function SavedScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -322,6 +310,7 @@ export default function SavedScreen() {
 
   async function fetchSavedBuilders(isRefresh = false) {
     if (!isRefresh) setLoading(true);
+    setError(null);
 
     const { data: userData } = await supabase.auth.getUser();
     if (!userData?.user) {
@@ -333,14 +322,15 @@ export default function SavedScreen() {
 
     setLoggedIn(true);
 
-    const { data, error } = await supabase
+    const { data, error: fetchError } = await supabase
       .from('saved_builders')
       .select('builder_id, created_at, builder_profiles(business_name, trade_category, suburb, postcode, bio, profile_photo_url, cover_photo_url, projects, specialties, abn, license_key)')
       .eq('user_id', userData.user.id)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('[Saved] fetch error:', error.message);
+    if (fetchError) {
+      console.error('[Saved] fetch error:', fetchError.message);
+      setError(fetchError.message);
       setBuilders([]);
       setLoading(false);
       return;
@@ -408,27 +398,6 @@ export default function SavedScreen() {
       .eq('builder_id', builderId);
   }
 
-  // ─── Collect project images for carousel (project photos only, not logo) ──
-
-  function getCarouselImages(builder: SavedBuilder): string[] {
-    const images: string[] = [];
-    // Only use actual project photos, not logo/profile photo
-    if (builder.projects?.length) {
-      for (const proj of builder.projects) {
-        if (proj.images?.length) {
-          images.push(...proj.images);
-        } else if (proj.image_url) {
-          images.push(proj.image_url);
-        }
-      }
-    }
-    // Fall back to cover photo only if it exists and we have no project photos
-    if (images.length === 0 && builder.cover_photo_url) {
-      images.push(builder.cover_photo_url);
-    }
-    return images.slice(0, 5);
-  }
-
   // ─── Verification badges ──────────────────────────────────────────
 
   function getVerifications(item: SavedBuilder) {
@@ -492,7 +461,7 @@ export default function SavedScreen() {
           {/* ─── Avatar overlapping banner ─── */}
           <View style={styles.avatarOverlapWrap}>
             <View style={styles.avatarRing}>
-              <Image source={{ uri: avatarUri }} style={styles.avatar} />
+              <Image source={{ uri: avatarUri }} style={styles.avatar} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
             </View>
           </View>
 
@@ -701,6 +670,32 @@ export default function SavedScreen() {
           <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
             Keep track of your favourite tradies so you can find them quickly when you need them.
           </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // ─── Fetch error — show user-facing error card ───
+  if (error && !loading) {
+    return (
+      <View style={[styles.safeArea, { backgroundColor: pageBackground }]}>
+        {renderHeader()}
+        <View style={styles.emptyState}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.textSecondary} />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>Something went wrong</Text>
+          <Text style={[styles.emptySubtext, { color: colors.textSecondary, textAlign: 'center' }]}>{error}</Text>
+          <Pressable
+            onPress={() => fetchSavedBuilders()}
+            style={({ pressed }) => [
+              styles.emptyOutlineCta,
+              { borderColor: teal, backgroundColor: teal },
+              pressed && { opacity: 0.85 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Try again"
+          >
+            <Text style={[styles.emptyOutlineCtaText, { color: '#fff' }]}>Try Again</Text>
+          </Pressable>
         </View>
       </View>
     );

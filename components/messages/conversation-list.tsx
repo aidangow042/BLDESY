@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -72,7 +73,7 @@ export function ConversationList({ conversations, activeId, onSelect, refreshing
       >
         {/* Avatar with status dot */}
         <View style={styles.avatarWrap}>
-          <Image source={{ uri: avatarUri }} style={styles.avatar} />
+          <Image source={{ uri: avatarUri }} style={styles.avatar} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
           <View style={[styles.statusDot, { backgroundColor: '#059669', borderColor: isDark ? colors.surface : '#fff' }]} />
         </View>
 

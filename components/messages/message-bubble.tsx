@@ -1,4 +1,5 @@
-import { Image, Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -44,7 +45,7 @@ export function MessageBubble({ body, isMine, timestamp, attachmentUrl, attachme
         ]}
       >
         {isImage && attachmentUrl && (
-          <Image source={{ uri: attachmentUrl }} style={styles.attachmentImage} resizeMode="cover" />
+          <Image source={{ uri: attachmentUrl }} style={styles.attachmentImage} contentFit="cover" cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} />
         )}
         <Text style={[styles.body, { color: isMine ? '#ffffff' : colors.text }]}>
           {body}

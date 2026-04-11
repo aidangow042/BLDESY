@@ -4,7 +4,6 @@ import {
   Alert,
   Animated,
   FlatList,
-  Image,
   Linking,
   Platform,
   Pressable,
@@ -13,6 +12,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import MapView, { Circle, Marker, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
@@ -157,6 +157,8 @@ function ListCard({
       <Image
         source={{ uri: getAvatarUri(tradie, color) }}
         style={listStyles.avatar}
+        cachePolicy="disk"
+        placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
       />
       <View style={listStyles.info}>
         <Text style={[listStyles.name, { color: colors.text }]} numberOfLines={1}>
@@ -251,6 +253,7 @@ export default function MapScreen() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [tradies, setTradies] = useState<Tradie[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [locationDenied, setLocationDenied] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [showListView, setShowListView] = useState(false);
@@ -303,12 +306,13 @@ export default function MapScreen() {
   // ── Fetch approved builders within region ──
   async function fetchBuilders(region: Region) {
     setLoading(true);
+    setError(null);
     const latMin = region.latitude - region.latitudeDelta / 2;
     const latMax = region.latitude + region.latitudeDelta / 2;
     const lngMin = region.longitude - region.longitudeDelta / 2;
     const lngMax = region.longitude + region.longitudeDelta / 2;
 
-    const { data, error } = await supabase
+    const { data, error: fetchError } = await supabase
       .from('builder_profiles')
       .select(
         'id, business_name, trade_category, suburb, bio, latitude, longitude, radius_km, availability, availability_note, profile_photo_url, abn, license_key, specialties, established_year, projects',
@@ -322,7 +326,10 @@ export default function MapScreen() {
       .lte('longitude', lngMax)
       .limit(100);
 
-    if (!error && data) {
+    if (fetchError) {
+      console.error('[Map] fetch error:', fetchError.message);
+      setError(fetchError.message);
+    } else if (data) {
       setTradies(data as Tradie[]);
     }
     setLoading(false);
@@ -530,6 +537,20 @@ export default function MapScreen() {
             <View style={styles.listEmpty}>
               <ActivityIndicator size="large" color={colors.teal} />
             </View>
+          ) : error ? (
+            <View style={styles.listEmpty}>
+              <Ionicons name="alert-circle-outline" size={48} color={colors.textSecondary} />
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>Something went wrong</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary, textAlign: 'center' }]}>{error}</Text>
+              <Pressable
+                onPress={() => fetchBuilders(currentRegion)}
+                style={{ marginTop: 16, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8, backgroundColor: colors.teal, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
+                accessibilityRole="button"
+                accessibilityLabel="Try again"
+              >
+                <Text style={{ color: '#fff', fontWeight: '600', fontSize: 15 }}>Try Again</Text>
+              </Pressable>
+            </View>
           ) : filteredTradies.length === 0 ? (
             <View style={styles.listEmpty}>
               <MaterialIcons name="search-off" size={48} color={colors.borderLight} />
@@ -630,6 +651,8 @@ export default function MapScreen() {
                       <Image
                         source={{ uri: tradie.profile_photo_url! }}
                         style={styles.markerPhoto}
+                        cachePolicy="disk"
+                        placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
                       />
                     </View>
                     <View
@@ -794,6 +817,24 @@ export default function MapScreen() {
         </Pressable>
       </View>
 
+      {/* ─── Error overlay banner ─── */}
+      {error && !loading && (
+        <View style={[styles.errorOverlay, { backgroundColor: isDark ? 'rgba(30,41,59,0.95)' : 'rgba(255,255,255,0.97)' }]}>
+          <Ionicons name="alert-circle-outline" size={20} color={colors.textSecondary} />
+          <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600', flex: 1 }} numberOfLines={1}>
+            Failed to load tradies
+          </Text>
+          <Pressable
+            onPress={() => fetchBuilders(currentRegion)}
+            style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 6, backgroundColor: colors.teal, minHeight: 32, alignItems: 'center', justifyContent: 'center' }}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading tradies"
+          >
+            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>Retry</Text>
+          </Pressable>
+        </View>
+      )}
+
       {/* ─── Empty state hint (fades in/out) ─── */}
       <Animated.View
         pointerEvents={showEmpty ? 'auto' : 'none'}
@@ -861,7 +902,7 @@ export default function MapScreen() {
             {/* ─── Header row ─── */}
             <View style={styles.sheetHeader}>
               <View style={[styles.avatarRing, { borderColor: tradeColor }]}>
-                <Image source={{ uri: avatarUri! }} style={styles.sheetAvatar} />
+                <Image source={{ uri: avatarUri! }} style={styles.sheetAvatar} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
               </View>
               <View style={styles.sheetHeaderText}>
                 <Text
@@ -1088,6 +1129,8 @@ export default function MapScreen() {
                         <Image
                           source={{ uri: thumb }}
                           style={styles.projectThumb}
+                          cachePolicy="disk"
+                          placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }}
                         />
                       )}
                       <View style={styles.projectInfo}>
@@ -1375,6 +1418,29 @@ const styles = StyleSheet.create({
   countText: {
     fontSize: 13,
     fontWeight: '700',
+  },
+
+  // ── Error overlay banner ──
+  errorOverlay: {
+    position: 'absolute',
+    top: 120,
+    left: Spacing.lg,
+    right: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.lg,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.12,
+        shadowRadius: 6,
+      },
+      android: { elevation: 3 },
+    }),
   },
 
   // ── Empty state hint ──

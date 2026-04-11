@@ -7,13 +7,13 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -182,7 +182,7 @@ export default function EnterpriseJobDetailScreen() {
             <Text style={[s.cardTitle, { color: colors.text }]}>Site Photos & Plans ({photos.length})</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
               {photos.map((uri, i) => (
-                <Image key={i} source={{ uri }} style={s.photo} resizeMode="cover" />
+                <Image key={i} source={{ uri }} style={s.photo} contentFit="cover" cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} />
               ))}
             </ScrollView>
           </View>
@@ -218,7 +218,7 @@ export default function EnterpriseJobDetailScreen() {
               return (
                 <View key={app.id} style={[s.appCard, { borderColor: colors.border }]}>
                   <View style={s.appRow}>
-                    <Image source={{ uri: avatarUri }} style={s.appAvatar} />
+                    <Image source={{ uri: avatarUri }} style={s.appAvatar} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
                     <View style={{ flex: 1 }}>
                       <Text style={[s.appName, { color: colors.text }]}>{app.business_name}</Text>
                       <Text style={[s.appMeta, { color: colors.textSecondary }]}>{app.trade_category} · {app.suburb} · Applied {relTime(app.created_at)}</Text>

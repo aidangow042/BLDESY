@@ -1,4 +1,5 @@
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -85,7 +86,7 @@ export function DashboardHeader({
           {/* Profile photo */}
           <View style={styles.avatarWrap}>
             {profilePhotoUrl ? (
-              <Image source={{ uri: profilePhotoUrl }} style={styles.avatar} />
+              <Image source={{ uri: profilePhotoUrl }} style={styles.avatar} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
             ) : (
               <View style={[styles.avatar, styles.avatarFallback]}>
                 <Ionicons name="person" size={22} color={DashboardColors.textSecondary} />
