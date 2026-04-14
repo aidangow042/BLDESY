@@ -106,10 +106,6 @@ export default function LoginScreen() {
     // On success, root layout listener will redirect automatically
   }
 
-  function handleSocialStub(provider: string) {
-    setError(`${provider} sign-in coming soon.`);
-  }
-
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.canvas }]}
@@ -392,53 +388,6 @@ export default function LoginScreen() {
               </Pressable>
             </Link>
 
-            {/* Divider */}
-            <View style={styles.divider}>
-              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-              <Text style={[styles.dividerText, { color: colors.icon }]}>or</Text>
-              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-            </View>
-
-            {/* Social login */}
-            <View style={styles.socialGroup}>
-              <Pressable
-                onPress={() => handleSocialStub('Google')}
-                style={({ pressed }) => [
-                  styles.socialBtn,
-                  {
-                    borderColor: colors.border,
-                    backgroundColor: isDark ? colors.canvas : '#ffffff',
-                  },
-                  pressed && { opacity: 0.7 },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Continue with Google"
-              >
-                <Ionicons name="logo-google" size={20} color={isDark ? colors.text : '#4285F4'} />
-                <Text style={[styles.socialBtnText, { color: colors.text }]}>
-                  Continue with Google
-                </Text>
-              </Pressable>
-
-              {Platform.OS === 'ios' ? (
-                <Pressable
-                  onPress={() => handleSocialStub('Apple')}
-                  style={({ pressed }) => [
-                    styles.socialBtn,
-                    styles.appleSocialBtn,
-                    pressed && { opacity: 0.7 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Continue with Apple"
-                >
-                  <Ionicons name="logo-apple" size={20} color="#ffffff" />
-                  <Text style={[styles.socialBtnText, styles.appleSocialBtnText]}>
-                    Continue with Apple
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
-
             {/* Sign up link */}
             <View style={styles.footerInCard}>
               <Text style={[styles.footerText, { color: colors.textSecondary }]}>
@@ -625,45 +574,6 @@ const styles = StyleSheet.create({
   forgotText: {
     ...Type.bodySemiBold,
     textAlign: 'center',
-  },
-
-  // Divider
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-  },
-  dividerText: {
-    ...Type.caption,
-    fontWeight: '500',
-  },
-
-  // Social
-  socialGroup: {
-    gap: Spacing.md,
-  },
-  socialBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 48,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: Spacing.md,
-  },
-  socialBtnText: {
-    ...Type.bodySemiBold,
-  },
-  appleSocialBtn: {
-    backgroundColor: '#000000',
-    borderWidth: 0,
-  },
-  appleSocialBtnText: {
-    color: '#ffffff',
   },
 
   // Footer

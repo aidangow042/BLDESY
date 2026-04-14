@@ -25,6 +25,7 @@ import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
 import { ReviewForm } from '@/components/reviews/review-form';
 import { getRelativeTime, URGENCY_CONFIG } from '@/lib/trade-utils';
+import { friendlyError } from '@/lib/error-messages';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PHOTO_WIDTH = SCREEN_WIDTH - 68;
@@ -102,8 +103,7 @@ export default function MyJobsScreen() {
       .order('created_at', { ascending: false });
 
     if (fetchError) {
-      console.error('[MyJobs] fetch error:', fetchError.message);
-      setError(fetchError.message);
+      setError(friendlyError(fetchError));
       setLoading(false);
       return;
     }
@@ -257,7 +257,7 @@ export default function MyJobsScreen() {
               .delete()
               .eq('id', job.id);
             if (error) {
-              Alert.alert('Error', error.message);
+              Alert.alert('Error', friendlyError(error));
             } else {
               setJobs((prev) => prev.filter((j) => j.id !== job.id));
             }

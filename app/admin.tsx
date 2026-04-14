@@ -24,6 +24,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
 import { PageHeader } from '@/components/page-header';
+import { friendlyError } from '@/lib/error-messages';
 
 type Tab = 'pending' | 'approved' | 'rejected';
 type AppType = 'builder' | 'enterprise';
@@ -127,10 +128,10 @@ export default function AdminScreen() {
     setActionId(app.id);
     if (app.type === 'builder') {
       const { error } = await supabase.rpc('admin_set_builder_approved', { p_builder_id: app.id, p_approved: true });
-      if (error) { Alert.alert('Error', error.message); setActionId(null); return; }
+      if (error) { Alert.alert('Error', friendlyError(error)); setActionId(null); return; }
     } else {
       const { error } = await supabase.rpc('admin_set_enterprise_status', { p_enterprise_id: app.id, p_status: 'approved' });
-      if (error) { Alert.alert('Error', error.message); setActionId(null); return; }
+      if (error) { Alert.alert('Error', friendlyError(error)); setActionId(null); return; }
     }
     setActionId(null);
     loadApplications();
@@ -141,14 +142,14 @@ export default function AdminScreen() {
     setActionId(app.id);
     if (app.type === 'builder') {
       const { error } = await supabase.rpc('admin_set_builder_approved', { p_builder_id: app.id, p_approved: false });
-      if (error) { Alert.alert('Error', error.message); setActionId(null); return; }
+      if (error) { Alert.alert('Error', friendlyError(error)); setActionId(null); return; }
     } else {
       const { error } = await supabase.rpc('admin_set_enterprise_status', {
         p_enterprise_id: app.id,
         p_status: 'rejected',
         p_rejection_reason: rejectReason || null,
       });
-      if (error) { Alert.alert('Error', error.message); setActionId(null); return; }
+      if (error) { Alert.alert('Error', friendlyError(error)); setActionId(null); return; }
     }
     setActionId(null);
     setRejectingId(null);

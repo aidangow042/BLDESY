@@ -23,6 +23,7 @@ import { NotificationsPanel } from '@/components/dashboard/notifications-panel';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import { useUnreadCount } from '@/hooks/use-unread-count';
 import { computeCoachTip } from '@/lib/dashboard-data';
+import { friendlyError } from '@/lib/error-messages';
 
 type BuilderStatus = 'loading' | 'none' | 'pending' | 'approved' | 'error';
 
@@ -108,8 +109,7 @@ export default function PortalScreen() {
       .maybeSingle();
 
     if (error) {
-      console.error('[Portal] fetch error:', error.message);
-      setErrorMessage(error.message);
+      setErrorMessage(friendlyError(error));
       setStatus('error');
     } else if (!data) {
       setStatus('none');
@@ -300,18 +300,6 @@ export default function PortalScreen() {
       title: 'Analytics',
       description: 'Track views, applications & profile performance',
       onPress: () => router.push('/builder-analytics'),
-    },
-    {
-      icon: 'star-outline',
-      title: 'Subscribe',
-      description: 'Upgrade to BLDESY Pro for full access',
-      onPress: () => router.push('/subscribe' as any),
-    },
-    {
-      icon: 'card-outline',
-      title: 'Billing',
-      description: 'Manage subscription and payment details',
-      onPress: () => router.push('/billing'),
     },
     {
       icon: 'settings-outline',

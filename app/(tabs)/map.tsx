@@ -25,6 +25,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Radius, Shadows, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { friendlyError } from '@/lib/error-messages';
 
 const DEBOUNCE_MS = 500;
 
@@ -328,8 +329,7 @@ export default function MapScreen() {
       .limit(100);
 
     if (fetchError) {
-      console.error('[Map] fetch error:', fetchError.message);
-      setError(fetchError.message);
+      setError(friendlyError(fetchError));
     } else if (data) {
       setTradies(data as Tradie[]);
     }

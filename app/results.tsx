@@ -28,6 +28,7 @@ import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { geocode, distanceKm } from '@/lib/geo';
 import { supabase } from '@/lib/supabase';
+import { friendlyError } from '@/lib/error-messages';
 import { useUser } from '@/lib/auth-context';
 import { getCached, setCache } from '@/lib/query-cache';
 import { TRADE_ICONS, getTradeIcon, getCarouselImages } from '@/lib/trade-utils';
@@ -594,7 +595,7 @@ export default function ResultsScreen() {
     const { data, error: fetchError } = await query;
 
     if (fetchError) {
-      setError(fetchError.message);
+      setError(friendlyError(fetchError));
       setLoading(false);
       return;
     }

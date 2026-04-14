@@ -35,6 +35,7 @@ import { useUser } from '@/lib/auth-context';
 import { addRecentProfile } from '@/lib/recent-profiles';
 import { CredentialBadges } from '@/components/builder/credential-badges';
 import { StarRating } from '@/components/ui/star-rating';
+import { friendlyError } from '@/lib/error-messages';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COVER_HEIGHT = 260;
@@ -220,7 +221,7 @@ function GalleryLightbox({
     <Modal visible={visible} animationType="fade" transparent statusBarTranslucent>
       <View style={lightboxStyles.container}>
         <StatusBar barStyle="light-content" />
-        <Pressable onPress={onClose} style={lightboxStyles.closeBtn}>
+        <Pressable onPress={onClose} style={lightboxStyles.closeBtn} accessibilityRole="button" accessibilityLabel="Close gallery">
           <Text style={lightboxStyles.closeText}>✕</Text>
         </Pressable>
 
@@ -239,7 +240,7 @@ function GalleryLightbox({
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
           keyExtractor={(_, i) => String(i)}
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <View style={lightboxStyles.mediaContainer}>
               {item.type === 'video' ? (
                 <Video
@@ -248,6 +249,7 @@ function GalleryLightbox({
                   resizeMode={ResizeMode.CONTAIN}
                   useNativeControls
                   shouldPlay
+                  accessibilityLabel={'Project video ' + (index + 1)}
                 />
               ) : (
                 <Image
@@ -256,6 +258,7 @@ function GalleryLightbox({
                   contentFit="contain"
                   cachePolicy="disk"
                   placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }}
+                  accessibilityLabel={'Project photo ' + (index + 1)}
                 />
               )}
             </View>
@@ -339,8 +342,10 @@ function BeforeAfterCompare({ beforeUri, afterUri, onPress }: { beforeUri: strin
         <Pressable
           onPress={() => onPress?.(0)}
           style={({ pressed }) => [baStyles.half, pressed && { opacity: 0.9 }]}
+          accessibilityRole="button"
+          accessibilityLabel="View before photo"
         >
-          <Image source={{ uri: beforeUri }} style={[baStyles.image, { width: halfWidth }]} cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} />
+          <Image source={{ uri: beforeUri }} style={[baStyles.image, { width: halfWidth }]} cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} accessibilityLabel="Before photo" />
           <View style={baStyles.label}>
             <Text style={baStyles.labelText}>BEFORE</Text>
           </View>
@@ -349,8 +354,10 @@ function BeforeAfterCompare({ beforeUri, afterUri, onPress }: { beforeUri: strin
         <Pressable
           onPress={() => onPress?.(1)}
           style={({ pressed }) => [baStyles.half, pressed && { opacity: 0.9 }]}
+          accessibilityRole="button"
+          accessibilityLabel="View after photo"
         >
-          <Image source={{ uri: afterUri }} style={[baStyles.image, { width: halfWidth }]} cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} />
+          <Image source={{ uri: afterUri }} style={[baStyles.image, { width: halfWidth }]} cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} accessibilityLabel="After photo" />
           <View style={[baStyles.label, baStyles.labelAfter]}>
             <Text style={baStyles.labelText}>AFTER</Text>
           </View>
@@ -432,9 +439,9 @@ function ProjectCarousel({ media, onPress }: { media: { uri: string; type: 'imag
 
   if (media.length === 1) {
     return (
-      <Pressable onPress={() => onPress(0)} style={({ pressed }) => pressed && { opacity: 0.9 }}>
+      <Pressable onPress={() => onPress(0)} style={({ pressed }) => pressed && { opacity: 0.9 }} accessibilityRole="button" accessibilityLabel="View project photo">
         <View style={{ height: CAROUSEL_HEIGHT, overflow: 'hidden' }}>
-          <Image source={{ uri: media[0].uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} />
+          <Image source={{ uri: media[0].uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} accessibilityLabel="Project photo 1" />
           {media[0].type === 'video' && (
             <View style={carouselStyles.playOverlay}>
               <View style={carouselStyles.playCircle}>
@@ -463,9 +470,11 @@ function ProjectCarousel({ media, onPress }: { media: { uri: string; type: 'imag
             key={idx}
             onPress={() => onPress(idx)}
             style={({ pressed }) => pressed && { opacity: 0.9 }}
+            accessibilityRole="button"
+            accessibilityLabel={'View project ' + (m.type === 'video' ? 'video' : 'photo') + ' ' + (idx + 1)}
           >
             <View style={{ width: CAROUSEL_WIDTH, height: CAROUSEL_HEIGHT }}>
-              <Image source={{ uri: m.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} />
+              <Image source={{ uri: m.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} accessibilityLabel={'Project photo ' + (idx + 1)} />
               {m.type === 'video' && (
                 <View style={carouselStyles.playOverlay}>
                   <View style={carouselStyles.playCircle}>
@@ -651,7 +660,7 @@ export default function BuilderProfileScreen() {
       .single();
 
     if (fetchError) {
-      setError(fetchError.message);
+      setError(friendlyError(fetchError));
     } else {
       setBuilder(data);
       addRecentProfile({
@@ -800,6 +809,8 @@ export default function BuilderProfileScreen() {
           </ThemedText>
           <Pressable
             onPress={() => (router.back())}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
             style={({ pressed }) => [
               styles.outlineBtn,
               { borderColor: teal },
@@ -896,7 +907,7 @@ export default function BuilderProfileScreen() {
         {/* ─── COVER PHOTO + HEADER ─── */}
         <View style={{ height: COVER_HEIGHT + AVATAR_SIZE / 2 }}>
           {coverUri ? (
-            <Image source={{ uri: coverUri }} style={styles.coverImage} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
+            <Image source={{ uri: coverUri }} style={styles.coverImage} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} accessibilityLabel={builder.business_name + ' cover photo'} />
           ) : (
             <LinearGradient
               colors={colorScheme === 'dark' ? ['#042f2e', '#0f3d3a', '#134E4A'] : ['#0d9488', '#0f766e', '#115e59']}
@@ -925,7 +936,7 @@ export default function BuilderProfileScreen() {
           {/* Profile photo + info overlay */}
           <View style={styles.headerInfoContainer}>
             <View style={[styles.avatarContainer, { borderColor: '#ffffff' }]}>
-              <Image source={{ uri: avatarUri }} style={styles.avatar} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
+              <Image source={{ uri: avatarUri }} style={styles.avatar} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} accessibilityLabel={builder.business_name + ' profile photo'} />
             </View>
             <View style={styles.headerTextContainer}>
               <Text style={styles.businessNameOverlay} numberOfLines={2}>
@@ -1012,6 +1023,8 @@ export default function BuilderProfileScreen() {
           <View style={styles.actionRow}>
             <Pressable
               onPress={handleCall}
+              accessibilityRole="button"
+              accessibilityLabel={'Call ' + builder.business_name}
               style={({ pressed }) => [
                 styles.actionBtn,
                 { backgroundColor: colors.surface, borderColor: teal },
@@ -1024,6 +1037,8 @@ export default function BuilderProfileScreen() {
 
             <Pressable
               onPress={handleEmail}
+              accessibilityRole="button"
+              accessibilityLabel={'Email ' + builder.business_name}
               style={({ pressed }) => [
                 styles.actionBtn,
                 { backgroundColor: colors.surface, borderColor: teal },
@@ -1036,6 +1051,8 @@ export default function BuilderProfileScreen() {
 
             <Pressable
               onPress={handleWebsite}
+              accessibilityRole="button"
+              accessibilityLabel={'Visit ' + builder.business_name + ' website'}
               style={({ pressed }) => [
                 styles.actionBtn,
                 { backgroundColor: colors.surface, borderColor: teal },
@@ -1059,7 +1076,7 @@ export default function BuilderProfileScreen() {
             {bio}
           </Text>
           {bio.length > 200 && (
-            <Pressable onPress={() => setBioExpanded(!bioExpanded)}>
+            <Pressable onPress={() => setBioExpanded(!bioExpanded)} accessibilityRole="button" accessibilityLabel={bioExpanded ? 'Show less of bio' : 'Read more of bio'}>
               <Text style={[styles.readMoreText, { color: teal }]}>
                 {bioExpanded ? 'Show less' : 'Read more'}
               </Text>
@@ -1179,6 +1196,8 @@ export default function BuilderProfileScreen() {
             {!showAllProjects && builderProjects.length > 3 && (
               <Pressable
                 onPress={() => setShowAllProjects(true)}
+                accessibilityRole="button"
+                accessibilityLabel={'View all ' + builderProjects.length + ' projects'}
                 style={({ pressed }) => [
                   styles.viewAllBtn,
                   { borderColor: teal },
@@ -1212,7 +1231,7 @@ export default function BuilderProfileScreen() {
                 return (
                   <View key={member.id} style={styles.teamCard}>
                     {member.photoUri ? (
-                      <Image source={{ uri: member.photoUri }} style={styles.teamPhoto} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
+                      <Image source={{ uri: member.photoUri }} style={styles.teamPhoto} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} accessibilityLabel={member.name + ', ' + member.role} />
                     ) : (
                       <View style={[styles.teamPhoto, styles.teamInitials, { backgroundColor: tealBg }]}>
                         <Text style={{ color: teal, fontSize: 18, fontWeight: '700' }}>{initials}</Text>
@@ -1320,7 +1339,7 @@ export default function BuilderProfileScreen() {
                         {review.text}
                       </Text>
                       {review.text.length > 120 && (
-                        <Pressable onPress={() => toggleReviewExpanded(review.id)}>
+                        <Pressable onPress={() => toggleReviewExpanded(review.id)} accessibilityRole="button" accessibilityLabel={isExpanded ? 'Show less of review' : 'Read more of review'}>
                           <Text style={[styles.readMoreText, { color: teal }]}>
                             {isExpanded ? 'Show less' : 'Read more'}
                           </Text>
@@ -1333,6 +1352,8 @@ export default function BuilderProfileScreen() {
                 {!showAllReviews && reviews.length > 3 && (
                   <Pressable
                     onPress={() => setShowAllReviews(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel={'View all ' + reviewCount + ' reviews'}
                     style={({ pressed }) => [
                       styles.viewAllBtn,
                       { borderColor: teal },
@@ -1350,6 +1371,8 @@ export default function BuilderProfileScreen() {
             {/* Write a review button */}
             <Pressable
               onPress={() => Alert.alert('Coming soon', 'Review submission will be available soon.')}
+              accessibilityRole="button"
+              accessibilityLabel={'Write a review for ' + builder.business_name}
               style={({ pressed }) => [
                 styles.writeReviewBtn,
                 { borderColor: teal },
@@ -1422,6 +1445,9 @@ export default function BuilderProfileScreen() {
             <Pressable
               onPress={() => setFaqOpen(!faqOpen)}
               style={styles.foldoutHeader}
+              accessibilityRole="button"
+              accessibilityLabel={faqOpen ? 'Collapse FAQ section' : 'Expand FAQ section'}
+              accessibilityState={{ expanded: faqOpen }}
             >
               <Text style={[styles.foldoutTitle, { color: colors.text }]}>FAQ</Text>
               <Ionicons name={faqOpen ? 'chevron-up' : 'chevron-down'} size={20} color={teal} />
@@ -1443,6 +1469,10 @@ export default function BuilderProfileScreen() {
                     styles.faqItem,
                     { borderTopWidth: 1, borderTopColor: colors.border },
                   ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={faq.question}
+                  accessibilityHint={isOpen ? 'Collapse answer' : 'Expand answer'}
+                  accessibilityState={{ expanded: isOpen }}
                 >
                   <View style={styles.faqQuestion}>
                     <Text style={[styles.faqQuestionText, { color: colors.text }]}>{faq.question}</Text>
@@ -1468,6 +1498,9 @@ export default function BuilderProfileScreen() {
           <Pressable
             onPress={() => setCredentialsExpanded(!credentialsExpanded)}
             style={styles.foldoutHeader}
+            accessibilityRole="button"
+            accessibilityLabel={credentialsExpanded ? 'Collapse credentials and documents' : 'Expand credentials and documents'}
+            accessibilityState={{ expanded: credentialsExpanded }}
           >
             <Text style={[styles.foldoutTitle, { color: colors.text }]}>Credentials & Documents</Text>
             <Ionicons
@@ -1538,6 +1571,8 @@ export default function BuilderProfileScreen() {
               if (!builder) return;
               router.push({ pathname: '/messages', params: { recipientId: builder.user_id } } as any);
             }}
+            accessibilityRole="button"
+            accessibilityLabel={'Message ' + builder.business_name}
           >
             <MaterialIcons name="chat-bubble-outline" size={20} color="#0D7C66" />
           </Pressable>
@@ -1547,6 +1582,8 @@ export default function BuilderProfileScreen() {
               { backgroundColor: '#0D7C66', flex: 1 },
               pressed && { backgroundColor: '#0A6B58' },
             ]}
+            accessibilityRole="button"
+            accessibilityLabel={'Request a quote from ' + builder.business_name}
           >
             <Text style={styles.stickyQuoteText}>Request a Quote</Text>
           </Pressable>

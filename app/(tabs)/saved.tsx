@@ -27,6 +27,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
 import { TRADE_ICONS, getTradeIcon, getCarouselImages } from '@/lib/trade-utils';
+import { friendlyError } from '@/lib/error-messages';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_PADDING = Spacing.xl;
@@ -331,8 +332,7 @@ export default function SavedScreen() {
       .order('created_at', { ascending: false });
 
     if (fetchError) {
-      console.error('[Saved] fetch error:', fetchError.message);
-      setError(fetchError.message);
+      setError(friendlyError(fetchError));
       setBuilders([]);
       setLoading(false);
       return;

@@ -242,12 +242,6 @@ export function SideDrawer({ visible, onClose, builderMode = false, enterpriseMo
       icon: <MaterialIcons name="chat-bubble-outline" size={20} color={colors.textSecondary} />,
       onPress: () => navigate('/messages'),
     }] : []),
-    ...(builderMode ? [{
-      key: 'billing',
-      label: 'Billing',
-      icon: <MaterialIcons name="credit-card" size={20} color={colors.textSecondary} />,
-      onPress: () => navigate('/billing'),
-    }] : []),
     {
       key: 'settings',
       label: 'Settings',

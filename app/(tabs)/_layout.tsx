@@ -95,6 +95,9 @@ function BottomTabBar({ state, descriptors, navigation }: MaterialTopTabBarProps
             key={route.key}
             onPress={onPress}
             style={styles.tabItem}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: isFocused }}
+            accessibilityLabel={`${label} tab`}
           >
             {icon}
             <Text style={[styles.tabLabel, { color }]}>{label}</Text>

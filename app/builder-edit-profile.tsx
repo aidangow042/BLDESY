@@ -30,6 +30,7 @@ import { uploadImage, uploadImages, isLocalUri } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
 import { VerifyCredentialsForm } from '@/components/builder/verify-credentials-form';
+import { friendlyError } from '@/lib/error-messages';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COVER_HEIGHT = 180;
@@ -690,7 +691,7 @@ export default function EditProfileScreen() {
       setSaving(false);
 
       if (error) {
-        Alert.alert('Error', error.message);
+        Alert.alert('Error', friendlyError(error));
         return;
       }
 
@@ -699,7 +700,7 @@ export default function EditProfileScreen() {
       ]);
     } catch (err: any) {
       setSaving(false);
-      Alert.alert('Error', err?.message ?? 'Something went wrong. Please try again.');
+      Alert.alert('Error', friendlyError(err));
     }
   }
 

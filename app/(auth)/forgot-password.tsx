@@ -14,6 +14,7 @@ import { Link, router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
+import { friendlyError } from '@/lib/error-messages';
 
 export default function ForgotPasswordScreen() {
   const colorScheme = useColorScheme();
@@ -32,7 +33,7 @@ export default function ForgotPasswordScreen() {
     const { error } = await supabase.auth.resetPasswordForEmail(email);
     setLoading(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      Alert.alert('Error', friendlyError(error));
     } else {
       setSent(true);
     }

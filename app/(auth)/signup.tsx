@@ -15,7 +15,6 @@ import {
 import { Link, router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
@@ -106,10 +105,6 @@ export default function SignupScreen() {
     } else {
       setSuccess(true);
     }
-  }
-
-  function handleSocialStub(provider: string) {
-    setError(`${provider} sign-up coming soon.`);
   }
 
   const gradientColors: [string, string, string] = isDark
@@ -492,56 +487,6 @@ export default function SignupScreen() {
               By creating an account you agree to our Terms of Service and Privacy Policy.
             </Text>
 
-            {/* Divider */}
-            <View style={styles.divider}>
-              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-              <Text style={[styles.dividerText, { color: colors.icon }]}>or</Text>
-              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-            </View>
-
-            {/* Social login stubs */}
-            <View style={styles.socialGroup}>
-              <Pressable
-                onPress={() => handleSocialStub('Google')}
-                style={({ pressed }) => [
-                  styles.socialBtn,
-                  {
-                    borderColor: colors.border,
-                    backgroundColor: isDark ? colors.canvas : '#ffffff',
-                  },
-                  pressed && { opacity: 0.7 },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Continue with Google"
-              >
-                <Ionicons name="logo-google" size={20} color={isDark ? colors.text : '#4285F4'} />
-                <Text style={[styles.socialBtnText, { color: colors.text }]}>
-                  Continue with Google
-                </Text>
-              </Pressable>
-
-              {Platform.OS === 'ios' ? (
-                <Pressable
-                  onPress={() => handleSocialStub('Apple')}
-                  style={({ pressed }) => [
-                    styles.socialBtn,
-                    {
-                      borderColor: colors.border,
-                      backgroundColor: isDark ? colors.canvas : '#ffffff',
-                    },
-                    pressed && { opacity: 0.7 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Continue with Apple"
-                >
-                  <Ionicons name="logo-apple" size={20} color={isDark ? colors.text : '#000000'} />
-                  <Text style={[styles.socialBtnText, { color: colors.text }]}>
-                    Continue with Apple
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
-
             {/* Footer */}
             <View style={styles.footerInCard}>
               <Text style={[styles.footerText, { color: colors.textSecondary }]}>
@@ -767,38 +712,6 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     textAlign: 'center',
     marginTop: -Spacing.sm,
-  },
-
-  // Divider
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-  },
-  dividerText: {
-    ...Type.caption,
-    fontWeight: '500',
-  },
-
-  // Social login
-  socialGroup: {
-    gap: Spacing.md,
-  },
-  socialBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: Spacing.md,
-  },
-  socialBtnText: {
-    ...Type.bodySemiBold,
   },
 
   // Footer inside card

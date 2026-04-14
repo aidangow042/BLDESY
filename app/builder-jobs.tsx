@@ -26,6 +26,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
 import { TRADE_ICONS, getTradeIcon } from '@/lib/trade-utils';
+import { friendlyError } from '@/lib/error-messages';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CAROUSEL_HEIGHT = 160;
@@ -454,8 +455,7 @@ export default function BuilderJobsFeed() {
       // RLS filters to open jobs visible to approved builders
 
       if (fetchError) {
-        console.error('[BuilderJobs] fetch error:', fetchError.message);
-        setError(fetchError.message);
+        setError(friendlyError(fetchError));
         setJobs([]);
         return;
       }
@@ -496,8 +496,7 @@ export default function BuilderJobsFeed() {
         setJobs([]);
       }
     } catch (err: any) {
-      console.error('[BuilderJobs] unexpected error:', err);
-      setError(err?.message ?? 'Failed to load jobs');
+      setError(friendlyError(err));
     } finally {
       setLoading(false);
     }

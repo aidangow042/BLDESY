@@ -42,14 +42,12 @@ async function uploadAvatar(localUri: string, userId: string): Promise<string | 
       .upload(fileName, arrayBuffer, { contentType, upsert: true });
 
     if (error) {
-      console.error('Avatar upload error:', error.message);
       return null;
     }
 
     const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
     return data.publicUrl;
   } catch (err) {
-    console.error('Avatar upload failed:', err);
     return null;
   }
 }
@@ -142,7 +140,6 @@ export default function EditProfileScreen() {
         .eq('id', userId);
 
       if (error) {
-        console.error('Profile update error:', error);
         Alert.alert('Error', error.message);
         return;
       }
