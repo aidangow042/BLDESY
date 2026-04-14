@@ -30,7 +30,7 @@ export function ReviewForm({ jobId, builderId, builderName, onSubmitted, onCance
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];
-  const { userId } = useUser();
+  const { userId, user } = useUser();
 
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
@@ -49,12 +49,20 @@ export function ReviewForm({ jobId, builderId, builderName, onSubmitted, onCance
 
     setSubmitting(true);
 
+    // Fetch reviewer name from profiles for denormalised display
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('name')
+      .eq('id', userId)
+      .single();
+
     const { error } = await supabase.from('reviews').insert({
       job_id: jobId,
       reviewer_id: userId,
       reviewee_id: builderId,
       rating,
       comment: comment.trim() || null,
+      reviewer_name: profile?.name || user?.user_metadata?.full_name || null,
     });
 
     setSubmitting(false);

@@ -39,6 +39,7 @@ const AVATAR_OVERLAP = AVATAR_SIZE / 2;
 
 type SavedBuilder = {
   builder_id: string;
+  user_id: string;
   business_name: string;
   trade_category: string;
   suburb: string;
@@ -325,7 +326,7 @@ export default function SavedScreen() {
 
     const { data, error: fetchError } = await supabase
       .from('saved_builders')
-      .select('builder_id, created_at, builder_profiles(business_name, trade_category, suburb, postcode, bio, profile_photo_url, cover_photo_url, projects, specialties, abn, license_key)')
+      .select('builder_id, created_at, builder_profiles(user_id, business_name, trade_category, suburb, postcode, bio, profile_photo_url, cover_photo_url, projects, specialties, abn, license_key)')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
@@ -341,6 +342,7 @@ export default function SavedScreen() {
       .filter((row: any) => row.builder_profiles)
       .map((row: any) => ({
         builder_id: row.builder_id,
+        user_id: row.builder_profiles.user_id,
         business_name: row.builder_profiles.business_name,
         trade_category: row.builder_profiles.trade_category,
         suburb: row.builder_profiles.suburb,
@@ -359,22 +361,22 @@ export default function SavedScreen() {
 
     // Fetch review stats for all saved builders in one query
     if (mapped.length > 0) {
-      const builderIds = mapped.map((b) => b.builder_id);
+      const userIds = mapped.map((b) => b.user_id).filter(Boolean);
       const { data: reviewData } = await supabase
         .from('reviews')
-        .select('builder_id, rating')
-        .in('builder_id', builderIds);
+        .select('reviewee_id, rating')
+        .in('reviewee_id', userIds);
 
       if (reviewData && reviewData.length > 0) {
         const statsMap = new Map<string, { sum: number; count: number }>();
         for (const r of reviewData) {
-          const existing = statsMap.get(r.builder_id) ?? { sum: 0, count: 0 };
+          const existing = statsMap.get(r.reviewee_id) ?? { sum: 0, count: 0 };
           existing.sum += r.rating ?? 0;
           existing.count += 1;
-          statsMap.set(r.builder_id, existing);
+          statsMap.set(r.reviewee_id, existing);
         }
         for (const b of mapped) {
-          const stats = statsMap.get(b.builder_id);
+          const stats = statsMap.get(b.user_id);
           if (stats) {
             b.avg_rating = Math.round((stats.sum / stats.count) * 10) / 10;
             b.review_count = stats.count;

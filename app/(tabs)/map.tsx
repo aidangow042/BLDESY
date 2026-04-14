@@ -32,6 +32,7 @@ const DEBOUNCE_MS = 500;
 
 type Tradie = {
   id: string;
+  user_id: string;
   business_name: string;
   trade_category: string;
   latitude: number;
@@ -315,7 +316,7 @@ export default function MapScreen() {
     const { data, error: fetchError } = await supabase
       .from('builder_profiles')
       .select(
-        'id, business_name, trade_category, suburb, bio, latitude, longitude, radius_km, availability, availability_note, profile_photo_url, abn, license_key, specialties, established_year, projects',
+        'id, user_id, business_name, trade_category, suburb, bio, latitude, longitude, radius_km, availability, availability_note, profile_photo_url, abn, license_key, specialties, established_year, projects',
       )
       .eq('approved', true)
       .not('latitude', 'is', null)
@@ -392,7 +393,7 @@ export default function MapScreen() {
     const { data } = await supabase
       .from('reviews')
       .select('rating, reviewer_name, comment')
-      .eq('builder_id', builderId)
+      .eq('reviewee_id', builderId)
       .order('created_at', { ascending: false })
       .limit(10);
 
@@ -427,7 +428,7 @@ export default function MapScreen() {
         },
         400,
       );
-      fetchTradieReviews(tradie.id);
+      fetchTradieReviews(tradie.user_id);
     },
     [],
   );

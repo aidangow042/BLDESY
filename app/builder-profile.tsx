@@ -588,7 +588,7 @@ export default function BuilderProfileScreen() {
     const { data } = await supabase
       .from('reviews')
       .select('id, rating, comment, reviewer_name, project_type, created_at')
-      .eq('builder_id', id)
+      .eq('reviewee_id', builder?.user_id)
       .order('created_at', { ascending: false });
 
     if (data && data.length > 0) {
