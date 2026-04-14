@@ -1,10 +1,10 @@
-import { forwardRef, useCallback, useMemo, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { DashboardColors, DashboardFonts } from '@/constants/dashboard-theme';
-import { mockNotifications, type NotificationItem } from '@/lib/dashboard-mock-data';
+import { useDashboardNotifications, type NotificationItem } from '@/lib/dashboard-data';
 
 const EVENT_ICONS: Record<NotificationItem['type'], React.ComponentProps<typeof Ionicons>['name']> = {
   view: 'eye-outline',
@@ -14,9 +14,15 @@ const EVENT_ICONS: Record<NotificationItem['type'], React.ComponentProps<typeof 
   system: 'megaphone-outline',
 };
 
-export const NotificationsPanel = forwardRef<BottomSheet>(function NotificationsPanel(_, ref) {
+type PanelProps = { userId: string | null };
+
+export const NotificationsPanel = forwardRef<BottomSheet, PanelProps>(function NotificationsPanel({ userId }, ref) {
   const snapPoints = useMemo(() => ['50%', '85%'], []);
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const { notifications: dbNotifications } = useDashboardNotifications(userId);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+  // Sync from DB on load
+  useEffect(() => { setNotifications(dbNotifications); }, [dbNotifications]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 

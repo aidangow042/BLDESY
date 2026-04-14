@@ -23,6 +23,7 @@ import { File } from 'expo-file-system';
 import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 
 const AVATAR_SIZE = 88;
 
@@ -59,11 +60,11 @@ export default function EditProfileScreen() {
   const colors = Colors[isDark ? 'dark' : 'light'];
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { userId, user: authUser } = useUser();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string>('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -71,19 +72,17 @@ export default function EditProfileScreen() {
   const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-      setUserId(user.id);
-      setUserEmail(user.email ?? '');
+      setUserEmail(authUser?.email ?? '');
 
       const { data: profile } = await supabase
         .from('profiles')
         .select('name, avatar_url, phone')
-        .eq('id', user.id)
+        .eq('id', userId)
         .single();
 
       setFullName(profile?.name ?? '');
@@ -91,7 +90,7 @@ export default function EditProfileScreen() {
       setAvatarUrl(profile?.avatar_url ?? null);
       setLoading(false);
     })();
-  }, []);
+  }, [userId, authUser]);
 
   const handlePickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();

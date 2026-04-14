@@ -24,6 +24,7 @@ import ReAnimated, { FadeInUp } from 'react-native-reanimated';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import { TRADE_ICONS, getTradeIcon } from '@/lib/trade-utils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -391,6 +392,7 @@ export default function BuilderJobsFeed() {
   const router = useRouter();
   const params = useLocalSearchParams<{ type?: string }>();
   const jobType = params.type || 'all'; // 'commercial', 'residential', or 'all'
+  const { userId } = useUser();
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
@@ -400,8 +402,9 @@ export default function BuilderJobsFeed() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
+    if (!userId) return;
     loadJobs();
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     if (builderTrade !== null) {
@@ -414,8 +417,7 @@ export default function BuilderJobsFeed() {
       setLoading(true);
       setError(null);
 
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user) {
+      if (!userId) {
         setLoading(false);
         return;
       }
@@ -423,7 +425,7 @@ export default function BuilderJobsFeed() {
       const { data: profile } = await supabase
         .from('builder_profiles')
         .select('trade_category')
-        .eq('user_id', userData.user.id)
+        .eq('user_id', userId)
         .maybeSingle();
 
       const trade = profile?.trade_category ?? null;

@@ -26,6 +26,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import { getRelativeTime, getDisplayName, getInitials, URGENCY_CONFIG } from '@/lib/trade-utils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -82,6 +83,7 @@ export default function JobDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { userId } = useUser();
 
   const [job, setJob] = useState<Job | null>(null);
   const [customer, setCustomer] = useState<CustomerInfo | null>(null);
@@ -110,7 +112,7 @@ export default function JobDetailScreen() {
     if (id) {
       loadAll();
     }
-  }, [id]);
+  }, [id, userId]);
 
   async function loadAll() {
     setLoading(true);
@@ -139,14 +141,13 @@ export default function JobDetailScreen() {
     }
     if (docRes.data) setDocuments(docRes.data);
 
-    const { data: userData } = await supabase.auth.getUser();
-    if (userData?.user) {
-      setCurrentUserId(userData.user.id);
+    if (userId) {
+      setCurrentUserId(userId);
       const { data: app } = await supabase
         .from('applications')
         .select('id, status')
         .eq('job_id', id)
-        .eq('builder_id', userData.user.id)
+        .eq('builder_id', userId)
         .maybeSingle();
       if (app) {
         setAlreadyApplied(true);
@@ -158,7 +159,7 @@ export default function JobDetailScreen() {
       if (contact) setContactInfo(contact);
 
       // If owner, fetch applicants
-      if (jobRes.data && userData.user.id === jobRes.data.customer_id) {
+      if (jobRes.data && userId === jobRes.data.customer_id) {
         setIsOwner(true);
         const { data: apps } = await supabase
           .from('applications')
@@ -219,8 +220,7 @@ export default function JobDetailScreen() {
     }
 
     setApplying(true);
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData?.user) {
+    if (!userId) {
       Alert.alert('Error', 'You must be logged in to apply.');
       setApplying(false);
       return;
@@ -228,7 +228,7 @@ export default function JobDetailScreen() {
 
     const { error: insertError } = await supabase.from('applications').insert({
       job_id: id,
-      builder_id: userData.user.id,
+      builder_id: userId,
       message: null,
       status: 'pending',
     });

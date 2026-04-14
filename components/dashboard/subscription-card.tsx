@@ -3,15 +3,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { DashboardColors, DashboardFonts, DashboardShadows } from '@/constants/dashboard-theme';
-import { mockSubscription } from '@/lib/dashboard-mock-data';
+import { useDashboardSubscription } from '@/lib/dashboard-data';
 
 type Props = {
+  userId: string | null;
   onManage?: () => void;
   onUpgrade?: () => void;
 };
 
-export function SubscriptionCard({ onManage, onUpgrade }: Props) {
-  const sub = mockSubscription;
+export function SubscriptionCard({ userId, onManage, onUpgrade }: Props) {
+  const sub = useDashboardSubscription(userId);
   const isFree = sub.plan === 'Free';
 
   if (isFree) {

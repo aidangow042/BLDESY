@@ -31,6 +31,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import { addRecentProfile } from '@/lib/recent-profiles';
 import { CredentialBadges } from '@/components/builder/credential-badges';
 import { StarRating } from '@/components/ui/star-rating';
@@ -551,6 +552,7 @@ export default function BuilderProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { userId } = useUser();
 
   const [builder, setBuilder] = useState<BuilderProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -636,7 +638,7 @@ export default function BuilderProfileScreen() {
       fetchBuilder();
       checkIfSaved();
     }
-  }, [id]);
+  }, [id, userId]);
 
   async function fetchBuilder() {
     setLoading(true);
@@ -664,13 +666,12 @@ export default function BuilderProfileScreen() {
   }
 
   async function checkIfSaved() {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) return;
+    if (!userId) return;
 
     const { data } = await supabase
       .from('saved_builders')
       .select('id')
-      .eq('user_id', userData.user.id)
+      .eq('user_id', userId)
       .eq('builder_id', id)
       .maybeSingle();
 
@@ -686,8 +687,7 @@ export default function BuilderProfileScreen() {
 
     setSavingToggle(true);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData?.user) {
+    if (!userId) {
       Alert.alert('Sign in required', 'You need to be logged in to save builders.');
       setSavingToggle(false);
       return;
@@ -697,12 +697,12 @@ export default function BuilderProfileScreen() {
       await supabase
         .from('saved_builders')
         .delete()
-        .eq('user_id', userData.user.id)
+        .eq('user_id', userId)
         .eq('builder_id', id);
       setIsSaved(false);
     } else {
       const { error: insertError } = await supabase.from('saved_builders').insert({
-        user_id: userData.user.id,
+        user_id: userId,
         builder_id: id,
       });
       if (insertError) {
@@ -716,8 +716,7 @@ export default function BuilderProfileScreen() {
   }
 
   async function fetchContactInfo(): Promise<{ phone: string | null; email: string | null } | null> {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) {
+    if (!userId) {
       Alert.alert('Sign in required', 'Please sign in to view contact details.');
       return null;
     }

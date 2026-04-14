@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -22,6 +22,7 @@ import { ActivityFeed } from '@/components/dashboard/activity-feed';
 import { NotificationsPanel } from '@/components/dashboard/notifications-panel';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import { useUnreadCount } from '@/hooks/use-unread-count';
+import { computeCoachTip } from '@/lib/dashboard-data';
 
 type BuilderStatus = 'loading' | 'none' | 'pending' | 'approved' | 'error';
 
@@ -85,6 +86,7 @@ export default function PortalScreen() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const notificationsRef = useRef<BottomSheet>(null);
   const { count: unreadMessages } = useUnreadCount(userId);
+  const coachTip = useMemo(() => computeCoachTip(profile), [profile]);
 
   useFocusEffect(
     useCallback(() => {
@@ -94,17 +96,15 @@ export default function PortalScreen() {
 
   async function checkBuilderStatus() {
     setErrorMessage(null);
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) {
+    if (!ctxUserId) {
       setStatus('none');
       return;
     }
-    setUserId(userData.user.id);
 
     const { data, error } = await supabase
       .from('builder_profiles')
       .select('id, user_id, business_name, trade_category, suburb, postcode, bio, phone, email, website, profile_photo_url, cover_photo_url, projects, specialties, credentials, availability, availability_note, response_time, urgency_capacity, abn, license_key, approved, latitude, longitude, radius_km')
-      .eq('user_id', userData.user.id)
+      .eq('user_id', ctxUserId)
       .maybeSingle();
 
     if (error) {
@@ -353,6 +353,7 @@ export default function PortalScreen() {
 
         {/* Key metrics hero */}
         <MetricsGrid
+          userId={userId}
           onViewAnalytics={() => router.push('/builder-analytics')}
           onCardPress={() => router.push('/builder-analytics')}
         />
@@ -368,7 +369,7 @@ export default function PortalScreen() {
         />
 
         {/* AI Coach */}
-        <AICoachCard onGetCoaching={() => router.navigate('/(tabs)/ai' as any)} />
+        <AICoachCard tip={coachTip} onGetCoaching={() => router.navigate('/(tabs)/ai' as any)} />
 
         {/* Navigation grid */}
         <View style={styles.navGrid}>
@@ -392,7 +393,7 @@ export default function PortalScreen() {
         </View>
 
         {/* Activity feed */}
-        <ActivityFeed onViewAll={() => {}} />
+        <ActivityFeed userId={userId} onViewAll={() => {}} />
 
         {/* Bottom stats bar */}
         {profile && (
@@ -427,7 +428,7 @@ export default function PortalScreen() {
       </ScrollView>
 
       {/* Notifications bottom sheet */}
-      <NotificationsPanel ref={notificationsRef} />
+      <NotificationsPanel ref={notificationsRef} userId={userId} />
 
       {/* Side drawer (Settings, Help, Legal, etc.) */}
       <SideDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} builderMode />

@@ -11,13 +11,13 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { DashboardColors, DashboardFonts, DashboardShadows } from '@/constants/dashboard-theme';
-import { mockAICoachTip } from '@/lib/dashboard-mock-data';
 
 type Props = {
+  tip?: string;
   onGetCoaching?: () => void;
 };
 
-export function AICoachCard({ onGetCoaching }: Props) {
+export function AICoachCard({ tip, onGetCoaching }: Props) {
   const sparkleOpacity = useSharedValue(1);
 
   useEffect(() => {
@@ -57,7 +57,7 @@ export function AICoachCard({ onGetCoaching }: Props) {
           </View>
 
           {/* Suggestion */}
-          <Text style={styles.suggestion}>{mockAICoachTip}</Text>
+          <Text style={styles.suggestion}>{tip || 'Complete your profile to start getting noticed by customers.'}</Text>
 
           {/* CTA */}
           <Pressable

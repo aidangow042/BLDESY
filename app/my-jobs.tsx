@@ -22,6 +22,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import { ReviewForm } from '@/components/reviews/review-form';
 import { getRelativeTime, URGENCY_CONFIG } from '@/lib/trade-utils';
 
@@ -70,6 +71,7 @@ export default function MyJobsScreen() {
   const colors = Colors[colorScheme];
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { userId } = useUser();
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,22 +86,19 @@ export default function MyJobsScreen() {
   const [activePhotoIndices, setActivePhotoIndices] = useState<Record<string, number>>({});
 
   useEffect(() => {
+    if (!userId) return;
     fetchJobs();
-  }, []);
+  }, [userId]);
 
   async function fetchJobs() {
+    if (!userId) return;
     setLoading(true);
     setError(null);
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) {
-      setLoading(false);
-      return;
-    }
 
     const { data, error: fetchError } = await supabase
       .from('jobs')
       .select('id, title, trade_category, description, urgency, status, suburb, postcode, budget, contact_phone, contact_email, created_at')
-      .eq('customer_id', userData.user.id)
+      .eq('customer_id', userId)
       .order('created_at', { ascending: false });
 
     if (fetchError) {

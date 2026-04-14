@@ -15,6 +15,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import { StarRating } from '@/components/ui/star-rating';
 
 type Props = {
@@ -29,6 +30,7 @@ export function ReviewForm({ jobId, builderId, builderName, onSubmitted, onCance
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];
+  const { userId } = useUser();
 
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
@@ -40,17 +42,16 @@ export function ReviewForm({ jobId, builderId, builderName, onSubmitted, onCance
       return;
     }
 
-    setSubmitting(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    if (!userId) {
       Alert.alert('Error', 'You must be logged in to leave a review.');
-      setSubmitting(false);
       return;
     }
 
+    setSubmitting(true);
+
     const { error } = await supabase.from('reviews').insert({
       job_id: jobId,
-      reviewer_id: user.id,
+      reviewer_id: userId,
       reviewee_id: builderId,
       rating,
       comment: comment.trim() || null,

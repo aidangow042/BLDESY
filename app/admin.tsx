@@ -22,6 +22,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Radius, Spacing, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import { PageHeader } from '@/components/page-header';
 
 type Tab = 'pending' | 'approved' | 'rejected';
@@ -45,6 +46,7 @@ export default function AdminScreen() {
   const colors = Colors[isDark ? 'dark' : 'light'];
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { userId } = useUser();
 
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [tab, setTab] = useState<Tab>('pending');
@@ -58,13 +60,12 @@ export default function AdminScreen() {
 
   // Check admin access
   useEffect(() => {
+    if (!userId) { setIsAdmin(false); return; }
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setIsAdmin(false); return; }
-      const { data } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
+      const { data } = await supabase.from('profiles').select('is_admin').eq('id', userId).single();
       setIsAdmin(!!(data as any)?.is_admin);
     })();
-  }, []);
+  }, [userId]);
 
   const loadApplications = useCallback(async () => {
     setLoading(true);

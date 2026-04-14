@@ -10,7 +10,7 @@ export function useUnreadCount(userId: string | null) {
 
   const refresh = useCallback(async () => {
     if (!userId) return;
-    const total = await getTotalUnreadCount();
+    const total = await getTotalUnreadCount(userId);
     setCount(total);
   }, [userId]);
 

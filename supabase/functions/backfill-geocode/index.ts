@@ -1,20 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { corsOk, jsonResponse } from '../_shared/cors.ts';
 
-const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').filter(Boolean);
-
-function getCorsHeaders(req: Request) {
-  const origin = req.headers.get('Origin') ?? '';
-  const allowedOrigin = ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  };
-}
-
-/**
- * Geocode a query string using OpenStreetMap Nominatim.
- * Returns { latitude, longitude } or null.
- */
 async function geocode(query: string): Promise<{ latitude: number; longitude: number } | null> {
   try {
     const encoded = encodeURIComponent(`${query}, Australia`);
@@ -35,44 +21,32 @@ async function geocode(query: string): Promise<{ latitude: number; longitude: nu
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: getCorsHeaders(req) });
-  }
+  if (req.method === 'OPTIONS') return corsOk(req);
 
   try {
     // ── Admin-only: require service_role key ──
     const authHeader = req.headers.get('Authorization');
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     if (!authHeader || authHeader !== `Bearer ${serviceRoleKey}`) {
-      return new Response(JSON.stringify({ error: 'Forbidden — admin access only' }), {
-        status: 403,
-        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ error: 'Forbidden — admin access only' }, req, 403);
     }
 
-    // Use service role key to bypass RLS
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // Fetch builders with missing coordinates
     const { data: builders, error: fetchError } = await supabase
       .from('builder_profiles')
       .select('id, suburb, postcode, latitude, longitude')
       .or('latitude.is.null,longitude.is.null');
 
     if (fetchError) {
-      return new Response(JSON.stringify({ error: fetchError.message }), {
-        status: 500,
-        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ error: fetchError.message }, req, 500);
     }
 
     if (!builders || builders.length === 0) {
-      return new Response(JSON.stringify({ message: 'No builders need geocoding', updated: 0 }), {
-        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ message: 'No builders need geocoding', updated: 0 }, req);
     }
 
     const results: { id: string; suburb: string; postcode: string; success: boolean; lat?: number; lon?: number }[] = [];
@@ -109,14 +83,8 @@ Deno.serve(async (req) => {
 
     const updated = results.filter((r) => r.success).length;
 
-    return new Response(
-      JSON.stringify({ message: `Geocoded ${updated}/${builders.length} builders`, results }),
-      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-    );
+    return jsonResponse({ message: `Geocoded ${updated}/${builders.length} builders`, results }, req);
   } catch (_err) {
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
-      status: 500,
-      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: 'Internal server error' }, req, 500);
   }
 });

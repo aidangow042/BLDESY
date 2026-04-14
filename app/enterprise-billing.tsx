@@ -21,6 +21,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors, Radius, Spacing, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 
 type Plan = {
   key: string;
@@ -84,6 +85,7 @@ export default function EnterpriseBillingScreen() {
   const colors = Colors[isDark ? 'dark' : 'light'];
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { userId } = useUser();
 
   const indigo = isDark ? '#818cf8' : '#4f46e5';
   const indigoBg = isDark ? '#1e1b4b' : '#eef2ff';
@@ -95,13 +97,12 @@ export default function EnterpriseBillingScreen() {
   const [postsLimit, setPostsLimit] = useState(0);
 
   const loadBilling = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
+    if (!userId) { setLoading(false); return; }
 
     const { data: ep } = await supabase
       .from('enterprise_profiles')
       .select('subscription_plan, has_active_subscription, posts_used_this_cycle, posts_limit')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
 
     if (ep) {
@@ -111,7 +112,7 @@ export default function EnterpriseBillingScreen() {
       setPostsLimit(ep.posts_limit || 0);
     }
     setLoading(false);
-  }, []);
+  }, [userId]);
 
   useFocusEffect(useCallback(() => { loadBilling(); }, [loadBilling]));
 

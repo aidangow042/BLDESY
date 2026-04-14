@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/page-header';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 
 type Application = {
   id: string;
@@ -38,6 +39,7 @@ export default function MyApplicationsScreen() {
   const colors = Colors[colorScheme];
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { userId } = useUser();
 
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,14 +55,14 @@ export default function MyApplicationsScreen() {
   };
 
   useEffect(() => {
+    if (!userId) return;
     fetchApplications();
-  }, []);
+  }, [userId]);
 
   async function fetchApplications() {
     setLoading(true);
 
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) {
+    if (!userId) {
       setLoading(false);
       return;
     }
@@ -68,7 +70,7 @@ export default function MyApplicationsScreen() {
     const { data, error } = await supabase
       .from('applications')
       .select('id, message, status, created_at, jobs(id, title, trade_category, urgency, suburb, postcode, status)')
-      .eq('builder_id', userData.user.id)
+      .eq('builder_id', userId)
       .order('created_at', { ascending: false });
 
     if (!error && data) {

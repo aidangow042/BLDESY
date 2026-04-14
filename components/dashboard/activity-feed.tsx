@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { DashboardColors, DashboardFonts, DashboardShadows } from '@/constants/dashboard-theme';
-import { mockActivityFeed, type ActivityEvent } from '@/lib/dashboard-mock-data';
+import { useDashboardActivity, type ActivityEvent } from '@/lib/dashboard-data';
 
 const EVENT_ICONS: Record<ActivityEvent['type'], React.ComponentProps<typeof Ionicons>['name']> = {
   view: 'eye-outline',
@@ -13,11 +13,13 @@ const EVENT_ICONS: Record<ActivityEvent['type'], React.ComponentProps<typeof Ion
 };
 
 type Props = {
+  userId: string | null;
   onViewAll?: () => void;
 };
 
-export function ActivityFeed({ onViewAll }: Props) {
-  const events = mockActivityFeed.slice(0, 5);
+export function ActivityFeed({ userId, onViewAll }: Props) {
+  const { events: allEvents } = useDashboardActivity(userId);
+  const events = allEvents.slice(0, 5);
 
   return (
     <View style={styles.container}>

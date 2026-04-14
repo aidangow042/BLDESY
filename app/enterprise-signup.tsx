@@ -23,6 +23,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import { getSuburbSuggestions } from '@/lib/geo';
 import { PageHeader } from '@/components/page-header';
 
@@ -42,6 +43,7 @@ export default function EnterpriseSignupScreen() {
   const colors = Colors[isDark ? 'dark' : 'light'];
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { userId } = useUser();
 
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -99,11 +101,10 @@ export default function EnterpriseSignupScreen() {
     if (!contactName.trim()) { Alert.alert('Error', 'Contact name is required'); return; }
 
     setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setSaving(false); Alert.alert('Error', 'Not logged in'); return; }
+    if (!userId) { setSaving(false); Alert.alert('Error', 'Not logged in'); return; }
 
     const { error } = await supabase.from('enterprise_profiles').insert({
-      user_id: user.id,
+      user_id: userId,
       company_name: companyName.trim(),
       abn: abn.replace(/\s/g, '') || null,
       contact_name: contactName.trim(),

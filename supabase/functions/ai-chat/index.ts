@@ -1,17 +1,8 @@
 import Anthropic from 'npm:@anthropic-ai/sdk@0.39.0';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { aiChatLimiter, checkRateLimit } from '../_shared/rate-limit.ts';
-
-const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').filter(Boolean);
-
-function getCorsHeaders(req: Request) {
-  const origin = req.headers.get('Origin') ?? '';
-  const allowedOrigin = ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  };
-}
+import { corsOk, jsonResponse } from '../_shared/cors.ts';
+import { requireUser } from '../_shared/auth.ts';
 
 type BuilderRec = {
   id: string;
@@ -23,71 +14,36 @@ type BuilderRec = {
 };
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: getCorsHeaders(req) });
-  }
+  if (req.method === 'OPTIONS') return corsOk(req);
 
   try {
-    // ── Auth: verify the caller is a logged-in user ──
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization' }), {
-        status: 401,
-        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-      });
-    }
+    const auth = await requireUser(req);
+    if (auth.error) return auth.error;
 
-    const supabaseAuth = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-    );
-    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(
-      authHeader.replace('Bearer ', ''),
-    );
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized — please sign in' }), {
-        status: 401,
-        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-      });
-    }
-
-    // ── Rate limit: 10 requests/hour per user (persistent via Upstash Redis) ──
-    const { allowed } = await checkRateLimit(aiChatLimiter, user.id);
+    const { allowed } = await checkRateLimit(aiChatLimiter, auth.user.id);
     if (!allowed) {
-      return new Response(
-        JSON.stringify({ error: 'Too many requests — please wait a moment before trying again' }),
-        { status: 429, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json', 'Retry-After': '60' } },
+      return jsonResponse(
+        { error: 'Too many requests — please wait a moment before trying again' },
+        req, 429, { 'Retry-After': '60' },
       );
     }
 
     const { messages } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
-      return new Response(JSON.stringify({ error: 'messages array required' }), {
-        status: 400,
-        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ error: 'messages array required' }, req, 400);
     }
 
     // ── Input validation ──
     if (messages.length > 30) {
-      return new Response(
-        JSON.stringify({ error: 'Too many messages — please start a new conversation' }),
-        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-      );
+      return jsonResponse({ error: 'Too many messages — please start a new conversation' }, req, 400);
     }
     for (const m of messages) {
       if (!m.role || !['user', 'assistant'].includes(m.role)) {
-        return new Response(
-          JSON.stringify({ error: 'Each message must have a valid role (user or assistant)' }),
-          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-        );
+        return jsonResponse({ error: 'Each message must have a valid role (user or assistant)' }, req, 400);
       }
       if (typeof m.content !== 'string' || m.content.length === 0 || m.content.length > 2000) {
-        return new Response(
-          JSON.stringify({ error: 'Each message content must be 1-2000 characters' }),
-          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-        );
+        return jsonResponse({ error: 'Each message content must be 1-2000 characters' }, req, 400);
       }
     }
 
@@ -161,7 +117,6 @@ SEARCH:{"trade":"<trade>","location":"<suburb or null>","urgency":"<emergency|so
             searchParams.urgency = urgencyMap[urgency] ?? urgency;
           }
 
-          // Query matching builders (anon key — RLS handles approved-only filtering)
           const supabase = createClient(
             Deno.env.get('SUPABASE_URL')!,
             Deno.env.get('SUPABASE_ANON_KEY')!,
@@ -205,19 +160,14 @@ SEARCH:{"trade":"<trade>","location":"<suburb or null>","urgency":"<emergency|so
       }
     }
 
-    return new Response(JSON.stringify({
+    return jsonResponse({
       reply,
       builders: builders.length > 0 ? builders : undefined,
       searchParams: Object.keys(searchParams).length > 0 ? searchParams : undefined,
-    }), {
-      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-    });
+    }, req);
   } catch (error: any) {
     console.error('ai-chat error:', error);
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
-      status: 500,
-      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: 'Internal server error' }, req, 500);
   }
 });
 

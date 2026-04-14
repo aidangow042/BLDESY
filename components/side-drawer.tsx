@@ -33,6 +33,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.82, 320);
@@ -78,6 +79,7 @@ export function SideDrawer({ visible, onClose, builderMode = false, enterpriseMo
   const colors = Colors[isDark ? 'dark' : 'light'];
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { userId, user: authUser } = useUser();
 
   const progress = useSharedValue(0);
   const [userInfo, setUserInfo] = React.useState<UserInfo>({
@@ -112,30 +114,29 @@ export function SideDrawer({ visible, onClose, builderMode = false, enterpriseMo
   }, [visible]);
 
   async function fetchUserInfo() {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) {
+    if (!userId) {
       setUserInfo({ name: 'Guest', email: null, avatar: null, isBuilder: false, isEnterprise: false, isAdmin: false, isGuest: true, businessName: null, tradeCategory: null, profilePhoto: null });
       hasFetched.current = true;
       return;
     }
 
-    const email = userData.user.email ?? null;
+    const email = authUser?.email ?? null;
 
     const [{ data: profile }, { data: builderProfile }, { data: enterpriseProfile }] = await Promise.all([
       supabase
         .from('profiles')
         .select('name, avatar_url, role, is_admin')
-        .eq('id', userData.user.id)
+        .eq('id', userId)
         .maybeSingle(),
       supabase
         .from('builder_profiles')
         .select('approved, business_name, trade_category, profile_photo_url')
-        .eq('user_id', userData.user.id)
+        .eq('user_id', userId)
         .maybeSingle(),
       supabase
         .from('enterprise_profiles')
         .select('status, company_name')
-        .eq('user_id', userData.user.id)
+        .eq('user_id', userId)
         .maybeSingle(),
     ]);
 

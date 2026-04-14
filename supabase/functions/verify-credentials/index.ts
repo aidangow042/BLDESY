@@ -7,21 +7,9 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { verifyCredentialsLimiter, checkRateLimit } from '../_shared/rate-limit.ts';
-
-const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').filter(Boolean);
-
-function getCorsHeaders(req: Request) {
-  const origin = req.headers.get('Origin') ?? '';
-  const allowedOrigin =
-    ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin)
-      ? origin
-      : ALLOWED_ORIGINS[0];
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Content-Type': 'application/json',
-  };
-}
+import { corsOk, jsonResponse } from '../_shared/cors.ts';
+import { requireUser } from '../_shared/auth.ts';
+import { getLicenceReq } from '../_shared/trade-licence-map.ts';
 
 // ── NSW OAuth token cache ──
 const tokenCache = new Map<string, { access_token: string; expires_at: number }>();
@@ -125,72 +113,24 @@ async function lookupAbn(abn: string) {
   }
 }
 
-// ── Trade licence map (inline subset) ──
-const TRADE_LICENCE_MAP: Record<string, Record<string, { display_label: string; source: string } | null>> = {
-  builder: { nsw: { display_label: 'NSW Builder Licence', source: 'nsw_trades_api' }, qld: { display_label: 'QBCC Builder', source: 'qbcc_register' } },
-  carpenter: { nsw: { display_label: 'NSW Carpentry Licence', source: 'nsw_trades_api' }, qld: { display_label: 'QBCC Carpentry', source: 'qbcc_register' } },
-  electrician: { nsw: { display_label: 'NSW Electrical Licence', source: 'nsw_trades_api' }, qld: { display_label: 'QBCC Electrical', source: 'qbcc_register' } },
-  plumber: { nsw: { display_label: 'NSW Plumbing Licence', source: 'nsw_trades_api' }, qld: { display_label: 'QBCC Plumbing', source: 'qbcc_register' } },
-  'gas-fitter': { nsw: { display_label: 'NSW Gas Fitting Licence', source: 'nsw_trades_api' }, qld: { display_label: 'QBCC Gas Fitting', source: 'qbcc_register' } },
-  roofer: { nsw: { display_label: 'NSW Roofing Licence', source: 'nsw_trades_api' }, qld: { display_label: 'QBCC Roofing', source: 'qbcc_register' } },
-  waterproofer: { nsw: { display_label: 'NSW Waterproofing Licence', source: 'nsw_trades_api' }, qld: { display_label: 'QBCC Waterproofing', source: 'qbcc_register' } },
-  glazier: { nsw: { display_label: 'NSW Glazier Licence', source: 'nsw_trades_api' }, qld: { display_label: 'QBCC Glazing', source: 'qbcc_register' } },
-  locksmith: { nsw: { display_label: 'NSW Security Licence', source: 'nsw_security_api' }, qld: null },
-  'asbestos-removal': { nsw: { display_label: 'NSW Asbestos Licence', source: 'nsw_asbestos_api' }, qld: { display_label: 'QBCC Asbestos', source: 'qbcc_register' } },
-  demolition: { nsw: { display_label: 'NSW Demolition Licence', source: 'nsw_asbestos_api' }, qld: { display_label: 'QBCC Demolition', source: 'qbcc_register' } },
-  scaffolder: { nsw: { display_label: 'HRW Scaffolding Licence', source: 'nsw_highrisk_api' }, qld: { display_label: 'QBCC Scaffolding', source: 'qbcc_register' } },
-  // Unlicensed trades
-  painter: { nsw: null, qld: null },
-  tiler: { nsw: null, qld: null },
-  landscaper: { nsw: null, qld: null },
-  fencer: { nsw: null, qld: null },
-  handyman: { nsw: null, qld: null },
-  cleaner: { nsw: null, qld: null },
-  plasterer: { nsw: null, qld: null },
-};
-
-function getLicenceReq(trade: string, state: string) {
-  const entry = TRADE_LICENCE_MAP[trade.toLowerCase()];
-  if (!entry) return undefined;
-  return entry[state.toLowerCase()] ?? undefined;
-}
-
 // ── Main handler ──
 Deno.serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req);
-
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return corsOk(req);
 
   try {
-    // Auth
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization' }), { status: 401, headers: corsHeaders });
-    }
+    const auth = await requireUser(req);
+    if (auth.error) return auth.error;
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
-    }
-
-    const { allowed } = await checkRateLimit(verifyCredentialsLimiter, user.id);
+    const { allowed } = await checkRateLimit(verifyCredentialsLimiter, auth.user.id);
     if (!allowed) {
-      return new Response(JSON.stringify({ error: 'Too many requests' }), { status: 429, headers: corsHeaders });
+      return jsonResponse({ error: 'Too many requests' }, req, 429);
     }
 
     const body = await req.json();
     const { abn, licence_number, state, trade_category } = body;
 
     if (!abn && !licence_number && !trade_category) {
-      return new Response(JSON.stringify({ error: 'Provide ABN, licence number, or trade category' }), { status: 400, headers: corsHeaders });
+      return jsonResponse({ error: 'Provide ABN, licence number, or trade category' }, req, 400);
     }
 
     // Fetch current credentials from DB — never trust client-supplied credentials object
@@ -201,7 +141,7 @@ Deno.serve(async (req) => {
     const { data: currentProfile } = await adminClient
       .from('builder_profiles')
       .select('credentials_verified')
-      .eq('user_id', user.id)
+      .eq('user_id', auth.user.id)
       .single();
 
     const existing: Record<string, any> = (currentProfile?.credentials_verified as Record<string, any>) || {};
@@ -276,7 +216,6 @@ Deno.serve(async (req) => {
           licence_verified = true;
         }
       } else if (builderState.toUpperCase() === 'QLD' && requirement.source === 'qbcc_register') {
-        // QBCC register lookup is not yet available — flag for admin review
         existing.licences = [
           ...(existing.licences || []).filter((l: any) => l.type !== tradeCategory),
           { type: tradeCategory, licence_number, verified: false, status: 'Pending Admin Review', display_label: requirement.display_label, source: 'qbcc_register', verification_method: 'admin' },
@@ -287,21 +226,17 @@ Deno.serve(async (req) => {
 
     existing.state = builderState || existing.state;
 
-    // Persist with service role client (already created above)
     const { error: persistError } = await adminClient
       .from('builder_profiles')
       .update({ credentials_verified: existing })
-      .eq('user_id', user.id);
+      .eq('user_id', auth.user.id);
 
     if (persistError) {
-      return new Response(JSON.stringify({ error: 'Failed to save credentials' }), { status: 500, headers: corsHeaders });
+      return jsonResponse({ error: 'Failed to save credentials' }, req, 500);
     }
 
-    return new Response(
-      JSON.stringify({ success: true, abn_verified, licence_verified, errors, credentials_verified: existing }),
-      { headers: corsHeaders },
-    );
+    return jsonResponse({ success: true, abn_verified, licence_verified, errors, credentials_verified: existing }, req);
   } catch (_err) {
-    return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500, headers: corsHeaders });
+    return jsonResponse({ error: 'Internal server error' }, req, 500);
   }
 });

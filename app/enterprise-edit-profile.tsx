@@ -24,6 +24,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors, Radius, Spacing, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import { getSuburbSuggestions } from '@/lib/geo';
 
 const COMPANY_SIZES = ['1-10', '11-50', '51-200', '200+'];
@@ -41,6 +42,7 @@ export default function EnterpriseEditProfileScreen() {
   const colors = Colors[isDark ? 'dark' : 'light'];
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { userId } = useUser();
 
   const indigo = isDark ? '#818cf8' : '#4f46e5';
   const indigoBg = isDark ? '#1e1b4b' : '#eef2ff';
@@ -66,13 +68,12 @@ export default function EnterpriseEditProfileScreen() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
   const loadProfile = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
+    if (!userId) { setLoading(false); return; }
 
     const { data } = await supabase
       .from('enterprise_profiles')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
 
     if (data) {
@@ -90,7 +91,7 @@ export default function EnterpriseEditProfileScreen() {
       setTradesNeeded(data.trades_needed || []);
     }
     setLoading(false);
-  }, []);
+  }, [userId]);
 
   useFocusEffect(useCallback(() => { loadProfile(); }, [loadProfile]));
 
@@ -118,8 +119,7 @@ export default function EnterpriseEditProfileScreen() {
     if (!companyName.trim()) { Alert.alert('Error', 'Company name is required'); return; }
 
     setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setSaving(false); Alert.alert('Error', 'Not logged in'); return; }
+    if (!userId) { setSaving(false); Alert.alert('Error', 'Not logged in'); return; }
 
     const { error } = await supabase
       .from('enterprise_profiles')
@@ -137,7 +137,7 @@ export default function EnterpriseEditProfileScreen() {
         postcode: postcode || null,
         trades_needed: tradesNeeded,
       })
-      .eq('user_id', user.id);
+      .eq('user_id', userId);
 
     setSaving(false);
     if (error) { Alert.alert('Error', error.message); return; }

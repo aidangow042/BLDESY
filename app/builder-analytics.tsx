@@ -25,6 +25,7 @@ import { BarChart } from 'react-native-gifted-charts';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,21 +55,11 @@ const PERIODS: { key: Period; label: string }[] = [
 ];
 const EMPTY: Metrics = { profileViews: 0, applications: 0, acceptanceRate: 0, responseTime: 0, searchAppearances: 0, jobsApplied: 0, jobsWon: 0, profileCompleteness: 0 };
 
-// Profile-level stats (populated from real data when available, mock placeholders for now)
-const topKeywords = [
-  { keyword: 'bathroom reno surry hills', count: 34 },
-  { keyword: 'knock down rebuild sydney', count: 28 },
-  { keyword: 'kitchen renovation newtown', count: 21 },
-  { keyword: 'home builder inner west', count: 18 },
-  { keyword: 'extension marrickville', count: 12 },
-];
-const trafficSources = [
-  { source: 'Search Results', percent: 52, icon: 'search-outline' as const },
-  { source: 'Map View', percent: 24, icon: 'map-outline' as const },
-  { source: 'AI Assist', percent: 15, icon: 'sparkles-outline' as const },
-  { source: 'Direct Link', percent: 9, icon: 'link-outline' as const },
-];
-const competitorData = { yourViews: 147, avgViews: 89, yourQuotes: 23, avgQuotes: 14 };
+// Profile-level stats — these require analytics tables not yet built.
+// Shown as empty until profile_views and search_analytics tables are created.
+const topKeywords: { keyword: string; count: number }[] = [];
+const trafficSources: { source: string; percent: number; icon: 'search-outline' | 'map-outline' | 'sparkles-outline' | 'link-outline' }[] = [];
+const competitorData = { yourViews: 0, avgViews: 0, yourQuotes: 0, avgQuotes: 0 };
 
 function periodCutoff(p: Period): string | null {
   if (p === 'all') return null;
@@ -109,6 +100,7 @@ function HBar({ label, value, maxValue, color, bgColor, textColor }: { label: st
 // ── Data Hook ────────────────────────────────────────────────────────────────
 
 function useBuilderAnalytics(period: Period) {
+  const { userId } = useUser();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [metrics, setMetrics] = useState<Metrics>(EMPTY);
@@ -117,15 +109,14 @@ function useBuilderAnalytics(period: Period) {
   const [topLocations, setTopLocations] = useState<RankedItem[]>([]);
 
   const load = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
+    if (!userId) { setLoading(false); return; }
 
     const cutoff = periodCutoff(period);
 
     // Fetch builder profile for completeness
     const { data: profile } = await supabase.from('builder_profiles')
       .select('business_name, bio, phone, cover_photo_url, profile_photo_url, specialties, projects, abn, license_key, website')
-      .eq('user_id', user.id).single();
+      .eq('user_id', userId).single();
 
     // Profile completeness
     let complete = 0;
@@ -137,7 +128,7 @@ function useBuilderAnalytics(period: Period) {
     }
 
     // Fetch applications
-    let appsQ = supabase.from('applications').select('id, status, created_at, job_id').eq('builder_id', user.id).order('created_at', { ascending: true });
+    let appsQ = supabase.from('applications').select('id, status, created_at, job_id').eq('builder_id', userId).order('created_at', { ascending: true });
     if (cutoff) appsQ = appsQ.gte('created_at', cutoff);
     const { data: apps } = await appsQ;
     const allApps = apps || [];
@@ -179,7 +170,7 @@ function useBuilderAnalytics(period: Period) {
     setTopLocations(Object.entries(lc).sort(([, a], [, b]) => b - a).slice(0, 5).map(([label, count]) => ({ label, count })));
 
     setLoading(false);
-  }, [period]);
+  }, [period, userId]);
 
   async function refresh() { setRefreshing(true); await load(); setRefreshing(false); }
 

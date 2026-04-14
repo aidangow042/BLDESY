@@ -24,6 +24,7 @@ import { BarChart } from 'react-native-gifted-charts';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -109,6 +110,7 @@ function HBar({ label, value, maxValue, color, bgColor, textColor }: { label: st
 // ── Data Hook ────────────────────────────────────────────────────────────────
 
 function useAnalyticsData(period: Period) {
+  const { userId } = useUser();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [metrics, setMetrics] = useState<Metrics>(EMPTY_METRICS);
@@ -118,12 +120,11 @@ function useAnalyticsData(period: Period) {
   const [jobRows, setJobRows] = useState<JobRow[]>([]);
 
   const load = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
+    if (!userId) { setLoading(false); return; }
 
     const { data: jobs } = await supabase.from('jobs')
       .select('id, title, trade_category, status, workers_needed, created_at')
-      .eq('customer_id', user.id);
+      .eq('customer_id', userId);
 
     const allJobs = jobs || [];
     const jobIds = allJobs.map(j => j.id);
@@ -200,7 +201,7 @@ function useAnalyticsData(period: Period) {
     }).sort((a, b) => b.apps - a.apps));
 
     setLoading(false);
-  }, [period]);
+  }, [period, userId]);
 
   async function refresh() { setRefreshing(true); await load(); setRefreshing(false); }
 

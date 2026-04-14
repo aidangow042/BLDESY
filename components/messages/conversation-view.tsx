@@ -38,7 +38,7 @@ export function ConversationView({ conversation, currentUserId, onBack }: Props)
 
   const loadMessages = useCallback(async () => {
     setLoading(true);
-    const { messages: msgs } = await fetchMessages(conversation.id);
+    const { messages: msgs } = await fetchMessages(currentUserId, conversation.id);
     setMessages(msgs);
     setLoading(false);
   }, [conversation.id]);
@@ -95,7 +95,7 @@ export function ConversationView({ conversation, currentUserId, onBack }: Props)
     };
     setMessages((prev) => [...prev, tempMsg]);
 
-    const sent = await sendMessage(conversation.id, text);
+    const sent = await sendMessage(currentUserId, conversation.id, text);
     if (sent) {
       // Replace temp with real message
       setMessages((prev) => prev.map((m) => (m.id === tempMsg.id ? sent : m)));

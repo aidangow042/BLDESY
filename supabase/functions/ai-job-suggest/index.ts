@@ -1,89 +1,43 @@
 import Anthropic from 'npm:@anthropic-ai/sdk@0.39.0';
-import { createClient } from 'npm:@supabase/supabase-js@2';
 import { aiJobSuggestLimiter, checkRateLimit } from '../_shared/rate-limit.ts';
-
-const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').filter(Boolean);
-
-function getCorsHeaders(req: Request) {
-  const origin = req.headers.get('Origin') ?? '';
-  const allowedOrigin = ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  };
-}
+import { corsOk, jsonResponse } from '../_shared/cors.ts';
+import { requireUser } from '../_shared/auth.ts';
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: getCorsHeaders(req) });
-  }
+  if (req.method === 'OPTIONS') return corsOk(req);
 
   try {
-    // ── Auth: verify the caller is a logged-in user ──
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization' }), {
-        status: 401,
-        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-      });
-    }
+    const auth = await requireUser(req);
+    if (auth.error) return auth.error;
 
-    const supabaseAuth = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-    );
-    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(
-      authHeader.replace('Bearer ', ''),
-    );
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized — please sign in' }), {
-        status: 401,
-        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-      });
-    }
-
-    // ── Rate limit: 10 requests/hour per user (persistent via Upstash Redis) ──
-    const { allowed } = await checkRateLimit(aiJobSuggestLimiter, user.id);
+    const { allowed } = await checkRateLimit(aiJobSuggestLimiter, auth.user.id);
     if (!allowed) {
-      return new Response(
-        JSON.stringify({ error: 'Too many requests — please wait a moment' }),
-        { status: 429, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json', 'Retry-After': '60' } },
+      return jsonResponse(
+        { error: 'Too many requests — please wait a moment' },
+        req, 429, { 'Retry-After': '60' },
       );
     }
 
     const { title, trade_type, mode = 'suggest' } = await req.json();
 
     if (!title || typeof title !== 'string') {
-      return new Response(JSON.stringify({ error: 'title string required' }), {
-        status: 400,
-        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ error: 'title string required' }, req, 400);
     }
 
     // ── Input validation ──
     if (title.length > 200) {
-      return new Response(
-        JSON.stringify({ error: 'Title must be 200 characters or less' }),
-        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-      );
+      return jsonResponse({ error: 'Title must be 200 characters or less' }, req, 400);
     }
     if (trade_type && (typeof trade_type !== 'string' || trade_type.length > 50)) {
-      return new Response(
-        JSON.stringify({ error: 'Trade type must be 50 characters or less' }),
-        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-      );
+      return jsonResponse({ error: 'Trade type must be 50 characters or less' }, req, 400);
     }
     if (mode !== 'suggest' && mode !== 'describe') {
-      return new Response(
-        JSON.stringify({ error: 'Mode must be "suggest" or "describe"' }),
-        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-      );
+      return jsonResponse({ error: 'Mode must be "suggest" or "describe"' }, req, 400);
     }
 
     const client = new Anthropic();
 
     if (mode === 'describe') {
-      // Generate a job description from the title + trade
       const response = await client.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 200,
@@ -105,9 +59,7 @@ Return ONLY the description text — no JSON, no markdown, no quotes.`,
       const description =
         response.content[0].type === 'text' ? response.content[0].text.trim() : '';
 
-      return new Response(JSON.stringify({ description }), {
-        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ description }, req);
     }
 
     // Default: suggest mode — classify trade + urgency from title
@@ -127,24 +79,16 @@ Return ONLY valid JSON. No markdown, no explanation.`,
     });
 
     const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : '{}';
-
-    // Parse the JSON response
     const cleaned = raw.replace(/```json\s*/g, '').replace(/```/g, '').trim();
     const result = JSON.parse(cleaned);
 
-    return new Response(
-      JSON.stringify({
-        suggested_trade: result.suggested_trade ?? null,
-        suggested_urgency: result.suggested_urgency ?? null,
-        clarifying_question: result.clarifying_question ?? null,
-      }),
-      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-    );
+    return jsonResponse({
+      suggested_trade: result.suggested_trade ?? null,
+      suggested_urgency: result.suggested_urgency ?? null,
+      clarifying_question: result.clarifying_question ?? null,
+    }, req);
   } catch (error: any) {
     console.error('ai-job-suggest error:', error);
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
-      status: 500,
-      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: 'Internal server error' }, req, 500);
   }
 });

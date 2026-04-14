@@ -29,6 +29,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import { getSuburbSuggestions, getPostcodeForSuburb } from '@/lib/geo';
 import { uploadJobPhoto, uploadJobDocument } from '@/lib/storage';
 
@@ -212,6 +213,7 @@ export default function PostJobScreen() {
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { userId } = useUser();
   const params = useLocalSearchParams<{
     editId?: string;
     editTitle?: string;
@@ -255,19 +257,18 @@ export default function PostJobScreen() {
 
   // Check if user is enterprise
   useEffect(() => {
+    if (!userId) return;
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
       const { data } = await supabase
         .from('enterprise_profiles')
         .select('status')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .maybeSingle();
       if (data && ((data as any).status === 'approved' || (data as any).status === 'active')) {
         dispatch({ type: 'SET', field: 'isEnterprise', value: true });
       }
     })();
-  }, []);
+  }, [userId]);
 
   // Animations
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -473,11 +474,10 @@ export default function PostJobScreen() {
 
   async function saveDraft() {
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user) return;
+      if (!userId) return;
 
       const draftData: Record<string, any> = {
-        customer_id: userData.user.id,
+        customer_id: userId,
         title: s.title.trim(),
         description: s.description.trim(),
         trade_category: (s.tradeType === 'Other' ? s.otherTrade : s.tradeType).toLowerCase(),
@@ -509,8 +509,7 @@ export default function PostJobScreen() {
   async function handleContinue() {
     if (s.step === 1) {
       // Check auth first
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user) {
+      if (!userId) {
         dispatch({ type: 'SET', field: 'noAuth', value: true });
         return;
       }
@@ -527,13 +526,11 @@ export default function PostJobScreen() {
     dispatch({ type: 'SET', field: 'submitting', value: true });
 
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user) {
+      if (!userId) {
         dispatch({ type: 'SET_MANY', payload: { noAuth: true, submitting: false } });
         return;
       }
 
-      const userId = userData.user.id;
       const tradeValue = (s.tradeType === 'Other' ? s.otherTrade : s.tradeType).toLowerCase();
 
       // Create or update the job

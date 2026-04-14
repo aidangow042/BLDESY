@@ -3,52 +3,34 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { DashboardColors, DashboardFonts } from '@/constants/dashboard-theme';
 import { MetricCard } from './metric-card';
-import { mockMetrics, mockCompetitorRank } from '@/lib/dashboard-mock-data';
+import { useDashboardMetrics } from '@/lib/dashboard-data';
 
 type Props = {
+  userId: string | null;
   onViewAnalytics?: () => void;
   onCardPress?: (metric: string) => void;
 };
 
-export function MetricsGrid({ onViewAnalytics, onCardPress }: Props) {
-  const m = mockMetrics;
-  const rank = mockCompetitorRank;
+export function MetricsGrid({ userId, onViewAnalytics, onCardPress }: Props) {
+  const { metrics: m } = useDashboardMetrics(userId);
 
   return (
     <View style={styles.container}>
       {/* Row 1 */}
       <View style={styles.row}>
         <MetricCard
-          icon="eye-outline"
-          value={m.profileViews.value.toLocaleString()}
-          label="Profile Views"
-          change={m.profileViews.change}
-          onPress={() => onCardPress?.('profileViews')}
+          icon="bookmark-outline"
+          value={m.saves.value.toLocaleString()}
+          label="Profile Saves"
+          change={m.saves.change}
+          onPress={() => onCardPress?.('saves')}
         />
         <MetricCard
           icon="mail-outline"
-          value={m.quoteRequests.value.toLocaleString()}
-          label="Quote Requests"
-          change={m.quoteRequests.change}
-          onPress={() => onCardPress?.('quoteRequests')}
-        />
-      </View>
-
-      {/* Row 2 */}
-      <View style={styles.row}>
-        <MetricCard
-          icon="search-outline"
-          value={m.searchAppearances.value.toLocaleString()}
-          label="Search Hits"
-          change={m.searchAppearances.change}
-          onPress={() => onCardPress?.('searchAppearances')}
-        />
-        <MetricCard
-          icon="podium-outline"
-          value={`#${rank.rank}`}
-          label="Area Rank"
-          subtitle={`of ${rank.total} in ${rank.area}`}
-          onPress={() => onCardPress?.('competitorRank')}
+          value={m.applications.value.toLocaleString()}
+          label="Applications"
+          change={m.applications.change}
+          onPress={() => onCardPress?.('applications')}
         />
       </View>
 

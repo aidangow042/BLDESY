@@ -24,6 +24,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { geocode, getSuburbSuggestions, getPostcodeForSuburb } from '@/lib/geo';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 
 /* ───────────────────────── Constants ───────────────────────── */
 
@@ -55,6 +56,7 @@ export default function BuilderSignupScreen() {
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { userId } = useUser();
 
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -207,8 +209,7 @@ export default function BuilderSignupScreen() {
 
     setSubmitting(true);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData?.user) {
+    if (!userId) {
       Alert.alert('Error', 'You must be signed in to register as a builder.');
       setSubmitting(false);
       return;
@@ -219,7 +220,7 @@ export default function BuilderSignupScreen() {
     const geo = await geocode(`${suburb.trim()} ${postcode.trim()}`);
 
     const { error: insertError } = await supabase.from('builder_profiles').insert({
-      user_id: userData.user.id,
+      user_id: userId,
       business_name: businessName.trim(),
       trade_category: tradeCategory.toLowerCase(),
       specialties: specialtiesArray.length > 0 ? specialtiesArray : null,

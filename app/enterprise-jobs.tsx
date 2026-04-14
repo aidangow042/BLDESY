@@ -24,6 +24,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors, Radius, Spacing, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import { getRelativeTime, URGENCY_CONFIG } from '@/lib/trade-utils';
 
 /* ─── Types ────────────────────────────────────────────────── */
@@ -71,6 +72,7 @@ export default function EnterpriseJobsScreen() {
   const colors = Colors[isDark ? 'dark' : 'light'];
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { userId } = useUser();
 
   const indigo = isDark ? '#818cf8' : '#4f46e5';
   const indigoBg = isDark ? '#1e1b4b' : '#eef2ff';
@@ -86,14 +88,13 @@ export default function EnterpriseJobsScreen() {
   /* ── Data fetching ────────────────────────────────────────── */
 
   const fetchJobs = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
+    if (!userId) { setLoading(false); return; }
 
     // Fetch jobs posted by this enterprise user
     const { data: jobsData, error: jobsErr } = await supabase
       .from('jobs')
       .select('id, title, trade_category, suburb, urgency, status, workers_needed, created_at, photo_urls')
-      .eq('customer_id', user.id)
+      .eq('customer_id', userId)
       .order('created_at', { ascending: false });
 
     if (jobsErr || !jobsData) {
@@ -136,7 +137,7 @@ export default function EnterpriseJobsScreen() {
       })),
     );
     setLoading(false);
-  }, []);
+  }, [userId]);
 
   useFocusEffect(
     useCallback(() => {

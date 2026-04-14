@@ -28,6 +28,7 @@ import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { geocode, distanceKm } from '@/lib/geo';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import { getCached, setCache } from '@/lib/query-cache';
 import { TRADE_ICONS, getTradeIcon, getCarouselImages } from '@/lib/trade-utils';
 
@@ -503,6 +504,7 @@ export default function ResultsScreen() {
   const colors = Colors[isDark ? 'dark' : 'light'];
   const teal = colors.teal;
   const router = useRouter();
+  const { userId } = useUser();
   const params = useLocalSearchParams<{
     suburb?: string;
     postcode?: string;
@@ -540,12 +542,11 @@ export default function ResultsScreen() {
   }, [params.suburb, params.trade_category, params.urgency, params.keywords]);
 
   async function fetchSavedBuilders() {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) return;
+    if (!userId) return;
     const { data } = await supabase
       .from('saved_builders')
       .select('builder_id')
-      .eq('user_id', userData.user.id);
+      .eq('user_id', userId);
     if (data) {
       setSavedBuilders(new Set(data.map((d: any) => d.builder_id)));
     }
@@ -720,8 +721,7 @@ export default function ResultsScreen() {
 
   async function toggleSave(builderId: string) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) {
+    if (!userId) {
       Alert.alert('Sign in required', 'You need to be logged in to save builders.');
       return;
     }
@@ -733,13 +733,13 @@ export default function ResultsScreen() {
       await supabase
         .from('saved_builders')
         .delete()
-        .eq('user_id', userData.user.id)
+        .eq('user_id', userId)
         .eq('builder_id', builderId);
     } else {
       newSet.add(builderId);
       setSavedBuilders(newSet);
       await supabase.from('saved_builders').insert({
-        user_id: userData.user.id,
+        user_id: userId,
         builder_id: builderId,
       });
     }

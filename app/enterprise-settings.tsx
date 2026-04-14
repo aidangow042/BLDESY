@@ -23,6 +23,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors, Radius, Spacing, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 
 export default function EnterpriseSettingsScreen() {
   const colorScheme = useColorScheme();
@@ -31,6 +32,7 @@ export default function EnterpriseSettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
+  const { userId } = useUser();
   const indigo = isDark ? '#818cf8' : '#4f46e5';
   const indigoBg = isDark ? '#1e1b4b' : '#eef2ff';
   const inputBg = isDark ? 'rgba(255,255,255,0.06)' : '#F8FAFC';
@@ -46,13 +48,12 @@ export default function EnterpriseSettingsScreen() {
   const [industryFocus, setIndustryFocus] = useState('');
 
   const loadSettings = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
+    if (!userId) { setLoading(false); return; }
 
     const { data } = await supabase
       .from('enterprise_profiles')
       .select('company_name, contact_name, contact_email, contact_phone, industry_focus')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
 
     if (data) {
@@ -63,7 +64,7 @@ export default function EnterpriseSettingsScreen() {
       setIndustryFocus(data.industry_focus || '');
     }
     setLoading(false);
-  }, []);
+  }, [userId]);
 
   useFocusEffect(useCallback(() => { loadSettings(); }, [loadSettings]));
 
@@ -74,8 +75,7 @@ export default function EnterpriseSettingsScreen() {
     }
 
     setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setSaving(false); Alert.alert('Error', 'Not logged in'); return; }
+    if (!userId) { setSaving(false); Alert.alert('Error', 'Not logged in'); return; }
 
     const { error } = await supabase
       .from('enterprise_profiles')
@@ -86,7 +86,7 @@ export default function EnterpriseSettingsScreen() {
         contact_phone: contactPhone.trim() || null,
         industry_focus: industryFocus.trim() || null,
       })
-      .eq('user_id', user.id);
+      .eq('user_id', userId);
 
     setSaving(false);
     if (error) {

@@ -40,10 +40,11 @@ export default function MessagesScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const loadConversations = useCallback(async () => {
-    const convos = await fetchConversations();
+    if (!userId) return;
+    const convos = await fetchConversations(userId);
     setConversations(convos);
     setLoading(false);
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     if (userId) loadConversations();
@@ -53,9 +54,9 @@ export default function MessagesScreen() {
   useEffect(() => {
     if (!userId || !params.recipientId) return;
     (async () => {
-      const conversationId = await getOrCreateConversation(params.recipientId!);
+      const conversationId = await getOrCreateConversation(userId, params.recipientId!);
       if (!conversationId) return;
-      const convos = await fetchConversations();
+      const convos = await fetchConversations(userId);
       setConversations(convos);
       const target = convos.find((c) => c.id === conversationId);
       if (target) setActiveConversation(target);

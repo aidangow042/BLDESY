@@ -8,6 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 
 type Props = {
   onPress: () => void;
@@ -19,20 +20,20 @@ export function NotificationBell({ onPress, color, size = 24 }: Props) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];
+  const { userId } = useUser();
   const [unreadCount, setUnreadCount] = useState(0);
 
   const fetchCount = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!userId) return;
 
     const { count } = await supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('read', false);
 
     setUnreadCount(count ?? 0);
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     fetchCount();

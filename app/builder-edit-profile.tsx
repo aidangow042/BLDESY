@@ -28,6 +28,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { geocode } from '@/lib/geo';
 import { uploadImage, uploadImages, isLocalUri } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import { VerifyCredentialsForm } from '@/components/builder/verify-credentials-form';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -154,6 +155,7 @@ export default function EditProfileScreen() {
   const bgCanvas = colors.canvas;
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { userId } = useUser();
   const scrollRef = useRef<ScrollView>(null);
 
   // ─── Step management ─────────────────────────────────────────────────
@@ -244,12 +246,12 @@ export default function EditProfileScreen() {
   // ─── Fetch existing profile ──────────────────────────────────────────
 
   useEffect(() => {
+    if (!userId) return;
     fetchProfile();
-  }, []);
+  }, [userId]);
 
   async function fetchProfile() {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) {
+    if (!userId) {
       setLoading(false);
       return;
     }
@@ -257,7 +259,7 @@ export default function EditProfileScreen() {
     const { data, error } = await supabase
       .from('builder_profiles')
       .select('id, user_id, business_name, trade_category, suburb, postcode, bio, phone, email, website, profile_photo_url, cover_photo_url, projects, specialties, credentials, credentials_verified, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km')
-      .eq('user_id', userData.user.id)
+      .eq('user_id', userId)
       .maybeSingle();
 
     if (!error && data) {
@@ -567,9 +569,6 @@ export default function EditProfileScreen() {
     setSaving(true);
 
     try {
-      // Get user ID for storage paths
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.user?.id;
       if (!userId) {
         Alert.alert('Error', 'You must be signed in.');
         setSaving(false);

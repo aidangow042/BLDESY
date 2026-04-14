@@ -25,6 +25,7 @@ import * as Haptics from 'expo-haptics';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import { TRADE_ICONS, getTradeIcon, getCarouselImages } from '@/lib/trade-utils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -295,6 +296,7 @@ export default function SavedScreen() {
   const colors = Colors[isDark ? 'dark' : 'light'];
   const teal = colors.teal;
   const router = useRouter();
+  const { userId } = useUser();
 
   const [builders, setBuilders] = useState<SavedBuilder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -305,15 +307,14 @@ export default function SavedScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchSavedBuilders();
-    }, []),
+    }, [userId]),
   );
 
   async function fetchSavedBuilders(isRefresh = false) {
     if (!isRefresh) setLoading(true);
     setError(null);
 
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) {
+    if (!userId) {
       setLoggedIn(false);
       setBuilders([]);
       setLoading(false);
@@ -325,7 +326,7 @@ export default function SavedScreen() {
     const { data, error: fetchError } = await supabase
       .from('saved_builders')
       .select('builder_id, created_at, builder_profiles(business_name, trade_category, suburb, postcode, bio, profile_photo_url, cover_photo_url, projects, specialties, abn, license_key)')
-      .eq('user_id', userData.user.id)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
     if (fetchError) {
@@ -388,13 +389,12 @@ export default function SavedScreen() {
 
   async function unsaveBuilder(builderId: string) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) return;
+    if (!userId) return;
     setBuilders((prev) => prev.filter((b) => b.builder_id !== builderId));
     await supabase
       .from('saved_builders')
       .delete()
-      .eq('user_id', userData.user.id)
+      .eq('user_id', userId)
       .eq('builder_id', builderId);
   }
 

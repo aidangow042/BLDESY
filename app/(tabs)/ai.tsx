@@ -25,6 +25,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getSearchHistory, addSearchEntry, type SearchEntry } from '@/lib/search-history';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 import auLocations from '@/lib/au-locations.json';
 
 /* ───────────────────────── Constants ───────────────────────── */
@@ -326,6 +327,7 @@ export default function AIAssistScreen() {
   const isDark = colorScheme === 'dark';
   const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
+  const { userId } = useUser();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -385,8 +387,7 @@ export default function AIAssistScreen() {
 
     try {
       // Require sign-in — Edge Function verifies the JWT
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) {
+      if (!userId) {
         Alert.alert('Sign in required', 'Please sign in to use AI Assist.', [
           { text: 'OK' },
         ]);
@@ -454,7 +455,7 @@ export default function AIAssistScreen() {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages]);
+  }, [input, loading, messages, userId]);
 
   /* ── Time label ── */
   function getTimeLabel(ts: number) {

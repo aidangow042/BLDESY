@@ -20,6 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
 
 export default function SettingsScreen() {
   const colorScheme = useColorScheme();
@@ -27,6 +28,7 @@ export default function SettingsScreen() {
   const colors = Colors[isDark ? 'dark' : 'light'];
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { userId, user: authUser } = useUser();
 
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [fullName, setFullName] = useState<string | null>(null);
@@ -36,19 +38,17 @@ export default function SettingsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (!userId) return;
       (async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          setUserEmail(user.email ?? null);
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('name')
-            .eq('id', user.id)
-            .single();
-          setFullName(profile?.name ?? null);
-        }
+        setUserEmail(authUser?.email ?? null);
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('id', userId)
+          .single();
+        setFullName(profile?.name ?? null);
       })();
-    }, []),
+    }, [userId, authUser]),
   );
 
   const [emailModalVisible, setEmailModalVisible] = useState(false);
