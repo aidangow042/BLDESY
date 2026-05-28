@@ -1,8 +1,16 @@
 /**
- * Subscription plan selection for builders — BLDESY Pro.
- * Matches the website's /portal/subscribe page.
+ * Tier-aware subscription screen. Mirrors the website's /pricing page
+ * (`~/bldesy-web/app/pricing/pricing-page-client.tsx`), adapted for native
+ * via Stripe PaymentSheet — SetupIntent + server-side subscribe rather than
+ * Embedded Checkout (which is web-only).
+ *
+ * Route params:
+ *   side: 'tradie' | 'enterprise' (defaults to tradie)
+ *   tier: TradieTierKey | EnterpriseTierKey (optional pre-select)
+ *   interval: 'monthly' | 'annual' (optional pre-select)
+ *   pendingJobId: string — required for single-post enterprise checkout
  */
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,208 +20,491 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useStripe } from '@stripe/stripe-react-native';
 
-import { Colors, Radius, Spacing, Shadows, Type } from '@/constants/theme';
+import { AppShell } from '@/components/layout';
+import { Badge, Button, Card, useToast } from '@/components/ui';
+import { Colors, FontFamily, Radius, Shadows, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-context';
+import { api, ApiError } from '@/lib/api';
+import { invalidateSubscriptionCache } from '@/lib/subscription';
+import {
+  TRADIE_TIERS,
+  ENTERPRISE_TIERS,
+  annualSavings,
+  annualSavingsPercent,
+  type BillingInterval,
+  type EnterpriseTierKey,
+  type TradieTierKey,
+} from '@/lib/pricing-tiers-client';
 
-const FEATURES = [
-  'Public profile with projects, team & reviews',
-  'Appear in search results & interactive map',
-  'Unlimited job applications',
-  'Verified badge (ABN, licence & insurance)',
-  'Full analytics dashboard & performance insights',
-  'AI-powered job matching & assistant',
-  'Portfolio showcase with before/after photos',
-  'Customer enquiries via Request a Quote',
-];
+type Side = 'tradie' | 'enterprise';
+type TierKey = TradieTierKey | EnterpriseTierKey;
 
-const PLANS = [
-  {
-    key: 'monthly',
-    name: 'BLDESY Pro',
-    price: '$49',
-    period: '/month',
-    description: 'Full access, billed monthly',
-    savings: null,
-    popular: false,
-  },
-  {
-    key: 'annual',
-    name: 'BLDESY Pro',
-    price: '$468',
-    period: '/year',
-    description: 'Full access, billed annually',
-    savings: 'Save $120/year',
-    popular: true,
-  },
-];
+interface CheckoutInitResponse {
+  setupIntentClientSecret?: string;
+  paymentIntentClientSecret?: string;
+  customerId: string;
+  ephemeralKeySecret: string;
+  mode: 'setup' | 'payment';
+}
+
+interface SubscribeResponse {
+  subscriptionId: string;
+  status: string;
+}
 
 export default function SubscribeScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const colors = Colors[isDark ? 'dark' : 'light'];
-  const insets = useSafeAreaInsets();
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
   const router = useRouter();
+  const toast = useToast();
+  const { userId } = useUser();
+  const params = useLocalSearchParams<{
+    side?: string;
+    tier?: string;
+    interval?: string;
+    pendingJobId?: string;
+  }>();
+  const stripe = useStripe();
 
-  const teal = colors.teal;
-  const tealBg = colors.tealBg;
+  const initialSide: Side = params.side === 'enterprise' ? 'enterprise' : 'tradie';
+  const initialInterval: BillingInterval = params.interval === 'annual' ? 'annual' : 'monthly';
 
-  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [side, setSide] = useState<Side>(initialSide);
+  const [interval, setInterval] = useState<BillingInterval>(initialInterval);
+  const [selected, setSelected] = useState<TierKey>(() => {
+    if (params.tier) return params.tier as TierKey;
+    return initialSide === 'tradie' ? 'trade' : 'builder';
+  });
+  const [processing, setProcessing] = useState(false);
 
-  async function handleSubscribe(plan: string) {
-    setLoadingPlan(plan);
+  const tiers = useMemo(() => (side === 'tradie' ? TRADIE_TIERS : ENTERPRISE_TIERS), [side]);
+
+  // Reset selection when switching sides.
+  useEffect(() => {
+    if (!tiers.find((t) => t.key === selected)) {
+      setSelected(side === 'tradie' ? 'trade' : 'builder');
+    }
+  }, [side, tiers, selected]);
+
+  async function handleSubscribe() {
+    if (!userId) {
+      toast.show('Sign in required', { variant: 'warning' });
+      return;
+    }
+    if (!stripe) {
+      toast.show('Stripe failed to load. Try again.', { variant: 'error' });
+      return;
+    }
+
+    const isSinglePost = side === 'enterprise' && selected === 'single_post';
+    if (isSinglePost && !params.pendingJobId) {
+      Alert.alert(
+        'Tell us about the job first',
+        'Single-post purchases start from the Post a Job flow.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Post a job', onPress: () => router.push('/post-job' as any) },
+        ],
+      );
+      return;
+    }
+
+    setProcessing(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        Alert.alert('Error', 'Please log in to subscribe.');
-        setLoadingPlan(null);
+      const init = await api.post<CheckoutInitResponse>('/api/stripe/tier-checkout', {
+        side,
+        tier: selected,
+        interval,
+        mobile: true,
+        ...(params.pendingJobId ? { pendingJobId: params.pendingJobId } : {}),
+      });
+
+      const initRes = await stripe.initPaymentSheet({
+        merchantDisplayName: 'BLDESY',
+        customerId: init.customerId,
+        customerEphemeralKeySecret: init.ephemeralKeySecret,
+        ...(init.mode === 'payment'
+          ? { paymentIntentClientSecret: init.paymentIntentClientSecret! }
+          : { setupIntentClientSecret: init.setupIntentClientSecret! }),
+        allowsDelayedPaymentMethods: false,
+        returnURL: 'bldesy://stripe-redirect',
+      });
+      if (initRes.error) {
+        toast.show(initRes.error.message, { variant: 'error' });
+        setProcessing(false);
         return;
       }
 
-      // Call Stripe checkout API
-      const res = await supabase.functions.invoke('stripe-checkout', {
-        body: { plan },
+      const presentRes = await stripe.presentPaymentSheet();
+      if (presentRes.error) {
+        if (presentRes.error.code !== 'Canceled') {
+          toast.show(presentRes.error.message, { variant: 'error' });
+        }
+        setProcessing(false);
+        return;
+      }
+
+      if (init.mode === 'payment') {
+        invalidateSubscriptionCache(userId);
+        toast.show("Payment received — publishing your job now", { variant: 'success' });
+        router.replace('/enterprise-dashboard' as any);
+        return;
+      }
+
+      // Subscription path — retrieve saved PaymentMethod, hand it to the
+      // server to create the recurring subscription.
+      const retrieved = await stripe.retrieveSetupIntent(init.setupIntentClientSecret!);
+      const paymentMethodId = retrieved.setupIntent?.paymentMethodId;
+      if (!paymentMethodId) {
+        toast.show('Card was not saved. Try again.', { variant: 'error' });
+        setProcessing(false);
+        return;
+      }
+
+      const sub = await api.post<SubscribeResponse>('/api/stripe/mobile-subscribe', {
+        side,
+        tier: selected,
+        interval,
+        paymentMethodId,
       });
 
-      if (res.error) {
-        Alert.alert('Error', 'Subscription setup is not yet configured. Contact support.');
-      } else if (res.data?.url) {
-        // Open Stripe checkout in browser
-        const { Linking } = require('react-native');
-        Linking.openURL(res.data.url);
-      } else {
-        Alert.alert('Info', 'Subscription management will be available soon. Your profile is active while in beta.');
-      }
-    } catch {
-      Alert.alert('Error', 'Network error. Please try again.');
+      invalidateSubscriptionCache(userId);
+
+      toast.show(
+        sub.status === 'active' || sub.status === 'trialing'
+          ? "You're subscribed!"
+          : 'Subscription queued — live shortly',
+        { variant: 'success' },
+      );
+      router.replace(
+        side === 'tradie' ? ('/(tabs)/portal' as any) : ('/enterprise-dashboard' as any),
+      );
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : 'Something went wrong. Try again.';
+      toast.show(msg, { variant: 'error' });
+    } finally {
+      setProcessing(false);
     }
-    setLoadingPlan(null);
   }
 
+  const selectedTier = tiers.find((t) => t.key === selected);
+
   return (
-    <View style={[styles.container, { backgroundColor: colors.canvas }]}>
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}>
-        {/* Header */}
-        <LinearGradient
-          colors={isDark ? ['#134E4A', '#0D3B3B'] : ['#0D7C66', '#0A6B58']}
-          style={[styles.header, { paddingTop: insets.top + Spacing.lg }]}
-        >
-          <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={12}>
-            <MaterialIcons name="arrow-back" size={24} color="#fff" />
-          </Pressable>
-          <Text style={styles.headerTitle}>BLDESY Pro</Text>
-          <Text style={styles.headerSubtitle}>
-            Get found by local customers and grow your trade business
+    <AppShell title="Pick your plan" showBack>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.intro}>
+          <Text style={[styles.subhead, { color: c.textSecondary }]}>
+            Flat subscription. No commission. No pay-per-lead.
           </Text>
-        </LinearGradient>
+        </View>
 
-        {/* Plans */}
-        <View style={styles.plans}>
-          {PLANS.map((plan) => (
-            <View
-              key={plan.key}
-              style={[
-                styles.planCard,
-                {
-                  backgroundColor: isDark ? colors.surface : '#fff',
-                  borderColor: plan.popular ? teal : colors.border,
-                  borderWidth: plan.popular ? 2 : 1,
-                },
-                Shadows.md,
-              ]}
-            >
-              {plan.popular && (
-                <View style={[styles.popularBadge, { backgroundColor: teal }]}>
-                  <Text style={styles.popularText}>MOST POPULAR</Text>
-                </View>
-              )}
-
-              <Text style={[styles.planName, { color: colors.text }]}>{plan.name}</Text>
-              <View style={styles.priceRow}>
-                <Text style={[styles.price, { color: colors.text }]}>{plan.price}</Text>
-                <Text style={[styles.period, { color: colors.textSecondary }]}>{plan.period}</Text>
-              </View>
-              <Text style={[styles.planDesc, { color: colors.textSecondary }]}>{plan.description}</Text>
-
-              {plan.savings && (
-                <View style={[styles.savingsBadge, { backgroundColor: colors.successLight }]}>
-                  <Ionicons name="pricetag" size={14} color={colors.success} />
-                  <Text style={[styles.savingsText, { color: colors.success }]}>{plan.savings}</Text>
-                </View>
-              )}
-
+        {/* Side toggle */}
+        <View style={[styles.toggle, { backgroundColor: c.canvas }]}>
+          {(['tradie', 'enterprise'] as Side[]).map((s) => {
+            const active = side === s;
+            return (
               <Pressable
-                style={[styles.subscribeBtn, { backgroundColor: teal, opacity: loadingPlan === plan.key ? 0.7 : 1 }]}
-                onPress={() => handleSubscribe(plan.key)}
-                disabled={!!loadingPlan}
+                key={s}
+                onPress={() => setSide(s)}
+                style={[styles.togglePill, active && { backgroundColor: c.surface, ...Shadows.sm }]}
               >
-                {loadingPlan === plan.key ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.subscribeBtnText}>Subscribe</Text>
-                )}
+                <Text
+                  style={[
+                    styles.togglePillText,
+                    { color: active ? c.primary : c.textSecondary },
+                  ]}
+                >
+                  {s === 'tradie' ? 'For tradies' : 'For builders'}
+                </Text>
               </Pressable>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
-        {/* Features */}
-        <View style={styles.featuresSection}>
-          <Text style={[styles.featuresTitle, { color: colors.text }]}>Everything included</Text>
-          {FEATURES.map((feature) => (
-            <View key={feature} style={styles.featureRow}>
-              <Ionicons name="checkmark-circle" size={20} color={teal} />
-              <Text style={[styles.featureText, { color: colors.text }]}>{feature}</Text>
-            </View>
-          ))}
+        {/* Billing interval toggle */}
+        <View style={styles.intervalRow}>
+          {(['monthly', 'annual'] as BillingInterval[]).map((iv) => {
+            const active = interval === iv;
+            return (
+              <Pressable
+                key={iv}
+                onPress={() => setInterval(iv)}
+                style={[
+                  styles.intervalChip,
+                  {
+                    backgroundColor: active ? c.primaryBg : c.surface,
+                    borderColor: active ? c.primary : c.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.intervalChipText,
+                    { color: active ? c.primary : c.textSecondary },
+                  ]}
+                >
+                  {iv === 'monthly' ? 'Monthly' : 'Annual · save up to 39%'}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
-        {/* Trust note */}
-        <View style={[styles.trustCard, { backgroundColor: tealBg }]}>
-          <Ionicons name="shield-checkmark" size={24} color={teal} />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.trustTitle, { color: colors.text }]}>Cancel anytime</Text>
-            <Text style={[styles.trustDesc, { color: colors.textSecondary }]}>
-              No lock-in contracts. Cancel your subscription at any time from the billing page.
-            </Text>
-          </View>
+        {/* Tier cards */}
+        <View style={styles.tierList}>
+          {tiers.map((tier) => {
+            const isSelected = selected === tier.key;
+            const perPost = (tier as { pricePerPost?: number }).pricePerPost;
+            const monthlyPrice = (tier as { monthly?: number }).monthly;
+            const annualPrice = (tier as { annual?: number }).annual;
+            const tierPrice = perPost ?? (interval === 'monthly' ? monthlyPrice : annualPrice);
+            const priceSuffix = perPost ? '/job' : interval === 'monthly' ? '/mo' : '/yr';
+            const showSavings =
+              !perPost && interval === 'annual' && monthlyPrice && annualPrice;
+
+            return (
+              <Pressable key={tier.key} onPress={() => setSelected(tier.key as TierKey)}>
+                <Card
+                  padding={Spacing.lg}
+                  style={[
+                    styles.tierCard,
+                    isSelected && { borderColor: c.primary, borderWidth: 2 },
+                  ]}
+                >
+                  <View style={styles.tierHeadRow}>
+                    <View style={{ flex: 1, gap: 4 }}>
+                      <View style={styles.tierTitleRow}>
+                        <Text style={[styles.tierName, { color: c.textPrimary }]}>{tier.name}</Text>
+                        {tier.badge ? (
+                          <Badge variant="primary">
+                            {tier.badge === 'most_popular' ? 'Most popular' : 'Best value'}
+                          </Badge>
+                        ) : null}
+                      </View>
+                      <Text style={[styles.tagline, { color: c.textSecondary }]}>{tier.tagline}</Text>
+                    </View>
+                    <View style={styles.priceCol}>
+                      <Text style={[styles.price, { color: c.textPrimary }]}>${tierPrice}</Text>
+                      <Text style={[styles.priceSuffix, { color: c.textSecondary }]}>{priceSuffix}</Text>
+                    </View>
+                  </View>
+
+                  {showSavings && monthlyPrice && annualPrice ? (
+                    <Text style={[styles.savings, { color: c.primary }]}>
+                      Save ${annualSavings(monthlyPrice, annualPrice)} ({annualSavingsPercent(monthlyPrice, annualPrice)}%) vs monthly
+                    </Text>
+                  ) : null}
+
+                  <Text style={[styles.bestFor, { color: c.textSecondary }]}>{tier.bestFor}</Text>
+
+                  <View style={styles.featureList}>
+                    {tier.features
+                      .slice(0, isSelected ? tier.features.length : 4)
+                      .map((f) => (
+                        <View key={f} style={styles.featureRow}>
+                          <Text style={[styles.featureCheck, { color: c.primary }]}>✓</Text>
+                          <Text style={[styles.featureText, { color: c.textPrimary }]}>{f}</Text>
+                        </View>
+                      ))}
+                  </View>
+                  {!isSelected && tier.features.length > 4 ? (
+                    <Text style={[styles.moreLink, { color: c.primary }]}>
+                      +{tier.features.length - 4} more features →
+                    </Text>
+                  ) : null}
+
+                  {tier.competitorNote ? (
+                    <View style={[styles.compareBox, { backgroundColor: c.canvas, borderColor: c.border }]}>
+                      <Text style={[styles.compareLabel, { color: c.textSecondary }]}>vs the alternatives</Text>
+                      <Text style={[styles.compareText, { color: c.textPrimary }]}>{tier.competitorNote}</Text>
+                    </View>
+                  ) : null}
+                </Card>
+              </Pressable>
+            );
+          })}
         </View>
+
+        {selectedTier ? (
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
+            onPress={handleSubscribe}
+            disabled={processing}
+            leadingIcon={processing ? <ActivityIndicator color="#fff" size="small" /> : null}
+          >
+            {processing
+              ? 'Processing…'
+              : selectedTier && 'pricePerPost' in selectedTier
+                ? `Pay $${selectedTier.pricePerPost}`
+                : `Subscribe — ${selectedTier.name}`}
+          </Button>
+        ) : null}
+
+        <Text style={[styles.fineprint, { color: c.textSecondary }]}>
+          Cancel anytime. Auto-renews until cancelled. By subscribing you agree to the BLDESY Terms.
+        </Text>
       </ScrollView>
-    </View>
+    </AppShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scroll: { paddingBottom: 40 },
-  header: { paddingHorizontal: Spacing.xl, paddingBottom: Spacing['3xl'], gap: Spacing.sm },
-  backBtn: { marginBottom: Spacing.sm },
-  headerTitle: { color: '#fff', ...Type.display, textAlign: 'center' },
-  headerSubtitle: { color: 'rgba(255,255,255,0.7)', ...Type.body, textAlign: 'center' },
-  plans: { gap: Spacing.lg, paddingHorizontal: Spacing.xl, marginTop: -Spacing.xl },
-  planCard: { borderRadius: Radius.xl, padding: Spacing.xl, gap: Spacing.sm, overflow: 'hidden' },
-  popularBadge: { position: 'absolute', top: 0, right: 0, paddingHorizontal: Spacing.md, paddingVertical: 4, borderBottomLeftRadius: Radius.md },
-  popularText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
-  planName: { ...Type.h3 },
-  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
-  price: { fontSize: 36, fontWeight: '800', letterSpacing: -1 },
-  period: { ...Type.body },
-  planDesc: { ...Type.caption },
-  savingsBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Radius.sm },
-  savingsText: { ...Type.captionSemiBold },
-  subscribeBtn: { height: 48, borderRadius: Radius.lg, alignItems: 'center', justifyContent: 'center', marginTop: Spacing.sm },
-  subscribeBtnText: { color: '#fff', ...Type.btnPrimary },
-  featuresSection: { paddingHorizontal: Spacing.xl, marginTop: Spacing['2xl'], gap: Spacing.md },
-  featuresTitle: { ...Type.h2, marginBottom: Spacing.xs },
-  featureRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  featureText: { ...Type.body, flex: 1 },
-  trustCard: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginHorizontal: Spacing.xl, marginTop: Spacing['2xl'], padding: Spacing.lg, borderRadius: Radius.lg },
-  trustTitle: { ...Type.bodySemiBold },
-  trustDesc: { ...Type.caption },
+  scroll: {
+    padding: Spacing.lg,
+    paddingBottom: Spacing['5xl'],
+    gap: Spacing.lg,
+  },
+  intro: {
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+  },
+  subhead: {
+    fontSize: 14,
+    lineHeight: 22,
+    fontFamily: FontFamily.body,
+    textAlign: 'center',
+  },
+  toggle: {
+    flexDirection: 'row',
+    padding: 4,
+    borderRadius: Radius.full,
+    gap: 4,
+  },
+  togglePill: {
+    flex: 1,
+    height: 40,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  togglePillText: {
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  intervalRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  intervalChip: {
+    flex: 1,
+    height: 40,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  intervalChipText: {
+    fontSize: 12,
+    fontFamily: FontFamily.bodySemiBold,
+    fontWeight: '600',
+  },
+  tierList: {
+    gap: Spacing.md,
+  },
+  tierCard: {
+    gap: Spacing.md,
+  },
+  tierHeadRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.md,
+  },
+  tierTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  tierName: {
+    fontSize: 18,
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '700',
+  },
+  tagline: {
+    fontSize: 12,
+    fontFamily: FontFamily.body,
+  },
+  priceCol: {
+    alignItems: 'flex-end',
+  },
+  price: {
+    fontSize: 26,
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  priceSuffix: {
+    fontSize: 11,
+    fontFamily: FontFamily.body,
+    marginTop: -2,
+  },
+  savings: {
+    fontSize: 12,
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '700',
+  },
+  bestFor: {
+    fontSize: 12,
+    fontFamily: FontFamily.body,
+    lineHeight: 18,
+  },
+  featureList: {
+    gap: 6,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+  },
+  featureCheck: {
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '800',
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  featureText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: FontFamily.body,
+  },
+  moreLink: {
+    fontSize: 12,
+    fontFamily: FontFamily.bodySemiBold,
+    fontWeight: '600',
+  },
+  compareBox: {
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    gap: 4,
+  },
+  compareLabel: {
+    fontSize: 10,
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  compareText: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: FontFamily.body,
+  },
+  fineprint: {
+    fontSize: 11,
+    fontFamily: FontFamily.body,
+    textAlign: 'center',
+    lineHeight: 16,
+    paddingHorizontal: Spacing.lg,
+  },
 });

@@ -21,6 +21,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import ReAnimated, { FadeInUp } from 'react-native-reanimated';
 
+import { AppShell } from '@/components/layout';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
@@ -392,7 +393,7 @@ export default function BuilderJobsFeed() {
   const teal = colors.teal;
   const router = useRouter();
   const params = useLocalSearchParams<{ type?: string }>();
-  const jobType = params.type || 'all'; // 'commercial', 'residential', or 'all'
+  const jobType = params.type || 'all'; // 'commercial', 'residential', 'contracts', or 'all'
   const { userId } = useUser();
 
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -439,11 +440,16 @@ export default function BuilderJobsFeed() {
         .eq('status', 'open')
         .order('created_at', { ascending: false });
 
-      // Filter by job type (commercial = enterprise, residential = customer)
+      // Filter by job type.
+      //   commercial   → posted by an enterprise (project work)
+      //   residential  → posted by a customer (home jobs)
+      //   contracts    → posting_kind = 'contract' (ongoing / multi-week)
       if (jobType === 'commercial') {
         query = query.eq('poster_type', 'enterprise');
       } else if (jobType === 'residential') {
         query = query.eq('poster_type', 'customer');
+      } else if (jobType === 'contracts') {
+        query = query.eq('posting_kind', 'contract');
       }
 
       if (filterUrgency) {
@@ -559,40 +565,25 @@ export default function BuilderJobsFeed() {
 
   const keyExtractor = useCallback((item: Job) => item.id, []);
 
+  const screenTitle =
+    jobType === 'commercial'
+      ? 'Project Jobs'
+      : jobType === 'residential'
+        ? 'Home Jobs'
+        : jobType === 'contracts'
+          ? 'Contracts'
+          : 'Open Jobs';
+
   return (
-    <View style={[styles.screen, { backgroundColor: colors.canvas }]}>
-      {/* ─── Header ─── */}
-      <LinearGradient
-        colors={isDark ? ['#134E4A', '#0D3B3B'] : ['#0D7C66', '#0A6B58']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <SafeAreaView edges={['top']}>
-          <View style={styles.headerBar}>
-            <View style={styles.headerRow}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.backBtn,
-                  pressed && { opacity: 0.7 },
-                ]}
-                onPress={() => router.back()}
-                accessibilityRole="button"
-                accessibilityLabel="Go back"
-              >
-                <MaterialIcons name="arrow-back" size={20} color="#fff" />
-              </Pressable>
-              <View style={styles.headerCenter}>
-                <Text style={styles.headerTitle}>
-                  {jobType === 'commercial' ? 'Project Jobs' : jobType === 'residential' ? 'Home Jobs' : 'Open Jobs'}
-                </Text>
-                <Text style={styles.headerSubtitle}>
-                  {loading ? '...' : `${jobs.length} job${jobs.length !== 1 ? 's' : ''} available`}
-                  {builderTrade ? ` · ${capitalise(builderTrade)}` : ''}
-                </Text>
-              </View>
-              <View style={{ width: 36 }} />
-            </View>
-          </View>
+    <AppShell title={screenTitle} showBack>
+      <View style={{ flex: 1, backgroundColor: colors.canvas }}>
+        {/* Meta strip — job count */}
+        <View style={[styles.metaStrip, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+          <Text style={[styles.metaText, { color: colors.textSecondary }]}>
+            {loading ? '...' : `${jobs.length} job${jobs.length !== 1 ? 's' : ''} available`}
+            {builderTrade ? ` · ${capitalise(builderTrade)}` : ''}
+          </Text>
+        </View>
 
         {/* ─── Filter/sort bar ─── */}
         <View style={[styles.sortBar, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
@@ -631,8 +622,6 @@ export default function BuilderJobsFeed() {
             })}
           </ScrollView>
         </View>
-        </SafeAreaView>
-      </LinearGradient>
 
       {/* ─── Content ─── */}
       <ReAnimated.View entering={FadeInUp.duration(300).delay(100)} style={{ flex: 1 }}>
@@ -720,7 +709,8 @@ export default function BuilderJobsFeed() {
         />
       )}
       </ReAnimated.View>
-    </View>
+      </View>
+    </AppShell>
   );
 }
 
@@ -732,6 +722,15 @@ const styles = StyleSheet.create({
   },
 
   // ─── Header ────────────────────────────────────
+  metaStrip: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  metaText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
   headerBar: {
     paddingBottom: 12,
   },

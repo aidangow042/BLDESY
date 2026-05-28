@@ -25,7 +25,7 @@ import { Colors, Radius, Spacing, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
-import { SideDrawer } from '@/components/side-drawer';
+import { HamburgerMenu } from '@/components/layout';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -288,7 +288,7 @@ export default function EnterpriseDashboardScreen() {
         </View>
       </ScrollView>
 
-      <SideDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} enterpriseMode />
+      <HamburgerMenu open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </View>
   );
 }

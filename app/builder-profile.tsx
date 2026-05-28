@@ -28,6 +28,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
 import { ThemedText } from '@/components/themed-text';
+import { AppShell } from '@/components/layout';
+import { useToast } from '@/components/ui';
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
@@ -560,6 +562,7 @@ export default function BuilderProfileScreen() {
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const toast = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { userId } = useUser();
 
@@ -697,7 +700,7 @@ export default function BuilderProfileScreen() {
     setSavingToggle(true);
 
     if (!userId) {
-      Alert.alert('Sign in required', 'You need to be logged in to save builders.');
+      toast.show('Sign in to save tradies', { variant: 'warning' });
       setSavingToggle(false);
       return;
     }
@@ -715,7 +718,7 @@ export default function BuilderProfileScreen() {
         builder_id: id,
       });
       if (insertError) {
-        Alert.alert('Error', insertError.message);
+        toast.show("Couldn't save tradie", { variant: 'error' });
       } else {
         setIsSaved(true);
       }
@@ -726,12 +729,12 @@ export default function BuilderProfileScreen() {
 
   async function fetchContactInfo(): Promise<{ phone: string | null; email: string | null } | null> {
     if (!userId) {
-      Alert.alert('Sign in required', 'Please sign in to view contact details.');
+      toast.show('Sign in to view contact details', { variant: 'warning' });
       return null;
     }
     const { data, error } = await supabase.rpc('get_builder_contact', { p_builder_id: id });
     if (error || !data) {
-      Alert.alert('Error', 'Could not load contact info.');
+      toast.show("Couldn't load contact info", { variant: 'error' });
       return null;
     }
     return data as { phone: string | null; email: string | null };
@@ -741,9 +744,9 @@ export default function BuilderProfileScreen() {
     const contact = await fetchContactInfo();
     if (contact?.phone) {
       await Clipboard.setStringAsync(contact.phone);
-      Alert.alert('Copied', `${contact.phone} copied to clipboard`);
+      toast.show('Phone copied to clipboard', { variant: 'success' });
     } else if (contact) {
-      Alert.alert('No phone', 'This builder has not listed a phone number.');
+      toast.show('No phone number listed', { variant: 'warning' });
     }
   }
 
@@ -751,9 +754,9 @@ export default function BuilderProfileScreen() {
     const contact = await fetchContactInfo();
     if (contact?.email) {
       await Clipboard.setStringAsync(contact.email);
-      Alert.alert('Copied', `${contact.email} copied to clipboard`);
+      toast.show('Email copied to clipboard', { variant: 'success' });
     } else if (contact) {
-      Alert.alert('No email', 'This builder has not listed an email address.');
+      toast.show('No email address listed', { variant: 'warning' });
     }
   }
 
@@ -857,8 +860,8 @@ export default function BuilderProfileScreen() {
   }));
 
   return (
-    <View style={[styles.safeArea, { backgroundColor: bgCanvas }]}>
-      <StatusBar barStyle="light-content" />
+    <AppShell title={builder.business_name} showBack background={bgCanvas}>
+      <StatusBar barStyle="dark-content" />
 
       {/* Lightbox */}
       <GalleryLightbox
@@ -867,37 +870,6 @@ export default function BuilderProfileScreen() {
         initialIndex={lightboxIndex}
         onClose={() => setLightboxVisible(false)}
       />
-
-      {/* ─── TOP TEAL BAR ─── */}
-      <LinearGradient
-        colors={colorScheme === 'dark' ? ['#134E4A', '#0D3B3B'] : ['#0D7C66', '#0A6B58']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.topBar, { paddingTop: insets.top + 4 }]}
-      >
-        <Pressable
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          style={({ pressed }) => [styles.topBarBackBtn, pressed && { opacity: 0.7 }]}
-        >
-          <Ionicons name="arrow-back" size={20} color="#fff" />
-        </Pressable>
-        <Text style={styles.topBarTitle} numberOfLines={1}>{builder.business_name}</Text>
-        <Pressable
-          onPress={toggleSave}
-          disabled={savingToggle}
-          accessibilityRole="button"
-          accessibilityLabel={isSaved ? 'Remove from saved' : 'Save builder'}
-          style={({ pressed }) => [styles.topBarBackBtn, pressed && { opacity: 0.7 }]}
-        >
-          <MaterialIcons
-            name={isSaved ? 'bookmark' : 'bookmark-border'}
-            size={20}
-            color={isSaved ? '#fff' : 'rgba(255,255,255,0.7)'}
-          />
-        </Pressable>
-      </LinearGradient>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -1011,7 +983,7 @@ export default function BuilderProfileScreen() {
         {/* ─── VERIFIED CREDENTIALS (new system) ─── */}
         {builder.credentials_verified && (
           <View style={[styles.sectionContainer, { marginTop: Spacing.sm }]}>
-            <CredentialBadges credentials={builder.credentials_verified} variant="pills" />
+            <CredentialBadges credentials={builder.credentials_verified} variant="pills" showInsuranceDetail />
             <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 6, lineHeight: 14 }}>
               Credentials displayed as provided by the builder. BLDESY! verifies against government registers where available but does not guarantee accuracy. Verify independently before hiring.
             </Text>
@@ -1370,7 +1342,7 @@ export default function BuilderProfileScreen() {
 
             {/* Write a review button */}
             <Pressable
-              onPress={() => Alert.alert('Coming soon', 'Review submission will be available soon.')}
+              onPress={() => toast.show('Review submission coming soon')}
               accessibilityRole="button"
               accessibilityLabel={'Write a review for ' + builder.business_name}
               style={({ pressed }) => [
@@ -1589,7 +1561,7 @@ export default function BuilderProfileScreen() {
           </Pressable>
         </View>
       </View>
-    </View>
+    </AppShell>
   );
 }
 

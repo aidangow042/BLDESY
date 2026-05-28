@@ -24,6 +24,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import ReAnimated, { FadeInUp } from 'react-native-reanimated';
 
+import { AppShell } from '@/components/layout';
+import { useToast } from '@/components/ui';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { geocode, distanceKm } from '@/lib/geo';
@@ -505,6 +507,7 @@ export default function ResultsScreen() {
   const colors = Colors[isDark ? 'dark' : 'light'];
   const teal = colors.teal;
   const router = useRouter();
+  const toast = useToast();
   const { userId } = useUser();
   const params = useLocalSearchParams<{
     suburb?: string;
@@ -723,7 +726,7 @@ export default function ResultsScreen() {
   async function toggleSave(builderId: string) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (!userId) {
-      Alert.alert('Sign in required', 'You need to be logged in to save builders.');
+      toast.show('Sign in to save tradies', { variant: 'warning' });
       return;
     }
 
@@ -985,33 +988,18 @@ export default function ResultsScreen() {
   // ─── Render ───────────────────────────────────────────────────────
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.canvas }]}>
-      <SafeAreaView edges={['top']} style={{ backgroundColor: colors.background }}>
-        {/* ─── Header ─── */}
-        <View style={[styles.headerBar, { backgroundColor: colors.background }]}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.backBtn,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-              pressed && { opacity: 0.7 },
-            ]}
-            onPress={() => router.back()}
-          >
-            <MaterialIcons name="arrow-back" size={20} color={teal} />
-          </Pressable>
-          <View style={styles.headerCenter}>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>{tradeName}</Text>
-            <View style={styles.headerMeta}>
-              <MaterialIcons name="location-on" size={13} color={colors.textSecondary} />
-              <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-                {locationName}
-              </Text>
-              <View style={[styles.headerDot, { backgroundColor: colors.textSecondary }]} />
-              <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-                {loading ? '...' : `${totalFiltered} result${totalFiltered !== 1 ? 's' : ''}`}
-              </Text>
-            </View>
-          </View>
+    <AppShell title={tradeName} showBack>
+      <View style={{ flex: 1, backgroundColor: colors.canvas }}>
+        {/* Meta strip — location + result count */}
+        <View style={[styles.metaStrip, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+          <MaterialIcons name="location-on" size={13} color={colors.textSecondary} />
+          <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
+            {locationName}
+          </Text>
+          <View style={[styles.headerDot, { backgroundColor: colors.textSecondary }]} />
+          <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
+            {loading ? '...' : `${totalFiltered} result${totalFiltered !== 1 ? 's' : ''}`}
+          </Text>
         </View>
 
         {/* ─── Sort bar ─── */}
@@ -1068,7 +1056,6 @@ export default function ResultsScreen() {
             )}
           </Pressable>
         </View>
-      </SafeAreaView>
 
       {/* ─── Content ─── */}
       <ReAnimated.View entering={FadeInUp.duration(300).delay(100)} style={{ flex: 1 }}>
@@ -1161,7 +1148,8 @@ export default function ResultsScreen() {
         filters={filters}
         colors={colors}
       />
-    </View>
+      </View>
+    </AppShell>
   );
 }
 
@@ -1199,6 +1187,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     marginTop: 2,
+  },
+  metaStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerSubtitle: {
     ...Type.caption,

@@ -23,7 +23,7 @@ import { Colors, Radius, Spacing, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
-import { PageHeader } from '@/components/page-header';
+import { AppShell } from '@/components/layout';
 import { friendlyError } from '@/lib/error-messages';
 
 type Tab = 'pending' | 'approved' | 'rejected';
@@ -164,8 +164,7 @@ export default function AdminScreen() {
 
   if (!isAdmin) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.canvas }]}>
-        <PageHeader title="Admin" subtitle="Access restricted" />
+      <AppShell title="Admin" showBack>
         <View style={styles.denied}>
           <MaterialIcons name="lock" size={48} color={colors.textSecondary} />
           <Text style={[Type.h2, { color: colors.text, textAlign: 'center' }]}>Access Denied</Text>
@@ -174,7 +173,7 @@ export default function AdminScreen() {
             <Text style={[Type.btnSecondary, { color: colors.text }]}>Go Back</Text>
           </Pressable>
         </View>
-      </View>
+      </AppShell>
     );
   }
 
@@ -253,8 +252,7 @@ export default function AdminScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.canvas }]}>
-      <PageHeader title="Admin Panel" subtitle={`${applications.length} applications`} />
+    <AppShell title="Admin Panel" showBack>
 
       {/* Type toggle */}
       <View style={[styles.typeToggle, { backgroundColor: isDark ? colors.surface : '#f1f5f9' }]}>
@@ -294,7 +292,7 @@ export default function AdminScreen() {
           )
         }
       />
-    </View>
+    </AppShell>
   );
 }
 

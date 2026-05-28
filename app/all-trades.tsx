@@ -16,6 +16,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
+import { AppShell } from '@/components/layout';
 import { Colors, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -152,22 +153,8 @@ export default function AllTradesScreen() {
   }
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.canvas }]}>
-      {/* ── Header ── */}
-      <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: isDark ? colors.background : '#FFFFFF', borderBottomColor: isDark ? colors.border : '#E5E7EB' }]}>
-        <View style={styles.headerRow}>
-          <Pressable
-            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={22} color={isDark ? colors.text : '#1A1A2E'} />
-          </Pressable>
-          <ThemedText style={[styles.headerTitle, { color: isDark ? colors.text : '#1A1A2E' }]}>
-            All Trades
-          </ThemedText>
-          <View style={{ width: 40 }} />
-        </View>
-
+    <AppShell title="All Trades" showBack>
+      <View style={[styles.searchWrap, { backgroundColor: isDark ? colors.background : '#FFFFFF', borderBottomColor: isDark ? colors.border : '#E5E7EB' }]}>
         {/* ── Search bar ── */}
         <View style={[
           styles.filterBar,
@@ -235,13 +222,13 @@ export default function AllTradesScreen() {
           <View style={styles.emptyState}>
             <MaterialIcons name="search-off" size={48} color={isDark ? colors.icon : '#D1D5DB'} />
             <ThemedText style={[styles.emptyText, { color: isDark ? colors.textSecondary : '#9CA3AF' }]}>
-              No trades match "{filterText}"
+              No trades match &quot;{filterText}&quot;
             </ThemedText>
           </View>
         )}
       </ScrollView>
       </Animated.View>
-    </View>
+    </AppShell>
   );
 }
 
@@ -250,7 +237,14 @@ export default function AllTradesScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
 
-  /* Header */
+  /* Search bar wrapper (replaces former header) */
+  searchWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  /* Header (legacy) */
   header: {
     paddingHorizontal: 16,
     paddingBottom: 12,

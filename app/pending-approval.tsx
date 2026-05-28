@@ -1,63 +1,48 @@
-import { Pressable, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
+import { AppShell } from '@/components/layout';
+import { Button, Card } from '@/components/ui';
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
+import { Colors, FontFamily, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function PendingApprovalScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
   const router = useRouter();
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
+    <AppShell title="Pending approval">
       <View style={styles.container}>
-        <View
+        <Card
+          padding={Spacing['3xl']}
           style={[
             styles.card,
-            {
-              backgroundColor: colors.warningLight,
-              borderColor: colors.warning + '30',
-            },
-            Shadows.sm,
+            { backgroundColor: c.warningBg, borderColor: c.warning + '30' },
           ]}
         >
           <ThemedText style={styles.icon}>&#9203;</ThemedText>
-
-          <ThemedText type="title" style={styles.title}>
-            Application Submitted
+          <ThemedText type="title" style={[styles.title, { color: c.textPrimary }]}>
+            Application submitted
           </ThemedText>
-
-          <ThemedText style={[styles.body, { color: colors.textSecondary }]}>
-            Thanks for signing up as a builder! We're reviewing your application and will approve you shortly.
+          <ThemedText style={[styles.body, { color: c.textSecondary }]}>
+            Thanks for signing up as a builder! We&apos;re reviewing your application and will approve you shortly.
           </ThemedText>
-
-          <ThemedText style={[styles.body, { color: colors.textSecondary }]}>
-            Once approved, you'll get full access to the Builder Portal — browse jobs, apply, and manage your profile.
+          <ThemedText style={[styles.body, { color: c.textSecondary }]}>
+            Once approved, you&apos;ll get full access to the Builder Portal — browse jobs, apply, and manage your profile.
           </ThemedText>
-        </View>
+        </Card>
 
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            { backgroundColor: colors.tint },
-            pressed && { opacity: 0.7 },
-          ]}
-          onPress={() => router.replace('/(tabs)')}
-        >
-          <ThemedText style={styles.buttonText}>Back to Home</ThemedText>
-        </Pressable>
+        <Button variant="primary" size="lg" fullWidth onPress={() => router.replace('/(tabs)' as any)}>
+          Back to home
+        </Button>
       </View>
-    </SafeAreaView>
+    </AppShell>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
   container: {
     flex: 1,
     justifyContent: 'center',
@@ -66,9 +51,6 @@ const styles = StyleSheet.create({
     gap: Spacing['3xl'],
   },
   card: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    padding: Spacing['3xl'],
     alignItems: 'center',
     gap: Spacing.lg,
     width: '100%',
@@ -78,23 +60,13 @@ const styles = StyleSheet.create({
   },
   title: {
     textAlign: 'center',
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '700',
   },
   body: {
     textAlign: 'center',
     fontSize: 15,
     lineHeight: 22,
-  },
-  button: {
-    height: 52,
-    borderRadius: Radius.lg,
-    paddingHorizontal: Spacing['4xl'],
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '700',
+    fontFamily: FontFamily.body,
   },
 });

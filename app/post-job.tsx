@@ -26,12 +26,15 @@ import * as Haptics from 'expo-haptics';
 import ReAnimated, { FadeInUp } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
+import { AppShell } from '@/components/layout';
+import { useToast } from '@/components/ui';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
 import { getSuburbSuggestions, getPostcodeForSuburb } from '@/lib/geo';
 import { uploadJobPhoto, uploadJobDocument } from '@/lib/storage';
+import { isSubscriptionActive, useEnterpriseSubscription } from '@/lib/subscription';
 
 /* ───────────────────────── Constants ───────────────────────── */
 
@@ -213,7 +216,9 @@ export default function PostJobScreen() {
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const toast = useToast();
   const { userId } = useUser();
+  const enterpriseSub = useEnterpriseSubscription();
   const params = useLocalSearchParams<{
     editId?: string;
     editTitle?: string;
@@ -385,7 +390,7 @@ export default function PostJobScreen() {
   async function handlePickPhotos() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please allow photo access to upload images.');
+      toast.show('Photo access denied — enable it in Settings to upload', { variant: 'warning' });
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -413,11 +418,11 @@ export default function PostJobScreen() {
       if (result.canceled || !result.assets) return;
       for (const asset of result.assets) {
         if (asset.size && asset.size > 10 * 1024 * 1024) {
-          Alert.alert('File too large', `${asset.name} exceeds 10MB limit.`);
+          toast.show(`${asset.name} exceeds 10MB limit`, { variant: 'warning' });
           continue;
         }
         if (s.documents.length >= 5) {
-          Alert.alert('Limit reached', 'Maximum 5 documents allowed.');
+          toast.show('Maximum 5 documents allowed', { variant: 'warning' });
           break;
         }
         dispatch({
@@ -452,7 +457,7 @@ export default function PostJobScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please allow location access.');
+        toast.show('Location access denied — enable it in Settings', { variant: 'warning' });
         return;
       }
       const loc = await Location.getCurrentPositionAsync({});
@@ -466,7 +471,7 @@ export default function PostJobScreen() {
         dispatch({ type: 'SET_MANY', payload: { suburb: sub, postcode: pc } });
       }
     } catch {
-      Alert.alert('Error', 'Could not get your location. Please enter it manually.');
+      toast.show("Couldn't get location — enter it manually", { variant: 'error' });
     }
   }
 
@@ -531,6 +536,27 @@ export default function PostJobScreen() {
         return;
       }
 
+      // Enterprise posters need an active subscription to post.
+      if (s.isEnterprise && !isSubscriptionActive(enterpriseSub.status)) {
+        dispatch({ type: 'SET', field: 'submitting', value: false });
+        Alert.alert(
+          'Subscribe to post',
+          'Pick a plan to start posting jobs and reaching verified tradies.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            {
+              text: 'See plans',
+              onPress: () =>
+                router.push({
+                  pathname: '/subscribe',
+                  params: { side: 'enterprise', tier: 'builder', interval: 'monthly' },
+                } as any),
+            },
+          ],
+        );
+        return;
+      }
+
       const tradeValue = (s.tradeType === 'Other' ? s.otherTrade : s.tradeType).toLowerCase();
 
       // Create or update the job
@@ -563,7 +589,7 @@ export default function PostJobScreen() {
           .eq('id', params.editId!)
           .eq('customer_id', userId);
         if (updateErr) {
-          Alert.alert('Error', updateErr.message);
+          toast.show("Couldn't save changes", { variant: 'error' });
           dispatch({ type: 'SET', field: 'submitting', value: false });
           return;
         }
@@ -575,7 +601,7 @@ export default function PostJobScreen() {
           .select('id')
           .single();
         if (insertErr) {
-          Alert.alert('Error', insertErr.message);
+          toast.show("Couldn't post job", { variant: 'error' });
           dispatch({ type: 'SET', field: 'submitting', value: false });
           return;
         }
@@ -583,7 +609,7 @@ export default function PostJobScreen() {
       }
 
       if (!jobId) {
-        Alert.alert('Error', 'Failed to save job. Please try again.');
+        toast.show('Failed to save job — try again', { variant: 'error' });
         dispatch({ type: 'SET', field: 'submitting', value: false });
         return;
       }
@@ -639,7 +665,7 @@ export default function PostJobScreen() {
         Animated.timing(successOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
       ]).start();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Something went wrong.');
+      toast.show(err.message || 'Something went wrong', { variant: 'error' });
       dispatch({ type: 'SET', field: 'submitting', value: false });
     }
   }
@@ -1422,21 +1448,11 @@ export default function PostJobScreen() {
   /* ───────────── Main render ───────────── */
 
   return (
-    <View style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
-      {/* Compact header */}
-      <LinearGradient colors={['#0F4F3E', '#0F6E56']} style={[styles.header, { paddingTop: insets.top }]}>
-        <Pressable onPress={() => (s.step > 1 ? animateToStep(s.step, (s.step - 1) as 1 | 2 | 3) : router.back())} style={styles.headerBack}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
-        </Pressable>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>{isEditMode ? 'Edit Job' : 'Post a Job'}</Text>
-          <Text style={styles.headerSubtitle}>{isEditMode ? 'Update your job details' : 'Get quotes from quality tradies'}</Text>
-        </View>
-        <Text style={styles.headerStepText}>
-          {s.step}/3
-        </Text>
-      </LinearGradient>
-
+    <AppShell
+      title={isEditMode ? 'Edit Job' : `Post a Job  ·  ${s.step}/3`}
+      showBack
+      onBackPress={() => (s.step > 1 ? animateToStep(s.step, (s.step - 1) as 1 | 2 | 3) : router.back())}
+    >
       <ReAnimated.View entering={FadeInUp.duration(300).delay(100)} style={{ flex: 1 }}>
       {/* Trust bar */}
       <View style={[styles.trustBar, { backgroundColor: '#E1F5EE' }]}>
@@ -1515,7 +1531,7 @@ export default function PostJobScreen() {
           </Pressable>
         )}
       </View>
-    </View>
+    </AppShell>
   );
 }
 

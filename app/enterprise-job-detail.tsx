@@ -19,6 +19,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
+import { AppShell } from '@/components/layout';
 import { Colors, Radius, Spacing, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
@@ -118,20 +119,12 @@ export default function EnterpriseJobDetailScreen() {
   const rejected = applicants.filter(a => a.status === 'rejected').length;
 
   return (
-    <View style={[s.container, { backgroundColor: colors.canvas }]}>
-      {/* Header */}
-      <LinearGradient colors={isDark ? ['#1e1b4b', '#312e81'] : ['#4338ca', '#4f46e5']} style={[s.header, { paddingTop: insets.top + 8 }]}>
-        <View style={s.headerRow}>
-          <Pressable onPress={() => router.back()} hitSlop={12} style={s.backBtn}>
-            <Ionicons name="arrow-back" size={20} color="rgba(255,255,255,0.9)" />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={s.headerTitle} numberOfLines={1}>{job.title}</Text>
-            <Text style={s.headerSub}>{job.trade_category} · {job.suburb} · Posted {relTime(job.created_at)}</Text>
-          </View>
-        </View>
-      </LinearGradient>
-
+    <AppShell title={job.title} showBack>
+      <View style={[s.metaStrip, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <Text style={[s.metaText, { color: colors.textSecondary }]}>
+          {job.trade_category} · {job.suburb} · Posted {relTime(job.created_at)}
+        </Text>
+      </View>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Edit / Close */}
         <View style={s.actionRow}>
@@ -276,12 +269,14 @@ export default function EnterpriseJobDetailScreen() {
           </View>
         )}
       </ScrollView>
-    </View>
+    </AppShell>
   );
 }
 
 const s = StyleSheet.create({
   container: { flex: 1 },
+  metaStrip: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth },
+  metaText: { fontSize: 12, fontWeight: '500' },
   header: { paddingHorizontal: Spacing.xl, paddingBottom: Spacing.md },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   backBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },

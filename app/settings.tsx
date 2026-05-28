@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -7,28 +7,41 @@ import {
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { LinearGradient } from 'expo-linear-gradient';
-
-import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
+import { AppShell } from '@/components/layout';
+import { Button, Card, Input, useToast } from '@/components/ui';
+import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
-import { useUser } from '@/lib/auth-context';
+import { useRoles, useUser } from '@/lib/auth-context';
+import { DeleteAccountModal } from '@/components/delete-account-modal';
+
+type SectionRow = {
+  key: string;
+  label: string;
+  subtitle?: string;
+  icon: React.ComponentProps<typeof MaterialIcons>['name'];
+  onPress?: () => void;
+  rightElement?: React.ReactNode;
+  destructive?: boolean;
+};
+
+type SectionConfig = {
+  title: string;
+  rows: SectionRow[];
+};
 
 export default function SettingsScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const colors = Colors[isDark ? 'dark' : 'light'];
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const toast = useToast();
   const { userId, user: authUser } = useUser();
+  const { isBuilder, isEnterprise } = useRoles();
 
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [fullName, setFullName] = useState<string | null>(null);
@@ -54,90 +67,50 @@ export default function SettingsScreen() {
   const [emailModalVisible, setEmailModalVisible] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [emailSaving, setEmailSaving] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
 
-  const handleChangeEmail = () => {
+  function openChangeEmail() {
     setNewEmail(userEmail ?? '');
     setEmailModalVisible(true);
-  };
+  }
 
-  const submitEmailChange = async () => {
+  async function submitEmailChange() {
     if (!newEmail?.trim()) return;
     setEmailSaving(true);
     const { error } = await supabase.auth.updateUser({ email: newEmail.trim() });
     setEmailSaving(false);
     setEmailModalVisible(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      toast.show("Couldn't update email", { variant: 'error' });
     } else {
-      Alert.alert('Check Your Email', 'We\'ve sent a confirmation link to your new email address.');
+      toast.show('Confirmation link sent to your new email', { variant: 'success' });
     }
-  };
+  }
 
-  const handleChangePassword = () => {
+  function handleChangePassword() {
     Alert.alert(
-      'Reset Password',
-      'We\'ll send a password reset link to your email address.',
+      'Reset password',
+      "We'll send a password reset link to your email.",
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Send Link',
+          text: 'Send link',
           onPress: async () => {
             if (!userEmail) return;
             const { error } = await supabase.auth.resetPasswordForEmail(userEmail);
-            if (error) {
-              Alert.alert('Error', error.message);
-            } else {
-              Alert.alert('Email Sent', 'Check your inbox for the password reset link.');
-            }
+            if (error) toast.show("Couldn't send reset link", { variant: 'error' });
+            else toast.show('Check your inbox for the reset link', { variant: 'success' });
           },
         },
       ],
     );
-  };
+  }
 
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      'Delete Account',
-      'This action is permanent and cannot be undone. All your data, saved builders, and job postings will be removed.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete My Account',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Are you absolutely sure?',
-              'Type your email to confirm: ' + (userEmail ?? ''),
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Yes, Delete',
-                  style: 'destructive',
-                  onPress: async () => {
-                    await supabase.auth.signOut();
-                    router.replace('/');
-                  },
-                },
-              ],
-            );
-          },
-        },
-      ],
-    );
-  };
-
-  type SectionConfig = {
-    title: string;
-    rows: {
-      key: string;
-      label: string;
-      subtitle?: string;
-      icon: React.ComponentProps<typeof MaterialIcons>['name'];
-      onPress?: () => void;
-      rightElement?: React.ReactNode;
-      destructive?: boolean;
-    }[];
-  };
+  async function handleAccountDeleted() {
+    setDeleteModalVisible(false);
+    await supabase.auth.signOut();
+    router.replace('/');
+  }
 
   const sections: SectionConfig[] = [
     {
@@ -148,21 +121,63 @@ export default function SettingsScreen() {
           label: fullName || 'My Profile',
           subtitle: 'Name, phone, and avatar',
           icon: 'person-outline',
-          onPress: () => router.push('/edit-profile'),
+          onPress: () => router.push('/edit-profile' as any),
         },
         {
           key: 'email',
-          label: 'Email Address',
+          label: 'Email address',
           subtitle: userEmail ?? 'Not signed in',
           icon: 'email',
-          onPress: handleChangeEmail,
+          onPress: openChangeEmail,
         },
         {
           key: 'password',
-          label: 'Change Password',
+          label: 'Change password',
           subtitle: 'Reset via email link',
           icon: 'lock-outline',
           onPress: handleChangePassword,
+        },
+      ],
+    },
+    {
+      title: 'Roles',
+      rows: [
+        isBuilder
+          ? {
+              key: 'role-builder',
+              label: 'Tradie profile',
+              subtitle: 'Edit your tradie profile and credentials',
+              icon: 'construction' as const,
+              onPress: () => router.push('/builder-edit-profile' as any),
+            }
+          : {
+              key: 'role-builder-add',
+              label: 'Become a tradie',
+              subtitle: 'List yourself in search and apply to jobs',
+              icon: 'construction' as const,
+              onPress: () => router.push('/builder-signup' as any),
+            },
+        isEnterprise
+          ? {
+              key: 'role-enterprise',
+              label: 'Company profile',
+              subtitle: 'Manage your company and job posts',
+              icon: 'business' as const,
+              onPress: () => router.push('/enterprise-edit-profile' as any),
+            }
+          : {
+              key: 'role-enterprise-add',
+              label: 'List your company',
+              subtitle: 'Post jobs and hire verified tradies',
+              icon: 'business' as const,
+              onPress: () => router.push('/enterprise-signup' as any),
+            },
+        {
+          key: 'role-billing',
+          label: 'Billing & subscription',
+          subtitle: 'Plan, payment method, invoices',
+          icon: 'credit-card' as const,
+          onPress: () => router.push('/billing' as any),
         },
       ],
     },
@@ -171,43 +186,43 @@ export default function SettingsScreen() {
       rows: [
         {
           key: 'push',
-          label: 'Push Notifications',
+          label: 'Push notifications',
           subtitle: 'Job updates and messages',
           icon: 'notifications-none',
           rightElement: (
             <Switch
               value={pushNotifications}
               onValueChange={setPushNotifications}
-              trackColor={{ false: colors.border, true: colors.teal + '60' }}
-              thumbColor={pushNotifications ? colors.teal : colors.icon}
+              trackColor={{ false: c.border, true: c.primary + '66' }}
+              thumbColor={pushNotifications ? c.primary : c.textSecondary}
             />
           ),
         },
         {
           key: 'emailNotif',
-          label: 'Email Notifications',
+          label: 'Email notifications',
           subtitle: 'Weekly digest and alerts',
           icon: 'mark-email-unread',
           rightElement: (
             <Switch
               value={emailNotifications}
               onValueChange={setEmailNotifications}
-              trackColor={{ false: colors.border, true: colors.teal + '60' }}
-              thumbColor={emailNotifications ? colors.teal : colors.icon}
+              trackColor={{ false: c.border, true: c.primary + '66' }}
+              thumbColor={emailNotifications ? c.primary : c.textSecondary}
             />
           ),
         },
         {
           key: 'sms',
-          label: 'SMS Notifications',
+          label: 'SMS notifications',
           subtitle: 'Urgent job alerts only',
           icon: 'sms',
           rightElement: (
             <Switch
               value={smsNotifications}
               onValueChange={setSmsNotifications}
-              trackColor={{ false: colors.border, true: colors.teal + '60' }}
-              thumbColor={smsNotifications ? colors.teal : colors.icon}
+              trackColor={{ false: c.border, true: c.primary + '66' }}
+              thumbColor={smsNotifications ? c.primary : c.textSecondary}
             />
           ),
         },
@@ -221,53 +236,40 @@ export default function SettingsScreen() {
           label: 'Language',
           subtitle: 'English (AU)',
           icon: 'language',
-          onPress: () =>
-            Alert.alert('Language', 'English (AU) is currently the only supported language.'),
+          onPress: () => toast.show('English (AU) is the only supported language for now', { duration: 4000 }),
         },
         {
           key: 'appearance',
           label: 'Appearance',
-          subtitle: isDark ? 'Dark mode (system)' : 'Light mode (system)',
-          icon: isDark ? 'dark-mode' : 'light-mode',
-          onPress: () =>
-            Alert.alert(
-              'Appearance',
-              'BLDESY! follows your system appearance setting. Change it in your device Settings → Display & Brightness.',
-            ),
+          subtitle: scheme === 'dark' ? 'Dark mode (system)' : 'Light mode (system)',
+          icon: scheme === 'dark' ? 'dark-mode' : 'light-mode',
+          onPress: () => toast.show('BLDESY follows your device appearance setting', { duration: 4000 }),
         },
       ],
     },
     {
-      title: 'Privacy & Data',
+      title: 'Privacy & data',
       rows: [
         {
           key: 'privacy',
-          label: 'Privacy Settings',
+          label: 'Privacy settings',
           subtitle: 'Profile visibility and data sharing',
           icon: 'shield',
-          onPress: () =>
-            Alert.alert(
-              'Privacy',
-              'Your profile is only visible to other BLDESY! users. We never sell your data to third parties.',
-            ),
+          onPress: () => router.push('/legal' as any),
         },
         {
           key: 'download',
-          label: 'Download My Data',
+          label: 'Download my data',
           subtitle: 'Request a copy of your data',
           icon: 'download',
-          onPress: () =>
-            Alert.alert(
-              'Data Export',
-              'A data export request has been sent. You\'ll receive an email within 48 hours with a download link.',
-            ),
+          onPress: () => toast.show("Export requested — we'll email you within 48 hours", { variant: 'success', duration: 4000 }),
         },
         {
           key: 'delete',
-          label: 'Delete Account',
+          label: 'Delete account',
           subtitle: 'Permanently remove all data',
           icon: 'delete-outline',
-          onPress: handleDeleteAccount,
+          onPress: () => setDeleteModalVisible(true),
           destructive: true,
         },
       ],
@@ -275,223 +277,152 @@ export default function SettingsScreen() {
   ];
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.canvas }]}>
-      <View style={headerStyles.container}>
-        <LinearGradient
-          colors={isDark ? ['#042f2e', '#0a3a38', '#134E4A'] : ['#064E3B', '#0F6E56', '#1D9E75']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[headerStyles.gradient, { paddingTop: insets.top + Spacing.lg }]}
-        >
-          <View style={headerStyles.glowWrap} pointerEvents="none">
-            <View style={[headerStyles.glow, isDark && { opacity: 0.06 }]} />
-          </View>
-          <View style={headerStyles.accentLines} pointerEvents="none">
-            <View style={[headerStyles.accentLine, { left: '20%', opacity: 0.04 }]} />
-            <View style={[headerStyles.accentLine, { left: '50%', opacity: 0.03 }]} />
-            <View style={[headerStyles.accentLine, { left: '75%', opacity: 0.025 }]} />
-          </View>
-          <View style={headerStyles.content}>
-            <View style={headerStyles.textCol}>
-              <Text style={headerStyles.title}>Settings</Text>
-              <Text style={headerStyles.subtitle}>Manage your account and preferences</Text>
-            </View>
-            <View style={headerStyles.iconCircle}>
-              <MaterialIcons name="settings" size={22} color="#fff" />
-            </View>
-          </View>
-        </LinearGradient>
-        <LinearGradient
-          colors={['rgba(13,148,136,0.12)', 'transparent']}
-          style={headerStyles.bottomEdge}
-        />
-      </View>
-      <Pressable
-        onPress={() => router.back()}
-        style={[styles.backButton, { top: insets.top + 12 }]}
-        accessibilityRole="button"
-        accessibilityLabel="Go back"
-      >
-        <Ionicons name="arrow-back" size={22} color="#ffffff" />
-      </Pressable>
-
+    <AppShell title="Settings" showBack>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
         {sections.map((section) => (
           <View key={section.title} style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            <Text style={[styles.sectionTitle, { color: c.textSecondary }]}>
               {section.title}
             </Text>
-
-            <View
-              style={[
-                styles.card,
-                {
-                  backgroundColor: isDark ? colors.surface : '#ffffff',
-                  borderColor: colors.border,
-                },
-              ]}
-            >
+            <Card style={styles.card}>
               {section.rows.map((row, index) => (
                 <Pressable
                   key={row.key}
-                  style={({ pressed }) => [
-                    styles.row,
-                    {
-                      borderTopWidth: index > 0 ? 1 : 0,
-                      borderTopColor: colors.borderLight,
-                      backgroundColor: pressed && row.onPress
-                        ? isDark
-                          ? 'rgba(255,255,255,0.04)'
-                          : 'rgba(0,0,0,0.02)'
-                        : 'transparent',
-                    },
-                  ]}
                   onPress={row.onPress}
                   disabled={!row.onPress}
                   accessibilityRole="button"
                   accessibilityLabel={row.label}
+                  style={({ pressed }) => [
+                    styles.row,
+                    index > 0 && { borderTopColor: c.borderLight, borderTopWidth: StyleSheet.hairlineWidth },
+                    pressed && row.onPress && { backgroundColor: c.canvas },
+                  ]}
                 >
                   <View
                     style={[
                       styles.iconWrap,
                       {
-                        backgroundColor: row.destructive
-                          ? isDark ? colors.errorLight : '#fef2f2'
-                          : isDark ? colors.border : '#F0FDFA',
+                        backgroundColor: row.destructive ? c.errorBg : c.primaryBg,
                       },
                     ]}
                   >
                     <MaterialIcons
                       name={row.icon}
                       size={18}
-                      color={row.destructive ? colors.error : colors.teal}
+                      color={row.destructive ? c.error : c.primary}
                     />
                   </View>
                   <View style={styles.rowText}>
                     <Text
                       style={[
                         styles.rowLabel,
-                        { color: row.destructive ? colors.error : colors.text },
+                        { color: row.destructive ? c.error : c.textPrimary },
                       ]}
                     >
                       {row.label}
                     </Text>
                     {row.subtitle ? (
-                      <Text style={[styles.rowSubtitle, { color: colors.textSecondary }]}>
+                      <Text style={[styles.rowSubtitle, { color: c.textSecondary }]} numberOfLines={1}>
                         {row.subtitle}
                       </Text>
                     ) : null}
                   </View>
-                  {row.rightElement ?? (
-                    row.onPress ? (
-                      <MaterialIcons name="chevron-right" size={18} color={colors.icon} />
-                    ) : null
-                  )}
+                  {row.rightElement ??
+                    (row.onPress ? (
+                      <MaterialIcons name="chevron-right" size={18} color={c.textSecondary} />
+                    ) : null)}
                 </Pressable>
               ))}
-            </View>
+            </Card>
           </View>
         ))}
 
-        {/* App info footer */}
         <View style={styles.footer}>
-          <Text style={[styles.footerText, { color: colors.icon }]}>
-            BLDESY! v1.0.0
-          </Text>
-          <Text style={[styles.footerText, { color: colors.icon }]}>
-            Made with ❤️ in Australia
-          </Text>
+          <Text style={[styles.footerText, { color: c.textSecondary }]}>BLDESY! v1.0.0</Text>
+          <Text style={[styles.footerText, { color: c.textSecondary }]}>Made with ❤️ in Australia</Text>
         </View>
       </ScrollView>
 
-      {/* Change Email Modal — cross-platform replacement for Alert.prompt */}
-      <Modal visible={emailModalVisible} transparent animationType="fade" onRequestClose={() => setEmailModalVisible(false)}>
+      <DeleteAccountModal
+        visible={deleteModalVisible}
+        onClose={() => setDeleteModalVisible(false)}
+        onDeleted={handleAccountDeleted}
+      />
+
+      {/* Change-email modal — Toast-style would lose the input, so keep a sheet here. */}
+      <Modal
+        visible={emailModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEmailModalVisible(false)}
+      >
         <Pressable style={styles.modalOverlay} onPress={() => setEmailModalVisible(false)}>
-          <Pressable style={[styles.modalCard, { backgroundColor: isDark ? colors.surface : '#fff' }]} onPress={() => {}}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Change Email</Text>
-            <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
-              Enter your new email address. We'll send a confirmation link.
+          <Pressable
+            style={[styles.modalCard, { backgroundColor: c.surface, borderColor: c.border }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={[styles.modalTitle, { color: c.textPrimary }]}>Change email</Text>
+            <Text style={[styles.modalSubtitle, { color: c.textSecondary }]}>
+              Enter your new email address. We&apos;ll send a confirmation link.
             </Text>
-            <TextInput
-              style={[styles.modalInput, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#f8fafc', borderColor: colors.border, color: colors.text }]}
+            <Input
               value={newEmail}
               onChangeText={setNewEmail}
               placeholder="Email address"
-              placeholderTextColor={colors.textSecondary}
               keyboardType="email-address"
               autoCapitalize="none"
               autoFocus
             />
             <View style={styles.modalActions}>
-              <Pressable style={[styles.modalBtn, { borderColor: colors.border, borderWidth: 1 }]} onPress={() => setEmailModalVisible(false)}>
-                <Text style={[styles.modalBtnText, { color: colors.textSecondary }]}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.modalBtn, { backgroundColor: colors.teal, opacity: emailSaving ? 0.7 : 1 }]}
-                onPress={submitEmailChange}
-                disabled={emailSaving}
-              >
-                <Text style={[styles.modalBtnText, { color: '#fff' }]}>{emailSaving ? 'Saving...' : 'Update'}</Text>
-              </Pressable>
+              <Button variant="ghost" onPress={() => setEmailModalVisible(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" onPress={submitEmailChange} disabled={emailSaving}>
+                {emailSaving ? 'Saving…' : 'Update'}
+              </Button>
             </View>
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+    </AppShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  backButton: {
-    position: 'absolute',
-    left: 16,
-    zIndex: 10,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.xl,
+  scroll: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.lg,
     paddingBottom: Spacing['5xl'],
-    gap: Spacing.xl,
+    gap: Spacing['2xl'],
   },
   section: {
     gap: Spacing.sm,
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 11,
+    fontFamily: FontFamily.bodyBold,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    paddingHorizontal: Spacing.xs,
-    marginTop: Spacing.xs,
+    letterSpacing: 0.6,
+    paddingHorizontal: Spacing.sm,
   },
   card: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
     overflow: 'hidden',
-    ...Shadows.sm,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
     gap: Spacing.md,
-    minHeight: 56,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
   iconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: Radius.sm + 2,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -500,134 +431,51 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   rowLabel: {
-    fontSize: 15,
+    fontSize: 14,
+    fontFamily: FontFamily.bodySemiBold,
     fontWeight: '600',
   },
   rowSubtitle: {
     fontSize: 12,
+    fontFamily: FontFamily.body,
   },
   footer: {
     alignItems: 'center',
-    gap: 4,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.lg,
+    gap: 2,
+    paddingTop: Spacing.xl,
   },
   footerText: {
-    fontSize: 12,
-    textAlign: 'center',
+    fontSize: 11,
+    fontFamily: FontFamily.body,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     alignItems: 'center',
-    padding: Spacing['2xl'],
+    justifyContent: 'center',
+    padding: Spacing.lg,
   },
   modalCard: {
     width: '100%',
     maxWidth: 400,
-    borderRadius: Radius.lg,
-    padding: Spacing.xl,
-    gap: Spacing.md,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    padding: Spacing['2xl'],
+    gap: Spacing.lg,
   },
   modalTitle: {
     fontSize: 18,
+    fontFamily: FontFamily.bodyBold,
     fontWeight: '700',
   },
   modalSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
+    fontFamily: FontFamily.body,
     lineHeight: 20,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    fontSize: 16,
   },
   modalActions: {
     flexDirection: 'row',
-    gap: Spacing.sm,
     justifyContent: 'flex-end',
-    marginTop: Spacing.xs,
+    gap: Spacing.sm,
   },
-  modalBtn: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-  },
-  modalBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-});
-
-const headerStyles = StyleSheet.create({
-  container: { position: 'relative' },
-  gradient: {
-    paddingBottom: Spacing['2xl'],
-    paddingHorizontal: Spacing.xl,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  glowWrap: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'flex-end',
-    justifyContent: 'flex-start',
-    overflow: 'hidden',
-  },
-  glow: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    marginTop: -40,
-    marginRight: -40,
-  },
-  accentLines: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-  },
-  accentLine: {
-    position: 'absolute',
-    top: -20,
-    width: 1,
-    height: '150%',
-    backgroundColor: '#fff',
-    transform: [{ rotate: '15deg' }],
-  },
-  content: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.lg,
-    zIndex: 1,
-  },
-  textCol: { flex: 1, gap: 4 },
-  title: {
-    fontSize: 30,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-    lineHeight: 36,
-    color: '#fff',
-  },
-  subtitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    letterSpacing: -0.1,
-    lineHeight: 19,
-    color: 'rgba(255,255,255,0.75)',
-  },
-  iconCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bottomEdge: { height: 3 },
 });

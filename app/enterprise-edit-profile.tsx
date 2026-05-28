@@ -21,6 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
+import { AppShell } from '@/components/layout';
 import { Colors, Radius, Spacing, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
@@ -153,21 +154,7 @@ export default function EnterpriseEditProfileScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.canvas }]}>
-      {/* Header */}
-      <LinearGradient
-        colors={isDark ? ['#1e1b4b', '#312e81'] : ['#4f46e5', '#4338ca']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.header, { paddingTop: insets.top + 8 }]}
-      >
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Go back">
-          <Ionicons name="arrow-back" size={22} color="#fff" />
-        </Pressable>
-        <Text style={styles.headerTitle}>Edit Profile</Text>
-        <View style={{ width: 40 }} />
-      </LinearGradient>
-
+    <AppShell title="Edit Enterprise Profile" showBack>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 100 }]}
@@ -209,7 +196,7 @@ export default function EnterpriseEditProfileScreen() {
           </View>
 
           <Text style={[styles.label, { color: colors.textSecondary }]}>Industry Focus</Text>
-          <TextInput style={[styles.input, { backgroundColor: inputBg, borderColor: inputBorder, color: colors.text }]} value={industryFocus} onChangeText={setIndustryFocus} placeholder="e.g. Residential construction" placeholderTextColor={colors.textSecondary} />
+          <TextInput style={[styles.input, { backgroundColor: inputBg, borderColor: inputBorder, color: colors.text }]} value={industryFocus} onChangeText={setIndustryFocus} placeholder="e.g. Home builds, renovations" placeholderTextColor={colors.textSecondary} />
 
           <Text style={[styles.label, { color: colors.textSecondary }]}>About Your Company</Text>
           <TextInput style={[styles.input, styles.textArea, { backgroundColor: inputBg, borderColor: inputBorder, color: colors.text }]} value={bio} onChangeText={setBio} placeholder="Tell tradies about your company..." placeholderTextColor={colors.textSecondary} multiline numberOfLines={4} textAlignVertical="top" />
@@ -267,7 +254,7 @@ export default function EnterpriseEditProfileScreen() {
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </AppShell>
   );
 }
 

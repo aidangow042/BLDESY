@@ -18,6 +18,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
+import { AppShell } from '@/components/layout';
+import { useToast } from '@/components/ui';
 import { Colors, Radius, Spacing, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
@@ -85,6 +87,7 @@ export default function EnterpriseBillingScreen() {
   const colors = Colors[isDark ? 'dark' : 'light'];
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const toast = useToast();
   const { userId } = useUser();
 
   const indigo = isDark ? '#818cf8' : '#4f46e5';
@@ -117,11 +120,7 @@ export default function EnterpriseBillingScreen() {
   useFocusEffect(useCallback(() => { loadBilling(); }, [loadBilling]));
 
   function handleChoosePlan(plan: Plan) {
-    Alert.alert(
-      `Choose ${plan.name}`,
-      `You selected the ${plan.name} plan at ${plan.price}${plan.period === 'one-off' ? '' : plan.period}. Payment integration coming soon.`,
-      [{ text: 'OK' }],
-    );
+    toast.show(`${plan.name} plan selected — payment integration coming soon`, { duration: 4000 });
   }
 
   if (loading) {
@@ -133,21 +132,7 @@ export default function EnterpriseBillingScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.canvas }]}>
-      {/* Header */}
-      <LinearGradient
-        colors={isDark ? ['#1e1b4b', '#312e81'] : ['#4f46e5', '#4338ca']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.header, { paddingTop: insets.top + 8 }]}
-      >
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Go back">
-          <Ionicons name="arrow-back" size={22} color="#fff" />
-        </Pressable>
-        <Text style={styles.headerTitle}>Billing & Plans</Text>
-        <View style={{ width: 40 }} />
-      </LinearGradient>
-
+    <AppShell title="Billing & Plans" showBack>
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
@@ -252,7 +237,7 @@ export default function EnterpriseBillingScreen() {
           </Text>
         </View>
       </ScrollView>
-    </View>
+    </AppShell>
   );
 }
 

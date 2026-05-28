@@ -19,6 +19,8 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
+import { AppShell } from '@/components/layout';
+import { useToast } from '@/components/ui';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
@@ -72,6 +74,7 @@ export default function MyJobsScreen() {
   const colors = Colors[colorScheme];
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const toast = useToast();
   const { userId } = useUser();
 
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -257,9 +260,10 @@ export default function MyJobsScreen() {
               .delete()
               .eq('id', job.id);
             if (error) {
-              Alert.alert('Error', friendlyError(error));
+              toast.show(friendlyError(error), { variant: 'error' });
             } else {
               setJobs((prev) => prev.filter((j) => j.id !== job.id));
+              toast.show('Job deleted', { variant: 'success' });
             }
           },
         },
@@ -520,20 +524,7 @@ export default function MyJobsScreen() {
   /* ─── Main render ───────────────────────────────────────── */
 
   return (
-    <View style={styles.container}>
-      {/* ── Slim green header (matching job-detail) ── */}
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <View style={styles.headerRow}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Go back">
-            <Ionicons name="arrow-back" size={20} color="#fff" />
-          </Pressable>
-          <Text style={styles.headerTitle}>My Jobs</Text>
-        </View>
-        <View style={styles.headerSubRow}>
-          <Text style={styles.headerSubText}>Manage your posted jobs</Text>
-        </View>
-      </View>
-
+    <AppShell title="My Jobs" showBack>
       <Animated.View entering={FadeInUp.duration(300).delay(100)} style={{ flex: 1 }}>
       {loading ? (
         <ActivityIndicator color="#0F6E56" style={{ marginTop: 60 }} />
@@ -584,7 +575,7 @@ export default function MyJobsScreen() {
         />
       )}
       </Animated.View>
-    </View>
+    </AppShell>
   );
 }
 

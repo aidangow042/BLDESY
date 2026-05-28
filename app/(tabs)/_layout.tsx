@@ -1,106 +1,121 @@
 import React, { useState, useCallback } from 'react';
 import { View, Pressable, StyleSheet, Text } from 'react-native';
-import { withLayoutContext } from 'expo-router';
+import { withLayoutContext, useRouter } from 'expo-router';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import type { MaterialTopTabBarProps } from '@react-navigation/material-top-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors, Spacing, Shadows } from '@/constants/theme';
-import { DashboardColors } from '@/constants/dashboard-theme';
+import { Colors, FontFamily, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 const { Navigator } = createMaterialTopTabNavigator();
 const TopTabs = withLayoutContext(Navigator);
 
-// Shared flag so BottomTabBar can tell TabLayout to skip animation
+/* Shared flag so BottomTabBar can tell TabLayout to skip the slide animation
+   when the user taps (instead of swipes) between tabs. Keeps the press feel
+   snappy while leaving swipes smooth. */
 let disableAnimation: (() => void) | null = null;
 
-function BottomTabBar({ state, descriptors, navigation }: MaterialTopTabBarProps) {
+type SlotKind = 'tab' | 'push';
+
+interface TabSlot {
+  kind: SlotKind;
+  /** Route name (for `tab`) or path to push (for `push`). */
+  target: string;
+  label: string;
+  icon: string; // IconSymbol name
+  /** Larger, primary-coloured icon (used for the Post Job accent slot). */
+  accent?: boolean;
+}
+
+/* 5 slots — matches the website's mobile bottom bar:
+   Home / Search / Post Job (accent) / AI / Map
+   "Saved" moves to the hamburger menu (web parity). */
+const SLOTS: TabSlot[] = [
+  { kind: 'tab',  target: 'index',     label: 'Home',     icon: 'house' },
+  { kind: 'push', target: '/all-trades', label: 'Search', icon: 'magnifyingglass' },
+  { kind: 'push', target: '/post-job', label: 'Post Job', icon: 'plus.circle.fill', accent: true },
+  { kind: 'tab',  target: 'ai',        label: 'AI',       icon: 'sparkles' },
+  { kind: 'tab',  target: 'map',       label: 'Map',      icon: 'map' },
+];
+
+function BottomTabBar({ state, navigation }: MaterialTopTabBarProps) {
   const colorScheme = useColorScheme();
   const theme = colorScheme === 'dark' ? 'dark' : 'light';
   const colors = Colors[theme];
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
-  // Check if the current screen is the portal (builder dashboard)
+  // Builder portal keeps its dark-themed dashboard chrome until Phase 5
+  // restyles it; render its own tab bar.
   const currentRoute = state.routes[state.index];
-  const isPortal = currentRoute?.name === 'portal';
-
-  // Portal gets a single centered dashboard icon instead of the full tab bar
-  if (isPortal) {
-    return (
-      <View
-        style={[
-          styles.tabBar,
-          {
-            backgroundColor: DashboardColors.base,
-            borderTopColor: DashboardColors.border,
-            paddingBottom: insets.bottom,
-            height: 58 + insets.bottom,
-            justifyContent: 'center',
-            alignItems: 'center',
-          },
-        ]}
-      >
-        <View style={[styles.portalTabIcon, { backgroundColor: colors.teal }]}>
-          <IconSymbol size={22} name="building.2" color="#fff" />
-        </View>
-      </View>
-    );
-  }
+  // Portal used to render its own dark-teal tab bar with a single icon — the
+  // web doesn't do this, and the portal is now styled to match the rest of
+  // the app, so we fall through to the standard tab bar everywhere.
+  void currentRoute;
 
   return (
     <View
       style={[
         styles.tabBar,
         {
-          backgroundColor: colors.canvas,
+          backgroundColor: colors.surface,
           borderTopColor: colors.border,
           paddingBottom: insets.bottom,
-          height: 58 + insets.bottom,
-          ...Shadows.sm,
+          height: 64 + insets.bottom,
         },
       ]}
     >
-      {state.routes.map((route, index) => {
-        const { options } = descriptors[route.key];
+      {SLOTS.map((slot) => {
+        const isActive =
+          slot.kind === 'tab' && state.routes[state.index]?.name === slot.target;
+        const tint = slot.accent
+          ? colors.primary
+          : isActive
+            ? colors.primary
+            : colors.textSecondary;
 
-        // Skip hidden screens
-        if ((options as any).href === null) return null;
-
-        const isFocused = state.index === index;
-        const color = isFocused ? colors.teal : '#3A3A4A';
-        const icon = options.tabBarIcon?.({ color, focused: isFocused } as any);
-        const label = options.title ?? route.name;
-
-        const onPress = () => {
+        function handlePress() {
           if (process.env.EXPO_OS === 'ios') {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }
-          const event = navigation.emit({
-            type: 'tabPress',
-            target: route.key,
-            canPreventDefault: true,
-          });
-          if (!isFocused && !event.defaultPrevented) {
-            // Temporarily disable animation for instant switch
-            disableAnimation?.();
-            navigation.navigate(route.name);
+          if (slot.kind === 'tab') {
+            const route = state.routes.find((r) => r.name === slot.target);
+            if (!route) return;
+            const event = navigation.emit({
+              type: 'tabPress',
+              target: route.key,
+              canPreventDefault: true,
+            });
+            if (!isActive && !event.defaultPrevented) {
+              disableAnimation?.();
+              navigation.navigate(slot.target);
+            }
+          } else {
+            router.push(slot.target as any);
           }
-        };
+        }
 
         return (
           <Pressable
-            key={route.key}
-            onPress={onPress}
+            key={slot.label}
+            onPress={handlePress}
             style={styles.tabItem}
             accessibilityRole="tab"
-            accessibilityState={{ selected: isFocused }}
-            accessibilityLabel={`${label} tab`}
+            accessibilityState={{ selected: isActive }}
+            accessibilityLabel={`${slot.label} tab`}
           >
-            {icon}
-            <Text style={[styles.tabLabel, { color }]}>{label}</Text>
+            <IconSymbol size={slot.accent ? 30 : 24} name={slot.icon as any} color={tint} />
+            <Text
+              style={[
+                styles.tabLabel,
+                { color: tint, fontWeight: isActive || slot.accent ? '700' : '600' },
+              ]}
+            >
+              {slot.label}
+            </Text>
           </Pressable>
         );
       })}
@@ -113,7 +128,7 @@ export default function TabLayout() {
 
   disableAnimation = useCallback(() => {
     setAnimationEnabled(false);
-    // Re-enable after the navigation completes so swipes still animate
+    // Re-enable after the navigation completes so swipes still animate.
     setTimeout(() => setAnimationEnabled(true), 50);
   }, []);
 
@@ -127,50 +142,14 @@ export default function TabLayout() {
         animationEnabled,
       }}
     >
-      <TopTabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }: { color: string }) => (
-            <IconSymbol size={26} name="house" color={color} />
-          ),
-        }}
-      />
-
-      <TopTabs.Screen
-        name="ai"
-        options={{
-          title: 'AI Assist',
-          tabBarIcon: ({ color }: { color: string }) => (
-            <IconSymbol size={26} name="sparkles" color={color} />
-          ),
-        }}
-      />
-
-      <TopTabs.Screen
-        name="map"
-        options={{
-          title: 'Map',
-          swipeEnabled: false,
-          tabBarIcon: ({ color }: { color: string }) => (
-            <IconSymbol size={26} name="map" color={color} />
-          ),
-        }}
-      />
-
-      <TopTabs.Screen
-        name="saved"
-        options={{
-          title: 'Saved',
-          swipeEnabled: false,
-          tabBarIcon: ({ color }: { color: string }) => (
-            <IconSymbol size={26} name="bookmark" color={color} />
-          ),
-        }}
-      />
-
-      {/* Hidden screens — keep in route tree but not in tab bar */}
-      <TopTabs.Screen name="portal" options={{ href: null, swipeEnabled: false }} />
+      <TopTabs.Screen name="index" options={{ title: 'Home' }} />
+      <TopTabs.Screen name="ai" options={{ title: 'AI Assist' }} />
+      <TopTabs.Screen name="map" options={{ title: 'Map', swipeEnabled: false }} />
+      {/* Saved moved to hamburger menu — keep the screen registered so deep
+          links to /saved still work, but hidden from the bar. */}
+      <TopTabs.Screen name="saved" options={{ swipeEnabled: false }} />
+      {/* Portal is role-gated. Hidden from default rendering. */}
+      <TopTabs.Screen name="portal" options={{ swipeEnabled: false }} />
     </TopTabs>
   );
 }
@@ -178,7 +157,7 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: Spacing.sm,
   },
   tabItem: {
@@ -189,7 +168,7 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     fontSize: 10,
-    fontWeight: '600',
+    fontFamily: FontFamily.bodyBold,
   },
   portalTabIcon: {
     width: 40,

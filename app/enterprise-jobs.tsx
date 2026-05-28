@@ -21,6 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
+import { AppShell } from '@/components/layout';
 import { Colors, Radius, Spacing, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
@@ -413,30 +414,13 @@ export default function EnterpriseJobsScreen() {
   /* ── Main render ──────────────────────────────────────────── */
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.canvas }]}>
-      {/* Indigo gradient header */}
-      <LinearGradient
-        colors={isDark ? ['#1e1b4b', '#312e81'] : ['#4f46e5', '#4338ca']}
-        style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}
-      >
-        <View style={styles.headerRow}>
-          <Pressable
-            onPress={() => router.back()}
-            style={styles.backBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            hitSlop={12}
-          >
-            <Ionicons name="arrow-back" size={20} color="#fff" />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>My Job Posts</Text>
-            <Text style={styles.headerSubtitle}>
-              {loading ? 'Loading...' : `${jobs.length} ${jobs.length === 1 ? 'job' : 'jobs'} posted`}
-            </Text>
-          </View>
-        </View>
-      </LinearGradient>
+    <AppShell title="My Job Posts" showBack>
+      {/* Meta strip — job count */}
+      <View style={[styles.metaStrip, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <Text style={[styles.metaText, { color: colors.textSecondary }]}>
+          {loading ? 'Loading...' : `${jobs.length} ${jobs.length === 1 ? 'job' : 'jobs'} posted`}
+        </Text>
+      </View>
 
       {/* Content */}
       {loading ? (
@@ -480,13 +464,22 @@ export default function EnterpriseJobsScreen() {
           <Text style={styles.fabText}>Post Job</Text>
         </Pressable>
       )}
-    </View>
+    </AppShell>
   );
 }
 
 /* ─── Styles ───────────────────────────────────────────────── */
 
 const styles = StyleSheet.create({
+  metaStrip: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  metaText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
   container: {
     flex: 1,
   },

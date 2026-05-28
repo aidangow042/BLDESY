@@ -22,6 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { BarChart } from 'react-native-gifted-charts';
 
+import { AppShell } from '@/components/layout';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
@@ -222,24 +223,15 @@ export default function BuilderAnalyticsScreen() {
   const maxLoc = topLocations[0]?.count || 1;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.canvas }]}>
-      {/* Header */}
-      <LinearGradient colors={isDark ? ['#134E4A', '#0D3B3B', '#115E59'] : ['#0D7C66', '#0A6B58', '#059669']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.header, { paddingTop: insets.top + Spacing.md }]}>
-        <View style={styles.headerRow}>
-          <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}><Ionicons name="arrow-back" size={20} color="rgba(255,255,255,0.9)" /></Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>Analytics</Text>
-            <Text style={styles.headerSub}>Your performance insights</Text>
-          </View>
-        </View>
-        <View style={styles.periodRow}>
-          {PERIODS.map(p => (
-            <Pressable key={p.key} onPress={() => setPeriod(p.key)} style={[styles.periodPill, period === p.key && styles.periodPillActive]}>
-              <Text style={[styles.periodText, period === p.key && styles.periodTextActive]}>{p.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </LinearGradient>
+    <AppShell title="Analytics" showBack>
+      {/* Period selector strip — replaces former gradient header pills */}
+      <View style={[styles.periodStrip, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        {PERIODS.map(p => (
+          <Pressable key={p.key} onPress={() => setPeriod(p.key)} style={[styles.periodPill, period === p.key && { backgroundColor: colors.primary }]}>
+            <Text style={[styles.periodText, period === p.key && { color: '#fff' }]}>{p.label}</Text>
+          </Pressable>
+        ))}
+      </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={teal} />}>
 
@@ -402,7 +394,7 @@ export default function BuilderAnalyticsScreen() {
         </View>
 
       </ScrollView>
-    </View>
+    </AppShell>
   );
 }
 
@@ -422,6 +414,7 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#fff', fontFamily: 'RussoOne_400Regular', fontSize: 20, letterSpacing: -0.3 },
   headerSub: { color: 'rgba(255,255,255,0.45)', fontSize: 12, fontWeight: '500', marginTop: 1 },
   periodRow: { flexDirection: 'row', gap: 6, marginTop: Spacing.md },
+  periodStrip: { flexDirection: 'row', gap: 6, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth },
   periodPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)' },
   periodPillActive: { backgroundColor: 'rgba(255,255,255,0.22)' },
   periodText: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '600' },

@@ -7,18 +7,19 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ThemedText } from '@/components/themed-text';
-import { SideDrawer } from '@/components/side-drawer';
+import { HamburgerMenu } from '@/components/layout';
 import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { DashboardColors, DashboardShadows } from '@/constants/dashboard-theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
-import { PageHeader, HeaderIcon } from '@/components/page-header';
+import { AppShell } from '@/components/layout';
 import { DashboardHeader } from '@/components/dashboard/dashboard-header';
 import { MetricsGrid } from '@/components/dashboard/metrics-grid';
 import { HealthGauge } from '@/components/dashboard/health-gauge';
 import { AICoachCard } from '@/components/dashboard/ai-coach-card';
 import { ActivityFeed } from '@/components/dashboard/activity-feed';
+import { ApplicationBreakdown } from '@/components/dashboard/application-breakdown';
 import { NotificationsPanel } from '@/components/dashboard/notifications-panel';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import { useUnreadCount } from '@/hooks/use-unread-count';
@@ -171,23 +172,12 @@ export default function PortalScreen() {
     ];
 
     return (
-      <View style={[styles.safeArea, { backgroundColor: bgCanvas }]}>
+      <AppShell title="Builder Portal">
         <ScrollView
           contentContainerStyle={styles.noneScroll}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <PageHeader
-            title="Builder Portal"
-            subtitle="Grow your trade business"
-            variant="professional"
-            rightElement={
-              <HeaderIcon onRichBackground>
-                <MaterialIcons name="construction" size={24} color="#fff" />
-              </HeaderIcon>
-            }
-          />
-
           <View style={styles.noneContent}>
             <ThemedText style={[styles.ctaBody, { color: colors.textSecondary }]}>
               Join as a verified builder or tradesperson to get matched with high-intent customers in your area.
@@ -234,7 +224,7 @@ export default function PortalScreen() {
             </Pressable>
           </View>
         </ScrollView>
-      </View>
+      </AppShell>
     );
   }
 
@@ -280,14 +270,20 @@ export default function PortalScreen() {
     {
       icon: 'briefcase-outline',
       title: 'Project Jobs',
-      description: 'Browse commercial construction projects',
+      description: 'Browse large-scale project work',
       onPress: () => router.push({ pathname: '/builder-jobs', params: { type: 'commercial' } } as any),
     },
     {
       icon: 'home-outline',
       title: 'Home Jobs',
-      description: 'Browse residential home renovation jobs',
+      description: 'Browse home renovation and repair jobs',
       onPress: () => router.push({ pathname: '/builder-jobs', params: { type: 'residential' } } as any),
+    },
+    {
+      icon: 'reader-outline',
+      title: 'Contracts',
+      description: 'Ongoing work — multi-week and recurring contracts',
+      onPress: () => router.push({ pathname: '/builder-jobs', params: { type: 'contracts' } } as any),
     },
     {
       icon: 'document-text-outline',
@@ -345,6 +341,9 @@ export default function PortalScreen() {
           onViewAnalytics={() => router.push('/builder-analytics')}
           onCardPress={() => router.push('/builder-analytics')}
         />
+
+        {/* Application funnel — acceptance rate + status breakdown */}
+        <ApplicationBreakdown userId={userId} />
 
         {/* Profile health gauge */}
         <HealthGauge
@@ -419,7 +418,7 @@ export default function PortalScreen() {
       <NotificationsPanel ref={notificationsRef} userId={userId} />
 
       {/* Side drawer (Settings, Help, Legal, etc.) */}
-      <SideDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} builderMode />
+      <HamburgerMenu open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </View>
   );
 }

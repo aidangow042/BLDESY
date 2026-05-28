@@ -20,6 +20,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
+import { AppShell } from '@/components/layout';
+import { useToast } from '@/components/ui';
 import { Colors, Radius, Spacing, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
@@ -31,6 +33,7 @@ export default function EnterpriseSettingsScreen() {
   const colors = Colors[isDark ? 'dark' : 'light'];
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const toast = useToast();
 
   const { userId } = useUser();
   const indigo = isDark ? '#818cf8' : '#4f46e5';
@@ -70,12 +73,12 @@ export default function EnterpriseSettingsScreen() {
 
   async function handleSave() {
     if (!companyName.trim()) {
-      Alert.alert('Error', 'Company name is required');
+      toast.show('Company name is required', { variant: 'warning' });
       return;
     }
 
     setSaving(true);
-    if (!userId) { setSaving(false); Alert.alert('Error', 'Not logged in'); return; }
+    if (!userId) { setSaving(false); toast.show('Sign in required', { variant: 'warning' }); return; }
 
     const { error } = await supabase
       .from('enterprise_profiles')
@@ -90,10 +93,10 @@ export default function EnterpriseSettingsScreen() {
 
     setSaving(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      toast.show("Couldn't save changes", { variant: 'error' });
       return;
     }
-    Alert.alert('Saved', 'Your settings have been updated.');
+    toast.show('Settings saved', { variant: 'success' });
   }
 
   if (loading) {
@@ -109,25 +112,11 @@ export default function EnterpriseSettingsScreen() {
     { label: 'Contact Name', value: contactName, onChange: setContactName, placeholder: 'Your full name' },
     { label: 'Contact Email', value: contactEmail, onChange: setContactEmail, placeholder: 'you@company.com', keyboardType: 'email-address', autoCapitalize: 'none' },
     { label: 'Contact Phone', value: contactPhone, onChange: setContactPhone, placeholder: '04XX XXX XXX', keyboardType: 'phone-pad' },
-    { label: 'Industry Focus', value: industryFocus, onChange: setIndustryFocus, placeholder: 'e.g. Residential construction' },
+    { label: 'Industry Focus', value: industryFocus, onChange: setIndustryFocus, placeholder: 'e.g. Home builds, renovations' },
   ];
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.canvas }]}>
-      {/* Header */}
-      <LinearGradient
-        colors={isDark ? ['#1e1b4b', '#312e81'] : ['#4f46e5', '#4338ca']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.header, { paddingTop: insets.top + 8 }]}
-      >
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Go back">
-          <Ionicons name="arrow-back" size={22} color="#fff" />
-        </Pressable>
-        <Text style={styles.headerTitle}>Settings</Text>
-        <View style={{ width: 40 }} />
-      </LinearGradient>
-
+    <AppShell title="Enterprise Settings" showBack>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 100 }]}
@@ -175,7 +164,7 @@ export default function EnterpriseSettingsScreen() {
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </AppShell>
   );
 }
 

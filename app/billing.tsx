@@ -1,383 +1,660 @@
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+/**
+ * Billing screen — reads subscription state from the website's
+ * /api/stripe/billing-details or /api/stripe/enterprise-subscription-state.
+ *
+ * Actions:
+ *  - Update card  → PaymentSheet over a SetupIntent from /api/stripe/setup-intent
+ *  - Change plan  → in-app sheet → /api/stripe/swap-plan (tradie) or
+ *                   /api/stripe/enterprise-swap-tier (enterprise)
+ *  - Cancel       → POST /api/stripe/cancel-subscription (soft)
+ *  - Resume       → POST /api/stripe/resume-subscription
+ */
+import { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useStripe } from '@stripe/stripe-react-native';
 
-import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
+import { AppShell } from '@/components/layout';
+import { Badge, Button, Card, useToast } from '@/components/ui';
+import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { api, ApiError } from '@/lib/api';
+import { useUser } from '@/lib/auth-context';
+import {
+  invalidateSubscriptionCache,
+  useEnterpriseSubscription,
+  useTradieSubscription,
+  type SubscriptionState,
+} from '@/lib/subscription';
+import {
+  ENTERPRISE_TIERS,
+  tradieTier,
+  enterpriseTier,
+  type BillingInterval,
+} from '@/lib/pricing-tiers-client';
 
-/* ── Mock data (replace with Supabase / Stripe queries later) ── */
+type Side = 'tradie' | 'enterprise';
 
-const SUBSCRIPTION = {
-  plan: 'Pro',
-  price: '$49',
-  interval: 'month',
-  status: 'active' as const,
-  renewalDate: '15 April 2026',
-  startedDate: '15 March 2026',
-};
-
-const PAYMENT_METHOD = {
-  brand: 'Visa',
-  last4: '4242',
-  expiry: '09/28',
-};
-
-const INVOICE_HISTORY = [
-  { id: 'inv_1', date: '15 Mar 2026', amount: '$49.00', status: 'Paid' },
-  { id: 'inv_2', date: '15 Feb 2026', amount: '$49.00', status: 'Paid' },
-  { id: 'inv_3', date: '15 Jan 2026', amount: '$49.00', status: 'Paid' },
-];
-
-/* ── Helpers ── */
-
-function maskCard(brand: string, last4: string) {
-  return `${brand} •••• •••• •••• ${last4}`;
+function formatDate(unix: number | null): string {
+  if (!unix) return '—';
+  return new Date(unix * 1000).toLocaleDateString('en-AU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
-function brandIcon(brand: string): React.ComponentProps<typeof Ionicons>['name'] {
-  switch (brand.toLowerCase()) {
-    case 'visa': return 'card-outline';
-    case 'mastercard': return 'card-outline';
-    default: return 'card-outline';
-  }
+function formatAmount(cents: number, currency: string): string {
+  const dollars = (cents / 100).toFixed(2);
+  return `${currency.toUpperCase() === 'AUD' ? 'A$' : '$'}${dollars}`;
 }
-
-/* ── Screen ── */
 
 export default function BillingScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const colors = Colors[isDark ? 'dark' : 'light'];
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const toast = useToast();
+  const { userId } = useUser();
+  const stripe = useStripe();
 
-  const teal = colors.teal;
+  const tradie = useTradieSubscription();
+  const enterprise = useEnterpriseSubscription();
 
-  function handleManageSubscription() {
+  const side: Side = tradie.status ? 'tradie' : enterprise.status ? 'enterprise' : 'tradie';
+  const state: SubscriptionState = side === 'tradie' ? tradie : enterprise;
+  const loading = tradie.loading || enterprise.loading;
+
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [planModalVisible, setPlanModalVisible] = useState(false);
+
+  const refresh = useCallback(() => {
+    if (side === 'tradie') tradie.refresh();
+    else enterprise.refresh();
+  }, [side, tradie, enterprise]);
+
+  const tierDetails =
+    state.tier && side === 'tradie'
+      ? tradieTier(state.tier as any)
+      : state.tier && side === 'enterprise' && state.tier !== 'single_post'
+        ? enterpriseTier(state.tier as any)
+        : null;
+
+  async function handleUpdateCard() {
+    if (!stripe) return;
+    setActionLoading('update-card');
+    try {
+      const setup = await api.post<{
+        clientSecret: string;
+        customerId?: string;
+        ephemeralKeySecret?: string;
+      }>('/api/stripe/setup-intent');
+      if (!setup.clientSecret) {
+        toast.show('Stripe did not return a setup secret', { variant: 'error' });
+        return;
+      }
+      const initRes = await stripe.initPaymentSheet({
+        merchantDisplayName: 'BLDESY',
+        setupIntentClientSecret: setup.clientSecret,
+        ...(setup.customerId && setup.ephemeralKeySecret
+          ? {
+              customerId: setup.customerId,
+              customerEphemeralKeySecret: setup.ephemeralKeySecret,
+            }
+          : {}),
+        allowsDelayedPaymentMethods: false,
+        returnURL: 'bldesy://stripe-redirect',
+      });
+      if (initRes.error) {
+        toast.show(initRes.error.message, { variant: 'error' });
+        return;
+      }
+      const present = await stripe.presentPaymentSheet();
+      if (present.error) {
+        if (present.error.code !== 'Canceled') {
+          toast.show(present.error.message, { variant: 'error' });
+        }
+        return;
+      }
+
+      const retrieved = await stripe.retrieveSetupIntent(setup.clientSecret);
+      const paymentMethodId = retrieved.setupIntent?.paymentMethodId;
+      if (paymentMethodId) {
+        try {
+          await api.post('/api/stripe/setup-intent', { paymentMethodId });
+        } catch {
+          // Stripe already saved the card; promoting it to default is best-effort.
+        }
+      }
+
+      invalidateSubscriptionCache(userId ?? undefined);
+      refresh();
+      toast.show('Card updated', { variant: 'success' });
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.message : 'Try again later', { variant: 'error' });
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  function confirmCancel() {
     Alert.alert(
-      'Manage Subscription',
-      'This will open the Stripe customer portal where you can change or cancel your plan.',
+      'Cancel subscription?',
+      `You'll keep access until ${formatDate(state.currentPeriodEnd)}. You can resume any time before then.`,
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Continue', onPress: () => {} },
+        { text: 'Keep subscription', style: 'cancel' },
+        { text: 'Cancel', style: 'destructive', onPress: handleCancel },
       ],
     );
   }
 
-  function handleUpdatePayment() {
-    Alert.alert(
-      'Update Payment Method',
-      'This will open a secure form to update your card details.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Continue', onPress: () => {} },
-      ],
+  async function handleCancel() {
+    setActionLoading('cancel');
+    try {
+      const endpoint =
+        side === 'tradie' ? '/api/stripe/cancel-subscription' : '/api/stripe/enterprise-cancel';
+      await api.post(endpoint);
+      invalidateSubscriptionCache(userId ?? undefined);
+      refresh();
+      toast.show('Subscription will end on ' + formatDate(state.currentPeriodEnd), { variant: 'success' });
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.message : 'Try again later', { variant: 'error' });
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleResume() {
+    setActionLoading('resume');
+    try {
+      const endpoint =
+        side === 'tradie' ? '/api/stripe/resume-subscription' : '/api/stripe/enterprise-resume';
+      await api.post(endpoint);
+      invalidateSubscriptionCache(userId ?? undefined);
+      refresh();
+      toast.show('Subscription resumed', { variant: 'success' });
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.message : 'Try again later', { variant: 'error' });
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handlePlanChange(target: BillingInterval | string) {
+    setActionLoading('swap');
+    try {
+      if (side === 'tradie') {
+        await api.post('/api/stripe/swap-plan', { plan: target });
+      } else {
+        await api.post('/api/stripe/enterprise-swap-tier', {
+          tier: target,
+          interval: state.interval ?? 'monthly',
+        });
+      }
+      invalidateSubscriptionCache(userId ?? undefined);
+      refresh();
+      setPlanModalVisible(false);
+      toast.show('Plan changed', { variant: 'success' });
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.message : 'Try again later', { variant: 'error' });
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  /* ── Render: empty state ────────────────────────────────────── */
+
+  if (!loading && !state.status) {
+    return (
+      <AppShell title="Billing" showBack>
+        <View style={styles.emptyWrap}>
+          <View style={[styles.emptyIcon, { backgroundColor: c.primaryBg }]}>
+            <Text style={[styles.emptyGlyph, { color: c.primary }]}>💳</Text>
+          </View>
+          <Text style={[styles.emptyTitle, { color: c.textPrimary }]}>No active subscription</Text>
+          <Text style={[styles.emptyCopy, { color: c.textSecondary }]}>
+            Pick a plan to unlock applications, dashboard analytics and verified badges.
+          </Text>
+          <Button variant="primary" size="lg" onPress={() => router.push('/subscribe' as any)}>
+            See plans
+          </Button>
+        </View>
+      </AppShell>
     );
   }
+
+  /* ── Render: active sub ─────────────────────────────────────── */
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.canvas }]}>
-      {/* Header */}
-      <LinearGradient
-        colors={isDark ? ['#042f2e', '#0a3a38', '#134E4A'] : ['#064E3B', '#0F6E56', '#1D9E75']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.header, { paddingTop: insets.top + 8 }]}
-      >
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={12}
-          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-        >
-          <Ionicons name="arrow-back" size={22} color="#fff" />
-        </Pressable>
-        <Text style={styles.headerTitle}>Billing</Text>
-        <View style={{ width: 40 }} />
-      </LinearGradient>
-
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ── Subscription Card ── */}
-        <View style={[styles.card, { backgroundColor: isDark ? colors.surface : '#fff', borderColor: colors.border }]}>
-          <View style={styles.cardHeader}>
-            <View style={[styles.iconCircle, { backgroundColor: colors.tealBg }]}>
-              <Ionicons name="diamond" size={20} color={teal} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.cardTitle, { color: colors.text }]}>
-                {SUBSCRIPTION.plan} Plan
-              </Text>
-              <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>
-                {SUBSCRIPTION.status === 'active' ? 'Active' : 'Inactive'}
-              </Text>
-            </View>
-            <View style={[styles.statusBadge, { backgroundColor: colors.tealBg }]}>
-              <Text style={[styles.statusText, { color: teal }]}>Active</Text>
-            </View>
+    <AppShell title="Billing" showBack>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {loading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator color={c.primary} />
           </View>
-
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-          <View style={styles.detailRow}>
-            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Price</Text>
-            <Text style={[styles.detailValue, { color: colors.text }]}>
-              {SUBSCRIPTION.price}/{SUBSCRIPTION.interval}
-            </Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Next billing date</Text>
-            <Text style={[styles.detailValue, { color: colors.text }]}>
-              {SUBSCRIPTION.renewalDate}
-            </Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Member since</Text>
-            <Text style={[styles.detailValue, { color: colors.text }]}>
-              {SUBSCRIPTION.startedDate}
-            </Text>
-          </View>
-
-          <Pressable
-            onPress={handleManageSubscription}
-            style={({ pressed }) => [
-              styles.manageBtn,
-              { borderColor: colors.border },
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <MaterialIcons name="settings" size={16} color={colors.textSecondary} />
-            <Text style={[styles.manageBtnText, { color: colors.text }]}>Manage Subscription</Text>
-          </Pressable>
-        </View>
-
-        {/* ── Payment Method ── */}
-        <View style={[styles.card, { backgroundColor: isDark ? colors.surface : '#fff', borderColor: colors.border }]}>
-          <View style={styles.cardHeader}>
-            <View style={[styles.iconCircle, { backgroundColor: colors.tealBg }]}>
-              <Ionicons name={brandIcon(PAYMENT_METHOD.brand)} size={20} color={teal} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.cardTitle, { color: colors.text }]}>Payment Method</Text>
-            </View>
-          </View>
-
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-          <View style={[styles.paymentRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F8FAFC', borderColor: colors.border }]}>
-            <View style={styles.paymentInfo}>
-              <Ionicons name="card" size={24} color={teal} />
-              <View>
-                <Text style={[styles.paymentCard, { color: colors.text }]}>
-                  {maskCard(PAYMENT_METHOD.brand, PAYMENT_METHOD.last4)}
-                </Text>
-                <Text style={[styles.paymentExpiry, { color: colors.textSecondary }]}>
-                  Expires {PAYMENT_METHOD.expiry}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          <Pressable
-            onPress={handleUpdatePayment}
-            style={({ pressed }) => [
-              styles.manageBtn,
-              { borderColor: colors.border },
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <MaterialIcons name="credit-card" size={16} color={colors.textSecondary} />
-            <Text style={[styles.manageBtnText, { color: colors.text }]}>Update Payment Method</Text>
-          </Pressable>
-        </View>
-
-        {/* ── Invoice History ── */}
-        <View style={[styles.card, { backgroundColor: isDark ? colors.surface : '#fff', borderColor: colors.border }]}>
-          <View style={styles.cardHeader}>
-            <View style={[styles.iconCircle, { backgroundColor: colors.tealBg }]}>
-              <Ionicons name="receipt-outline" size={20} color={teal} />
-            </View>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Invoice History</Text>
-          </View>
-
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-          {INVOICE_HISTORY.map((inv, index) => (
-            <View key={inv.id}>
-              <View style={styles.invoiceRow}>
+        ) : (
+          <>
+            {/* Current plan card */}
+            <Card padding={Spacing.lg} style={{ gap: Spacing.md }}>
+              <Text style={[styles.label, { color: c.textSecondary }]}>CURRENT PLAN</Text>
+              <View style={styles.planHead}>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.invoiceDate, { color: colors.text }]}>{inv.date}</Text>
-                  <Text style={[styles.invoiceAmount, { color: colors.textSecondary }]}>{inv.amount}</Text>
+                  <Text style={[styles.planName, { color: c.textPrimary }]}>
+                    {tierDetails ? tierDetails.name : 'Subscription'}
+                  </Text>
+                  <Text style={[styles.planSub, { color: c.textSecondary }]}>
+                    {state.interval === 'annual' ? 'Annual' : 'Monthly'} billing · {state.status ?? 'unknown'}
+                  </Text>
                 </View>
-                <View style={[styles.invoiceBadge, { backgroundColor: colors.tealBg }]}>
-                  <Text style={[styles.invoiceBadgeText, { color: teal }]}>{inv.status}</Text>
-                </View>
+                {tierDetails ? (
+                  <View style={styles.priceCol}>
+                    <Text style={[styles.price, { color: c.textPrimary }]}>
+                      ${state.interval === 'annual'
+                        ? (tierDetails as any).annual ?? '—'
+                        : (tierDetails as any).monthly ?? '—'}
+                    </Text>
+                    <Text style={[styles.priceSuffix, { color: c.textSecondary }]}>
+                      /{state.interval === 'annual' ? 'yr' : 'mo'}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
-              {index < INVOICE_HISTORY.length - 1 && (
-                <View style={[styles.invoiceDivider, { backgroundColor: colors.border }]} />
+
+              <View style={[styles.divider, { backgroundColor: c.border }]} />
+
+              <View style={styles.metaRow}>
+                <Text style={[styles.metaLabel, { color: c.textSecondary }]}>
+                  {state.cancelAtPeriodEnd ? 'Cancels on' : 'Renews on'}
+                </Text>
+                <Text style={[styles.metaValue, { color: c.textPrimary }]}>
+                  {formatDate(state.currentPeriodEnd)}
+                </Text>
+              </View>
+
+              {state.cancelAtPeriodEnd ? (
+                <Badge variant="warning">Cancelling soon</Badge>
+              ) : null}
+
+              <View style={styles.actionsRow}>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onPress={() => setPlanModalVisible(true)}
+                  disabled={actionLoading === 'swap'}
+                >
+                  Change plan
+                </Button>
+                {state.cancelAtPeriodEnd ? (
+                  <Button
+                    variant="primary"
+                    size="md"
+                    onPress={handleResume}
+                    disabled={actionLoading === 'resume'}
+                    leadingIcon={actionLoading === 'resume' ? <ActivityIndicator color="#fff" size="small" /> : null}
+                  >
+                    Resume
+                  </Button>
+                ) : (
+                  <Button
+                    variant="danger"
+                    size="md"
+                    onPress={confirmCancel}
+                    disabled={actionLoading === 'cancel'}
+                    leadingIcon={actionLoading === 'cancel' ? <ActivityIndicator color={c.error} size="small" /> : null}
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </View>
+            </Card>
+
+            {/* Payment method */}
+            <Card padding={Spacing.lg} style={{ gap: Spacing.md }}>
+              <Text style={[styles.label, { color: c.textSecondary }]}>PAYMENT METHOD</Text>
+              {state.paymentMethod ? (
+                <View style={styles.pmRow}>
+                  <View style={[styles.brandChip, { backgroundColor: c.primaryBg }]}>
+                    <Text style={[styles.brandChipText, { color: c.primary }]}>
+                      {state.paymentMethod.brand.toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.pmLast4, { color: c.textPrimary }]}>•••• {state.paymentMethod.last4}</Text>
+                    <Text style={[styles.pmExp, { color: c.textSecondary }]}>
+                      Expires {String(state.paymentMethod.exp_month).padStart(2, '0')}/{state.paymentMethod.exp_year}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <Text style={[styles.empty, { color: c.textSecondary }]}>No payment method on file.</Text>
               )}
-            </View>
-          ))}
-        </View>
+              <Button
+                variant="secondary"
+                size="sm"
+                onPress={handleUpdateCard}
+                disabled={actionLoading === 'update-card'}
+                leadingIcon={actionLoading === 'update-card' ? <ActivityIndicator color={c.primary} size="small" /> : null}
+              >
+                Update card
+              </Button>
+            </Card>
+
+            {/* Invoices */}
+            {state.invoices.length > 0 ? (
+              <Card padding={Spacing.lg} style={{ gap: Spacing.sm }}>
+                <Text style={[styles.label, { color: c.textSecondary }]}>RECENT INVOICES</Text>
+                {state.invoices.map((inv, idx) => (
+                  <Pressable
+                    key={`${inv.date}-${idx}`}
+                    onPress={() => inv.invoice_url && Linking.openURL(inv.invoice_url)}
+                    style={({ pressed }) => [
+                      styles.invRow,
+                      idx > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.borderLight },
+                      pressed && inv.invoice_url && { backgroundColor: c.canvas },
+                    ]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.invDate, { color: c.textPrimary }]}>{formatDate(inv.date)}</Text>
+                      <Text style={[styles.invStatus, { color: c.textSecondary }]}>{inv.status}</Text>
+                    </View>
+                    <Text style={[styles.invAmount, { color: c.textPrimary }]}>
+                      {formatAmount(inv.amount, inv.currency)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </Card>
+            ) : null}
+          </>
+        )}
       </ScrollView>
-    </View>
+
+      {/* Plan change modal */}
+      <Modal
+        visible={planModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPlanModalVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setPlanModalVisible(false)}>
+          <Pressable
+            style={[styles.modalCard, { backgroundColor: c.surface, borderColor: c.border }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={[styles.modalTitle, { color: c.textPrimary }]}>Change plan</Text>
+            <Text style={[styles.modalCopy, { color: c.textSecondary }]}>
+              {side === 'tradie'
+                ? 'Switch your billing interval. Stripe handles the proration automatically.'
+                : 'Switch between Builder and Contractor tiers. Stripe handles the proration.'}
+            </Text>
+            <View style={styles.modalChoices}>
+              {side === 'tradie'
+                ? (['monthly', 'annual'] as BillingInterval[]).map((iv) => {
+                    const active = state.interval === iv;
+                    return (
+                      <Pressable
+                        key={iv}
+                        onPress={() => !active && handlePlanChange(iv)}
+                        disabled={active || actionLoading === 'swap'}
+                        style={[
+                          styles.modalChoice,
+                          {
+                            backgroundColor: active ? c.primaryBg : c.canvas,
+                            borderColor: active ? c.primary : c.border,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.modalChoiceTitle, { color: c.textPrimary }]}>
+                          {iv === 'monthly' ? 'Monthly billing' : 'Annual billing'}
+                        </Text>
+                        <Text style={[styles.modalChoiceMeta, { color: active ? c.primary : c.textSecondary }]}>
+                          {active ? 'Current' : 'Switch'}
+                        </Text>
+                      </Pressable>
+                    );
+                  })
+                : (['builder', 'contractor'] as const).map((tier) => {
+                    const active = state.tier === tier;
+                    const meta = ENTERPRISE_TIERS.find((t) => t.key === tier);
+                    return (
+                      <Pressable
+                        key={tier}
+                        onPress={() => !active && handlePlanChange(tier)}
+                        disabled={active || actionLoading === 'swap'}
+                        style={[
+                          styles.modalChoice,
+                          {
+                            backgroundColor: active ? c.primaryBg : c.canvas,
+                            borderColor: active ? c.primary : c.border,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.modalChoiceTitle, { color: c.textPrimary }]}>{meta?.name}</Text>
+                        <Text style={[styles.modalChoiceMeta, { color: active ? c.primary : c.textSecondary }]}>
+                          {active ? 'Current' : `$${meta?.monthly}/mo`}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+            </View>
+            <View style={styles.modalFooter}>
+              <Button variant="ghost" onPress={() => setPlanModalVisible(false)}>
+                Close
+              </Button>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </AppShell>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 16,
-    paddingHorizontal: 16,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: -0.3,
-  },
-  content: {
-    padding: Spacing.xl,
+  scroll: {
+    padding: Spacing.lg,
+    paddingBottom: Spacing['5xl'],
     gap: Spacing.lg,
   },
-
-  // Card
-  card: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    padding: Spacing.lg,
-    ...Shadows.sm,
-  },
-  cardHeader: {
-    flexDirection: 'row',
+  loadingWrap: {
+    paddingVertical: Spacing['4xl'],
     alignItems: 'center',
-    gap: Spacing.md,
   },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  emptyWrap: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: Spacing['3xl'],
+    gap: Spacing.md,
   },
-  cardTitle: {
-    fontSize: 16,
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
+  },
+  emptyGlyph: {
+    fontSize: 28,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontFamily: FontFamily.bodyBold,
     fontWeight: '700',
-    letterSpacing: -0.2,
+    textAlign: 'center',
   },
-  cardSubtitle: {
+  emptyCopy: {
     fontSize: 13,
-    marginTop: 1,
+    lineHeight: 20,
+    fontFamily: FontFamily.body,
+    textAlign: 'center',
+    maxWidth: 320,
+    marginBottom: Spacing.md,
   },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+  label: {
+    fontSize: 11,
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  divider: {
-    height: 1,
-    marginVertical: Spacing.md,
-  },
-
-  // Detail rows
-  detailRow: {
+  planHead: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  detailLabel: {
-    fontSize: 14,
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  // Manage button
-  manageBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderRadius: Radius.lg,
-    paddingVertical: 12,
-    marginTop: Spacing.md,
-  },
-  manageBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  // Payment method
-  paymentRow: {
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    padding: Spacing.md,
-  },
-  paymentInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: Spacing.md,
   },
-  paymentCard: {
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: 0.5,
+  planName: {
+    fontSize: 20,
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '700',
   },
-  paymentExpiry: {
+  planSub: {
     fontSize: 12,
+    fontFamily: FontFamily.body,
     marginTop: 2,
   },
-
-  // Invoices
-  invoiceRow: {
+  priceCol: {
+    alignItems: 'flex-end',
+  },
+  price: {
+    fontSize: 24,
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  priceSuffix: {
+    fontSize: 11,
+    fontFamily: FontFamily.body,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+  },
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    justifyContent: 'space-between',
   },
-  invoiceDate: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  invoiceAmount: {
-    fontSize: 13,
-    marginTop: 1,
-  },
-  invoiceBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  invoiceBadgeText: {
+  metaLabel: {
     fontSize: 12,
+    fontFamily: FontFamily.body,
+  },
+  metaValue: {
+    fontSize: 13,
+    fontFamily: FontFamily.bodySemiBold,
     fontWeight: '600',
   },
-  invoiceDivider: {
-    height: 1,
+  actionsRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    flexWrap: 'wrap',
+  },
+  pmRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  brandChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  brandChipText: {
+    fontSize: 11,
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  pmLast4: {
+    fontSize: 14,
+    fontFamily: FontFamily.bodySemiBold,
+    fontWeight: '600',
+  },
+  pmExp: {
+    fontSize: 12,
+    fontFamily: FontFamily.body,
+  },
+  empty: {
+    fontSize: 12,
+    fontFamily: FontFamily.body,
+  },
+  invRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    gap: Spacing.md,
+  },
+  invDate: {
+    fontSize: 13,
+    fontFamily: FontFamily.bodySemiBold,
+    fontWeight: '600',
+  },
+  invStatus: {
+    fontSize: 11,
+    fontFamily: FontFamily.body,
+    textTransform: 'capitalize',
+  },
+  invAmount: {
+    fontSize: 13,
+    fontFamily: FontFamily.bodySemiBold,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.lg,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    padding: Spacing['2xl'],
+    gap: Spacing.lg,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '700',
+  },
+  modalCopy: {
+    fontSize: 13,
+    fontFamily: FontFamily.body,
+    lineHeight: 20,
+  },
+  modalChoices: {
+    gap: Spacing.sm,
+  },
+  modalChoice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+  },
+  modalChoiceTitle: {
+    fontSize: 14,
+    fontFamily: FontFamily.bodySemiBold,
+    fontWeight: '600',
+  },
+  modalChoiceMeta: {
+    fontSize: 12,
+    fontFamily: FontFamily.bodyMedium,
+    fontWeight: '500',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
   },
 });

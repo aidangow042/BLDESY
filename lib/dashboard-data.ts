@@ -16,7 +16,7 @@ export type MetricData = {
 
 export type ActivityEvent = {
   id: string;
-  type: 'view' | 'save' | 'quote' | 'review' | 'application_viewed';
+  type: 'view' | 'save' | 'quote' | 'review' | 'application_viewed' | 'application_rejected';
   text: string;
   timestamp: string;
   actionLabel?: string;
@@ -126,6 +126,63 @@ export function useDashboardMetrics(userId: string | null) {
   return { metrics, loading, refresh: fetch };
 }
 
+/**
+ * Application status breakdown — for the dashboard chart + acceptance
+ * rate metric. Mirrors the website's portal page analytics.
+ */
+export type ApplicationBreakdown = {
+  accepted: number;
+  pending: number;
+  rejected: number;
+  total: number;
+  acceptanceRate: number;
+};
+
+export function useApplicationBreakdown(userId: string | null) {
+  const [data, setData] = useState<ApplicationBreakdown>({
+    accepted: 0,
+    pending: 0,
+    rejected: 0,
+    total: 0,
+    acceptanceRate: 0,
+  });
+  const [loading, setLoading] = useState(true);
+
+  const fetch = useCallback(async () => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+    const { data: apps, error } = await supabase
+      .from('applications')
+      .select('status')
+      .eq('builder_id', userId);
+    if (error || !apps) {
+      setLoading(false);
+      return;
+    }
+    let accepted = 0;
+    let pending = 0;
+    let rejected = 0;
+    for (const a of apps as { status: string | null }[]) {
+      if (a.status === 'accepted') accepted += 1;
+      else if (a.status === 'rejected') rejected += 1;
+      else pending += 1;
+    }
+    const total = accepted + pending + rejected;
+    const resolved = accepted + rejected;
+    const acceptanceRate = resolved === 0 ? 0 : Math.round((accepted / resolved) * 100);
+    setData({ accepted, pending, rejected, total, acceptanceRate });
+    setLoading(false);
+  }, [userId]);
+
+  useEffect(() => {
+    fetch();
+  }, [fetch]);
+
+  return { ...data, loading, refresh: fetch };
+}
+
 export function useDashboardActivity(userId: string | null) {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -141,15 +198,32 @@ export function useDashboardActivity(userId: string | null) {
       .order('created_at', { ascending: false })
       .limit(10);
 
-    const activity: ActivityEvent[] = (apps || []).map((a: any) => ({
-      id: a.id,
-      type: a.status === 'accepted' ? 'quote' as const : 'application_viewed' as const,
-      text: a.status === 'accepted'
-        ? `Application accepted for "${a.jobs?.title || 'a job'}"`
-        : `Applied to "${a.jobs?.title || 'a job'}"`,
-      timestamp: relativeTime(a.created_at),
-      actionLabel: a.status === 'pending' ? 'View' : undefined,
-    }));
+    const activity: ActivityEvent[] = (apps || []).map((a: any) => {
+      const title = a.jobs?.title || 'a job';
+      if (a.status === 'accepted') {
+        return {
+          id: a.id,
+          type: 'quote' as const,
+          text: `Application accepted for "${title}"`,
+          timestamp: relativeTime(a.created_at),
+        };
+      }
+      if (a.status === 'rejected') {
+        return {
+          id: a.id,
+          type: 'application_rejected' as const,
+          text: `Application rejected for "${title}"`,
+          timestamp: relativeTime(a.created_at),
+        };
+      }
+      return {
+        id: a.id,
+        type: 'application_viewed' as const,
+        text: `Applied to "${title}"`,
+        timestamp: relativeTime(a.created_at),
+        actionLabel: 'View',
+      };
+    });
 
     setEvents(activity);
     setLoading(false);

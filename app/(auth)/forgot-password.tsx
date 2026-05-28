@@ -1,188 +1,149 @@
-import { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
-import { Link, router } from 'expo-router';
-import { supabase } from '@/lib/supabase';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Link } from 'expo-router';
+
+import { AuthCard } from '@/components/auth/auth-card';
+import { Button, Input } from '@/components/ui';
+import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
-import { friendlyError } from '@/lib/error-messages';
+import { supabase } from '@/lib/supabase';
 
 export default function ForgotPasswordScreen() {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
 
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
+  useEffect(() => {
+    if (error) setError(null);
+  }, [email]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleReset() {
-    if (!email) {
-      Alert.alert('Error', 'Please enter your email address.');
+    if (!email.trim()) {
+      setError('Please enter your email address.');
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    setError(null);
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim());
     setLoading(false);
-    if (error) {
-      Alert.alert('Error', friendlyError(error));
+    if (resetError) {
+      // Generic copy — avoid leaking whether the address is registered.
+      setSent(true);
     } else {
       setSent(true);
     }
   }
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: colors.canvas }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.inner}>
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => [styles.back, pressed && { opacity: 0.7 }]}
-        >
-          <Text style={[styles.backText, { color: colors.tint }]}>Back</Text>
-        </Pressable>
+    <AuthCard>
+      <Text style={[styles.heading, { color: c.textPrimary }]}>Reset password</Text>
 
-        <View style={styles.content}>
-          <Text style={[styles.heading, { color: colors.text }]}>Reset password</Text>
-
-          {sent ? (
-            <View
-              style={[
-                styles.successCard,
-                { backgroundColor: colors.successLight, borderColor: colors.success },
-              ]}
-            >
-              <Text style={[styles.successText, { color: colors.success }]}>
-                Check your inbox -- we've sent a password reset link to {email}.
-              </Text>
-            </View>
-          ) : (
-            <>
-              <Text style={[styles.body, { color: colors.textSecondary }]}>
-                Enter your email and we'll send you a link to reset your password.
-              </Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    color: colors.text,
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-                placeholder="Email"
-                placeholderTextColor={colors.icon}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                value={email}
-                onChangeText={setEmail}
-              />
-              <Pressable
-                style={({ pressed }) => [
-                  styles.button,
-                  { backgroundColor: colors.tint },
-                  Shadows.md,
-                  pressed && { opacity: 0.7 },
-                ]}
-                onPress={handleReset}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.buttonText}>Send reset link</Text>
-                )}
-              </Pressable>
-            </>
-          )}
-
-          <Link href="/(auth)/login" asChild>
-            <Pressable style={({ pressed }) => [pressed && { opacity: 0.7 }]}>
-              <Text style={[styles.link, { color: colors.tint }]}>Back to log in</Text>
-            </Pressable>
-          </Link>
+      {sent ? (
+        <View style={[styles.successBanner, { borderColor: c.successBorder, backgroundColor: c.successBg }]}>
+          <Text style={[styles.successText, { color: c.success }]}>
+            If an account exists for {email}, we&apos;ve sent a password reset link. Check your inbox.
+          </Text>
         </View>
+      ) : (
+        <>
+          <Text style={[styles.body, { color: c.textSecondary }]}>
+            Enter your email and we&apos;ll send you a link to reset your password.
+          </Text>
+
+          {error ? (
+            <View style={[styles.errorBanner, { borderColor: c.error + '33', backgroundColor: c.error + '0D' }]}>
+              <Text style={[styles.errorText, { color: c.error }]}>{error}</Text>
+            </View>
+          ) : null}
+
+          <Input
+            label="Email"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            autoComplete="email"
+            keyboardType="email-address"
+            placeholder="you@example.com.au"
+          />
+
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
+            onPress={handleReset}
+            disabled={loading}
+            leadingIcon={loading ? <ActivityIndicator color="#fff" size="small" /> : null}
+          >
+            {loading ? 'Sending…' : 'Send reset link'}
+          </Button>
+        </>
+      )}
+
+      <View style={styles.footerRow}>
+        <Text style={[styles.footerText, { color: c.textSecondary }]}>Remembered your password?{' '}</Text>
+        <Link href="/(auth)/login" asChild>
+          <Pressable hitSlop={6}>
+            <Text style={[styles.footerLink, { color: c.primary }]}>Log in</Text>
+          </Pressable>
+        </Link>
       </View>
-    </KeyboardAvoidingView>
+    </AuthCard>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  inner: {
-    flex: 1,
-    paddingHorizontal: Spacing['2xl'],
-  },
-  back: {
-    position: 'absolute',
-    top: 64,
-    left: Spacing['2xl'],
-    zIndex: 1,
-    paddingVertical: Spacing.sm,
-    paddingRight: Spacing.lg,
-  },
-  backText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: Spacing.lg,
-  },
   heading: {
-    fontSize: 28,
+    fontSize: 22,
+    fontFamily: FontFamily.bodyBold,
     fontWeight: '700',
-    marginBottom: Spacing.xs,
+    textAlign: 'center',
   },
   body: {
-    fontSize: 15,
+    fontSize: 14,
+    fontFamily: FontFamily.body,
     lineHeight: 22,
+    textAlign: 'center',
   },
-  successCard: {
+  errorBanner: {
     borderWidth: 1,
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
+    borderRadius: Radius.xl,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+  },
+  errorText: {
+    fontSize: 14,
+    fontFamily: FontFamily.body,
+  },
+  successBanner: {
+    borderWidth: 1,
+    borderRadius: Radius.xl,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
   },
   successText: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    fontFamily: FontFamily.bodyMedium,
     fontWeight: '500',
-  },
-  input: {
-    height: 52,
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.lg,
-    fontSize: 15,
-  },
-  button: {
-    height: 52,
-    borderRadius: Radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  link: {
-    fontSize: 15,
-    fontWeight: '600',
+    lineHeight: 22,
     textAlign: 'center',
-    marginTop: Spacing.sm,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  footerText: {
+    fontSize: 14,
+    fontFamily: FontFamily.body,
+  },
+  footerLink: {
+    fontSize: 14,
+    fontFamily: FontFamily.bodySemiBold,
+    fontWeight: '600',
   },
 });

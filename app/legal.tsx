@@ -20,6 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
+import { AppShell } from '@/components/layout';
 import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { legalDocuments } from '@/lib/legal-documents';
@@ -99,46 +100,7 @@ export default function LegalScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.canvas }]}>
-      <View style={headerStyles.container}>
-        <LinearGradient
-          colors={isDark ? ['#042f2e', '#0a3a38', '#134E4A'] : ['#064E3B', '#0F6E56', '#1D9E75']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[headerStyles.gradient, { paddingTop: insets.top + Spacing.lg }]}
-        >
-          <View style={headerStyles.glowWrap} pointerEvents="none">
-            <View style={[headerStyles.glow, isDark && { opacity: 0.06 }]} />
-          </View>
-          <View style={headerStyles.accentLines} pointerEvents="none">
-            <View style={[headerStyles.accentLine, { left: '20%', opacity: 0.04 }]} />
-            <View style={[headerStyles.accentLine, { left: '50%', opacity: 0.03 }]} />
-            <View style={[headerStyles.accentLine, { left: '75%', opacity: 0.025 }]} />
-          </View>
-          <View style={headerStyles.content}>
-            <View style={headerStyles.textCol}>
-              <Text style={headerStyles.title}>Legal</Text>
-              <Text style={headerStyles.subtitle}>Terms, privacy, and policies</Text>
-            </View>
-            <View style={headerStyles.iconCircle}>
-              <MaterialIcons name="gavel" size={22} color="#fff" />
-            </View>
-          </View>
-        </LinearGradient>
-        <LinearGradient
-          colors={['rgba(13,148,136,0.12)', 'transparent']}
-          style={headerStyles.bottomEdge}
-        />
-      </View>
-      <Pressable
-        onPress={() => router.back()}
-        style={[styles.backButton, { top: insets.top + 12 }]}
-        accessibilityRole="button"
-        accessibilityLabel="Go back"
-      >
-        <Ionicons name="arrow-back" size={22} color="#ffffff" />
-      </Pressable>
-
+    <AppShell title="Legal" showBack>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -329,7 +291,7 @@ export default function LegalScreen() {
           </Text>
         </View>
       </ScrollView>
-    </View>
+    </AppShell>
   );
 }
 

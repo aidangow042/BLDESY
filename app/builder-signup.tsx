@@ -20,6 +20,8 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as Location from 'expo-location';
 
 import { ThemedText } from '@/components/themed-text';
+import { AppShell } from '@/components/layout';
+import { useToast } from '@/components/ui';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { geocode, getSuburbSuggestions, getPostcodeForSuburb } from '@/lib/geo';
@@ -56,6 +58,7 @@ export default function BuilderSignupScreen() {
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const toast = useToast();
   const { userId } = useUser();
 
   const [step, setStep] = useState(1);
@@ -152,7 +155,7 @@ export default function BuilderSignupScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please allow location access.');
+        toast.show('Location access denied — enable it in Settings', { variant: 'warning' });
         return;
       }
       const loc = await Location.getCurrentPositionAsync({});
@@ -167,7 +170,7 @@ export default function BuilderSignupScreen() {
         setPostcode(pc);
       }
     } catch {
-      Alert.alert('Error', 'Could not get your location. Please enter it manually.');
+      toast.show("Couldn't get location — enter it manually", { variant: 'error' });
     }
   }
 
@@ -194,7 +197,7 @@ export default function BuilderSignupScreen() {
   function handleContinue() {
     if (step === 1) {
       const err = validateStep1();
-      if (err) { Alert.alert('Missing info', err); return; }
+      if (err) { toast.show(err, { variant: 'warning' }); return; }
       animateToStep(1, 2);
     } else if (step === 2) {
       animateToStep(2, 3);
@@ -205,12 +208,12 @@ export default function BuilderSignupScreen() {
 
   async function handleSubmit() {
     const err = validateStep3();
-    if (err) { Alert.alert('Missing info', err); return; }
+    if (err) { toast.show(err, { variant: 'warning' }); return; }
 
     setSubmitting(true);
 
     if (!userId) {
-      Alert.alert('Error', 'You must be signed in to register as a builder.');
+      toast.show('Sign in required to register as a builder', { variant: 'warning' });
       setSubmitting(false);
       return;
     }
@@ -243,9 +246,9 @@ export default function BuilderSignupScreen() {
 
     if (insertError) {
       if (insertError.message.includes('duplicate')) {
-        Alert.alert('Already registered', 'You already have a builder profile.');
+        toast.show('You already have a builder profile', { variant: 'warning' });
       } else {
-        Alert.alert('Error', insertError.message);
+        toast.show("Couldn't register — try again", { variant: 'error' });
       }
       return;
     }
@@ -683,23 +686,11 @@ export default function BuilderSignupScreen() {
   /* ───────────── Main render ───────────── */
 
   return (
-    <View style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
-      {/* Header */}
-      <LinearGradient colors={['#0F4F3E', '#0F6E56']} style={[styles.header, { paddingTop: insets.top }]}>
-        <Pressable
-          onPress={() => (step > 1 ? animateToStep(step, step - 1) : router.back())}
-          style={styles.headerBack}
-          accessibilityRole="button"
-          accessibilityLabel={step > 1 ? 'Back' : 'Cancel'}
-        >
-          <Ionicons name="arrow-back" size={22} color="#fff" />
-        </Pressable>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Register as a Builder</Text>
-          <Text style={styles.headerSubtitle}>Join the BLDESY network</Text>
-        </View>
-        <Text style={styles.headerStepText}>{step}/3</Text>
-      </LinearGradient>
+    <AppShell
+      title={`Register as a Builder · ${step}/3`}
+      showBack
+      onBackPress={() => (step > 1 ? animateToStep(step, step - 1) : router.back())}
+    >
 
       {/* Trust bar */}
       <View style={[styles.trustBar, { backgroundColor: '#E1F5EE' }]}>
@@ -780,7 +771,7 @@ export default function BuilderSignupScreen() {
           </Pressable>
         )}
       </View>
-    </View>
+    </AppShell>
   );
 }
 

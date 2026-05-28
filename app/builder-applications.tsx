@@ -12,7 +12,7 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ThemedText } from '@/components/themed-text';
-import { PageHeader } from '@/components/page-header';
+import { AppShell } from '@/components/layout';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
@@ -132,20 +132,7 @@ export default function MyApplicationsScreen() {
   }
 
   return (
-    <View style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
-      <PageHeader
-        title="My Applications"
-        subtitle="Track your job applications"
-        variant="professional"
-      />
-      <Pressable
-        onPress={() => router.back()}
-        style={[styles.backButton, { top: insets.top + 12 }]}
-        accessibilityRole="button"
-        accessibilityLabel="Go back"
-      >
-        <Ionicons name="arrow-back" size={22} color="#ffffff" />
-      </Pressable>
+    <AppShell title="My Applications" showBack>
 
       {loading ? (
         <ActivityIndicator color={colors.tint} style={{ marginTop: Spacing['5xl'] }} />
@@ -185,7 +172,7 @@ export default function MyApplicationsScreen() {
           }
         />
       )}
-    </View>
+    </AppShell>
   );
 }
 

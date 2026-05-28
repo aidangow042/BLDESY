@@ -25,7 +25,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
 import { getSuburbSuggestions } from '@/lib/geo';
-import { PageHeader } from '@/components/page-header';
+import { AppShell } from '@/components/layout';
 
 const COMPANY_SIZES = ['1-10', '11-50', '51-200', '200+'];
 const STEP_LABELS = ['Company Details', 'Profile', 'Trades & Credentials', 'Review'];
@@ -178,7 +178,7 @@ export default function EnterpriseSignupScreen() {
         </View>
 
         <Text style={[styles.label, { color: colors.textSecondary }]}>Industry Focus</Text>
-        <TextInput style={[styles.input, { backgroundColor: inputBg, borderColor: inputBorder, color: colors.text }]} value={industryFocus} onChangeText={setIndustryFocus} placeholder="e.g. Residential construction" placeholderTextColor={colors.textSecondary} />
+        <TextInput style={[styles.input, { backgroundColor: inputBg, borderColor: inputBorder, color: colors.text }]} value={industryFocus} onChangeText={setIndustryFocus} placeholder="e.g. Home builds, renovations" placeholderTextColor={colors.textSecondary} />
 
         <Text style={[styles.label, { color: colors.textSecondary }]}>About Your Company</Text>
         <TextInput style={[styles.input, styles.textArea, { backgroundColor: inputBg, borderColor: inputBorder, color: colors.text }]} value={bio} onChangeText={setBio} placeholder="Tell tradies about your company..." placeholderTextColor={colors.textSecondary} multiline numberOfLines={4} textAlignVertical="top" />
@@ -252,8 +252,7 @@ export default function EnterpriseSignupScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.canvas }]}>
-      <PageHeader title="Enterprise Signup" subtitle="Register your company" />
+    <AppShell title="Enterprise Signup" showBack>
 
       {/* Step indicators */}
       <View style={styles.stepIndicators}>
@@ -304,7 +303,7 @@ export default function EnterpriseSignupScreen() {
           )}
         </Pressable>
       </View>
-    </View>
+    </AppShell>
   );
 }
 

@@ -15,7 +15,11 @@
         "NSCameraUsageDescription": "BLDESY! needs camera access so you can take photos of your projects and job sites.",
         "NSPhotoLibraryUsageDescription": "BLDESY! needs photo library access so you can upload project photos and job images.",
         "NSPhotoLibraryAddUsageDescription": "BLDESY! needs permission to save photos to your library.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["remote-notification"]
+      },
+      "entitlements": {
+        "aps-environment": "production"
       },
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
@@ -71,6 +75,14 @@
         {
           "cameraPermission": "BLDESY! needs camera access so you can take photos of your projects and job sites.",
           "photosPermission": "BLDESY! needs photo library access so you can upload project photos and job images."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#0D9488",
+          "defaultChannel": "default"
         }
       ]
     ],

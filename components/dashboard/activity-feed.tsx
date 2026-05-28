@@ -10,6 +10,7 @@ const EVENT_ICONS: Record<ActivityEvent['type'], React.ComponentProps<typeof Ion
   quote: 'mail-outline',
   review: 'star-outline',
   application_viewed: 'document-text-outline',
+  application_rejected: 'close-circle-outline',
 };
 
 type Props = {

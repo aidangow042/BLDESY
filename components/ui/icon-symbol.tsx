@@ -26,6 +26,9 @@ const MAPPING = {
   'person.crop.circle': 'person-outline',
   'map': 'map',
   'map.fill': 'map',
+  'magnifyingglass': 'search',
+  'plus.circle.fill': 'add-circle',
+  'building.2': 'business',
 } as IconMapping;
 
 /**

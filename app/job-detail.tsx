@@ -23,11 +23,14 @@ import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from '@gorhom/botto
 import Animated, { FadeInUp } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
+import { AppShell } from '@/components/layout';
+import { useToast } from '@/components/ui';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
 import { getRelativeTime, getDisplayName, getInitials, URGENCY_CONFIG } from '@/lib/trade-utils';
+import { isSubscriptionActive, useTradieSubscription } from '@/lib/subscription';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PHOTO_WIDTH = SCREEN_WIDTH - 48;
@@ -82,8 +85,10 @@ export default function JobDetailScreen() {
   const colors = Colors[colorScheme];
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const toast = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { userId } = useUser();
+  const tradieSub = useTradieSubscription();
 
   const [job, setJob] = useState<Job | null>(null);
   const [customer, setCustomer] = useState<CustomerInfo | null>(null);
@@ -218,13 +223,32 @@ export default function JobDetailScreen() {
       sheetRef.current?.expand();
       return;
     }
-
-    setApplying(true);
     if (!userId) {
-      Alert.alert('Error', 'You must be logged in to apply.');
-      setApplying(false);
+      toast.show('Sign in to apply for jobs', { variant: 'warning' });
       return;
     }
+    // Gate the apply action on an active tradie subscription. Customers
+    // posting jobs aren't gated — only tradies applying.
+    if (!isSubscriptionActive(tradieSub.status)) {
+      Alert.alert(
+        'Subscribe to apply',
+        'A flat monthly subscription unlocks unlimited job applications.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          {
+            text: 'See plans',
+            onPress: () =>
+              router.push({
+                pathname: '/subscribe',
+                params: { side: 'tradie', tier: 'trade', interval: 'monthly' },
+              } as any),
+          },
+        ],
+      );
+      return;
+    }
+
+    setApplying(true);
 
     const { error: insertError } = await supabase.from('applications').insert({
       job_id: id,
@@ -240,7 +264,7 @@ export default function JobDetailScreen() {
         setAlreadyApplied(true);
         sheetRef.current?.expand();
       } else {
-        Alert.alert('Error', insertError.message);
+        toast.show("Couldn't submit application", { variant: 'error' });
       }
       return;
     }
@@ -262,38 +286,22 @@ export default function JobDetailScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: '#F5F2EC' }]}>
-        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-          <View style={styles.headerRow}>
-            <Pressable onPress={() => router.back()} style={styles.backBtn}>
-              <Ionicons name="arrow-back" size={20} color="#fff" />
-            </Pressable>
-            <Text style={styles.headerTitle}>Loading...</Text>
-          </View>
-        </View>
-        <ActivityIndicator color="#0F6E56" style={{ marginTop: 60 }} />
-      </View>
+      <AppShell title="Loading…" showBack>
+        <ActivityIndicator color={colors.primary} style={{ marginTop: 60 }} />
+      </AppShell>
     );
   }
 
   if (!job) {
     return (
-      <View style={[styles.container, { backgroundColor: '#F5F2EC' }]}>
-        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-          <View style={styles.headerRow}>
-            <Pressable onPress={() => router.back()} style={styles.backBtn}>
-              <Ionicons name="arrow-back" size={20} color="#fff" />
-            </Pressable>
-            <Text style={styles.headerTitle}>Job not found</Text>
-          </View>
-        </View>
+      <AppShell title="Job not found" showBack>
         <View style={styles.centeredContainer}>
           <ThemedText type="subtitle">This job is no longer available</ThemedText>
           <Pressable onPress={() => router.back()}>
-            <ThemedText style={{ color: '#0F6E56', fontWeight: '600', fontSize: 16, marginTop: 8 }}>Go back</ThemedText>
+            <ThemedText style={{ color: colors.primary, fontWeight: '600', fontSize: 16, marginTop: 8 }}>Go back</ThemedText>
           </Pressable>
         </View>
-      </View>
+      </AppShell>
     );
   }
 
@@ -308,29 +316,21 @@ export default function JobDetailScreen() {
   /* ─── Render ─────────────────────────────────────────────── */
 
   return (
-    <View style={[styles.container, { backgroundColor: '#F5F2EC' }]}>
+    <AppShell title={job.title} showBack>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 120 }}
       >
-        {/* ── Slim Header — back + title + pills ── */}
-        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-          <View style={styles.headerRow}>
-            <Pressable onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Go back">
-              <Ionicons name="arrow-back" size={20} color="#fff" />
-            </Pressable>
-            <Text style={styles.headerTitle} numberOfLines={1}>{job.title}</Text>
+        {/* Meta strip — trade + urgency pills + posted-time */}
+        <View style={[styles.metaStrip, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+          <View style={[styles.headerTradePill, { backgroundColor: colors.primaryBg }]}>
+            <Text style={[styles.headerTradePillText, { color: colors.primary }]}>{job.trade_category}</Text>
           </View>
-          <View style={styles.headerSubRow}>
-            <View style={styles.headerTradePill}>
-              <Text style={styles.headerTradePillText}>{job.trade_category}</Text>
-            </View>
-            <View style={[styles.headerUrgencyPill, { backgroundColor: urg.bg }]}>
-              <Ionicons name={urg.icon as any} size={12} color={urg.color} />
-              <Text style={[styles.headerUrgencyText, { color: urg.color }]}>{urg.label}</Text>
-            </View>
-            <Text style={styles.headerSubText}>{getRelativeTime(job.created_at)}</Text>
+          <View style={[styles.headerUrgencyPill, { backgroundColor: urg.bg }]}>
+            <Ionicons name={urg.icon as any} size={12} color={urg.color} />
+            <Text style={[styles.headerUrgencyText, { color: urg.color }]}>{urg.label}</Text>
           </View>
+          <Text style={[styles.headerSubText, { color: colors.textSecondary }]}>{getRelativeTime(job.created_at)}</Text>
         </View>
 
         <Animated.View entering={FadeInUp.duration(300).delay(100)}>
@@ -342,7 +342,7 @@ export default function JobDetailScreen() {
                 style={({ pressed }) => [styles.contactBtn, styles.contactBtnCall, pressed && { opacity: 0.8 }]}
                 onPress={async () => {
                   await Clipboard.setStringAsync(contactInfo!.contact_phone!);
-                  Alert.alert('Copied', `${contactInfo?.contact_phone} copied to clipboard`);
+                  toast.show('Phone copied to clipboard', { variant: 'success' });
                 }}
               >
                 <Ionicons name="call" size={18} color="#059669" />
@@ -355,7 +355,7 @@ export default function JobDetailScreen() {
                 style={({ pressed }) => [styles.contactBtn, styles.contactBtnEmail, pressed && { opacity: 0.8 }]}
                 onPress={async () => {
                   await Clipboard.setStringAsync(contactInfo!.contact_email!);
-                  Alert.alert('Copied', `${contactInfo?.contact_email} copied to clipboard`);
+                  toast.show('Email copied to clipboard', { variant: 'success' });
                 }}
               >
                 <Ionicons name="mail" size={18} color="#2563EB" />
@@ -503,7 +503,7 @@ export default function JobDetailScreen() {
                           .from('job-documents')
                           .createSignedUrl(doc.file_path, 3600);
                         if (data?.signedUrl) Linking.openURL(data.signedUrl);
-                        else Alert.alert('Error', 'Could not open document');
+                        else toast.show("Couldn't open document", { variant: 'error' });
                       }
                     }}
                   >
@@ -544,7 +544,7 @@ export default function JobDetailScreen() {
                 style={({ pressed }) => [styles.footerIconBtn, styles.footerCallBtn, pressed && { opacity: 0.8 }]}
                 onPress={async () => {
                   await Clipboard.setStringAsync(contactInfo!.contact_phone!);
-                  Alert.alert('Copied', `${contactInfo?.contact_phone} copied to clipboard`);
+                  toast.show('Phone copied to clipboard', { variant: 'success' });
                 }}
                 accessibilityRole="button"
                 accessibilityLabel="Copy phone number"
@@ -557,7 +557,7 @@ export default function JobDetailScreen() {
                 style={({ pressed }) => [styles.footerIconBtn, styles.footerEmailBtn, pressed && { opacity: 0.8 }]}
                 onPress={async () => {
                   await Clipboard.setStringAsync(contactInfo!.contact_email!);
-                  Alert.alert('Copied', `${contactInfo?.contact_email} copied to clipboard`);
+                  toast.show('Email copied to clipboard', { variant: 'success' });
                 }}
                 accessibilityRole="button"
                 accessibilityLabel="Copy email address"
@@ -662,7 +662,7 @@ export default function JobDetailScreen() {
                   style={({ pressed }) => [styles.contactRow, pressed && { opacity: 0.7 }]}
                   onPress={async () => {
                     await Clipboard.setStringAsync(contactInfo!.contact_phone!);
-                    Alert.alert('Copied', `${contactInfo?.contact_phone} copied to clipboard`);
+                    toast.show('Phone copied to clipboard', { variant: 'success' });
                   }}
                 >
                   <View style={[styles.contactIcon, { backgroundColor: '#ECFDF5' }]}>
@@ -681,7 +681,7 @@ export default function JobDetailScreen() {
                   style={({ pressed }) => [styles.contactRow, pressed && { opacity: 0.7 }]}
                   onPress={async () => {
                     await Clipboard.setStringAsync(contactInfo!.contact_email!);
-                    Alert.alert('Copied', `${contactInfo?.contact_email} copied to clipboard`);
+                    toast.show('Email copied to clipboard', { variant: 'success' });
                   }}
                 >
                   <View style={[styles.contactIcon, { backgroundColor: '#EFF6FF' }]}>
@@ -719,7 +719,7 @@ export default function JobDetailScreen() {
           )}
         </BottomSheetView>
       </BottomSheet>
-    </View>
+    </AppShell>
   );
 }
 
@@ -728,6 +728,17 @@ export default function JobDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+
+  /* Meta strip — appears below AppShell header */
+  metaStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexWrap: 'wrap',
   },
 
   /* Header */

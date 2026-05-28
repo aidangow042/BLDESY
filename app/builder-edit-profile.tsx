@@ -23,13 +23,15 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as ImagePicker from 'expo-image-picker';
 
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
+import { AppShell } from '@/components/layout';
+import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { geocode } from '@/lib/geo';
 import { uploadImage, uploadImages, isLocalUri } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
 import { VerifyCredentialsForm } from '@/components/builder/verify-credentials-form';
+import { InsuranceSlots } from '@/components/builder/insurance-slots';
 import { friendlyError } from '@/lib/error-messages';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -1909,23 +1911,12 @@ export default function EditProfileScreen() {
   // ─── Main render ─────────────────────────────────────────────────────
 
   return (
-    <View style={[styles.safeArea, { backgroundColor: bgCanvas }]}>
-      {/* Teal gradient header */}
-      <LinearGradient colors={['#0F4F3E', '#0F6E56']} style={[styles.header, { paddingTop: insets.top }]}>
-        <Pressable
-          onPress={() => (step > 1 ? animateToStep(step, step - 1) : router.back())}
-          style={styles.headerBack}
-          accessibilityRole="button"
-          accessibilityLabel={step > 1 ? 'Back' : 'Cancel'}
-        >
-          <Ionicons name="arrow-back" size={22} color="#fff" />
-        </Pressable>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Edit Profile</Text>
-          <Text style={styles.headerSubtitle}>Update your business profile</Text>
-        </View>
-        <Text style={styles.headerStepText}>{step}/5</Text>
-      </LinearGradient>
+    <AppShell
+      title={`Edit Profile · ${step}/5`}
+      showBack
+      onBackPress={() => (step > 1 ? animateToStep(step, step - 1) : router.back())}
+      background={bgCanvas}
+    >
 
       {/* Progress dots */}
       {renderProgressBar()}
@@ -1950,6 +1941,18 @@ export default function EditProfileScreen() {
                   existingCredentials={credentialsVerified}
                   onVerified={(creds) => setCredentialsVerified(creds)}
                 />
+                <View style={{ marginTop: Spacing['2xl'], gap: Spacing.md }}>
+                  <Text style={[Type.h2, { color: colors.text }]}>Insurance</Text>
+                  <Text style={[Type.caption, { color: colors.textSecondary }]}>
+                    Upload your Certificate of Currency for each policy. Our AI extracts insurer, coverage and expiry, then verifies it against known providers.
+                  </Text>
+                  <InsuranceSlots
+                    credentials={credentialsVerified}
+                    abnEntityName={credentialsVerified?.abn?.entity_name ?? null}
+                    profileType="builder"
+                    onUpdated={(merged) => setCredentialsVerified(merged)}
+                  />
+                </View>
               </View>
             )}
           </Animated.View>
@@ -2019,7 +2022,7 @@ export default function EditProfileScreen() {
           </Pressable>
         )}
       </View>
-    </View>
+    </AppShell>
   );
 }
 

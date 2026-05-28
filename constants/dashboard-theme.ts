@@ -1,66 +1,81 @@
 /**
- * Builder Dashboard — dark teal premium theme.
- * Separate from the customer-facing theme in theme.ts.
+ * Builder Dashboard tokens. Re-aligned to mirror the website's portal — same
+ * `canvas` / `surface` / `primary` / `text-*` tokens used by every other
+ * screen. The dashboard used to ship its own dark-teal palette; that's gone.
+ *
+ * Existing dashboard components still import `DashboardColors`/`DashboardFonts`/
+ * `DashboardShadows`, so the shape is preserved — only the values change. No
+ * component rewrites needed.
+ *
+ * If a dashboard component needs a fresh primitive (Card, Button, Badge),
+ * grab it from `@/components/ui` like every other screen.
  */
 
 import { Platform } from 'react-native';
 
-export const DashboardColors = {
-  // Backgrounds
-  base: '#0A3D2F',
-  surface: '#0F4F3E',
-  surfaceLight: '#145C4A',
+import { Colors, FontFamily } from './theme';
 
-  // Accent
-  accent: '#1D9E75',
-  accentLight: '#2BB88A',
-  accentDim: 'rgba(29,158,117,0.15)',
+/* The dashboard reads light-mode values directly. Dark mode is rare in this
+   surface (the portal is on-the-clock work), but if you need dark support
+   switch to `Colors[useColorScheme() ?? 'light']` inline at the call site. */
+const c = Colors.light;
+
+export const DashboardColors = {
+  // Backgrounds — page canvas + cards
+  base: c.canvas,
+  surface: c.surface,
+  surfaceLight: c.canvas,
+
+  // Accent — primary brand teal
+  accent: c.primary,
+  accentLight: c.primary,
+  accentDim: c.primaryBg,
 
   // Text
-  textPrimary: '#FFFFFF',
-  textSecondary: 'rgba(255,255,255,0.65)',
-  textMuted: 'rgba(255,255,255,0.4)',
+  textPrimary: c.textPrimary,
+  textSecondary: c.textSecondary,
+  textMuted: c.textSecondary + '99', // ~60% alpha
 
   // Borders & dividers
-  border: 'rgba(255,255,255,0.08)',
-  borderLight: 'rgba(255,255,255,0.12)',
+  border: c.border,
+  borderLight: c.borderLight,
 
   // Semantic
-  positive: '#34D399',
-  negative: '#F87171',
-  warning: '#FBBF24',
+  positive: c.success,
+  negative: c.error,
+  warning: c.warning,
 
   // Badges & indicators
-  badgeRed: '#EF4444',
-  onlineDot: '#22C55E',
+  badgeRed: c.error,
+  onlineDot: c.success,
 } as const;
 
 export const DashboardFonts = {
-  regular: 'DMSans_400Regular',
-  medium: 'DMSans_500Medium',
-  semiBold: 'DMSans_600SemiBold',
-  bold: 'DMSans_700Bold',
+  regular:  FontFamily.body,
+  medium:   FontFamily.bodyMedium,
+  semiBold: FontFamily.bodySemiBold,
+  bold:     FontFamily.bodyBold,
 } as const;
 
 export const DashboardShadows = {
   card: Platform.select({
     ios: {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.3,
+      shadowColor: '#0f172a',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.08,
       shadowRadius: 6,
     },
-    android: { elevation: 4 },
+    android: { elevation: 3 },
     default: {},
   }) as Record<string, any>,
   subtle: Platform.select({
     ios: {
-      shadowColor: '#000',
+      shadowColor: '#0f172a',
       shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.2,
-      shadowRadius: 3,
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
     },
-    android: { elevation: 2 },
+    android: { elevation: 1 },
     default: {},
   }) as Record<string, any>,
 };
