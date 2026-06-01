@@ -38,6 +38,7 @@ import { addRecentProfile } from '@/lib/recent-profiles';
 import { CredentialBadges } from '@/components/builder/credential-badges';
 import { StarRating } from '@/components/ui/star-rating';
 import { friendlyError } from '@/lib/error-messages';
+import { getSpecialisationName } from '@/lib/trade-specialisations';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COVER_HEIGHT = 260;
@@ -51,6 +52,8 @@ type BuilderProfile = {
   business_name: string;
   bio: string | null;
   trade_category: string;
+  trade_categories?: string[] | null;
+  specialisations?: Record<string, string[]> | null;
   suburb: string;
   postcode: string;
   website: string | null;
@@ -658,7 +661,7 @@ export default function BuilderProfileScreen() {
 
     const { data, error: fetchError } = await supabase
       .from('builder_profiles')
-      .select('id, user_id, business_name, trade_category, suburb, postcode, bio, website, profile_photo_url, cover_photo_url, projects, specialties, credentials, credentials_verified, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km, faqs, team_members')
+      .select('id, user_id, business_name, trade_category, trade_categories, suburb, postcode, bio, website, profile_photo_url, cover_photo_url, projects, specialties, specialisations, credentials, credentials_verified, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km, faqs, team_members')
       .eq('id', id)
       .single();
 
@@ -828,13 +831,37 @@ export default function BuilderProfileScreen() {
   }
 
   // Derive display data from real builder object
-  const builderProjects: Project[] = (builder.projects ?? []).map(projectToDisplay);
+  const builderProjects: Project[] = (Array.isArray(builder.projects) ? builder.projects : []).map(projectToDisplay);
   const totalVideos = builderProjects.reduce((acc: number, p) => acc + p.media.filter(m => m.type === 'video').length, 0);
   const displayProjects = showAllProjects ? builderProjects : builderProjects.slice(0, 3);
   const displayReviews = showAllReviews ? reviews : reviews.slice(0, 3);
   const bio = builder.bio ?? '';
-  const builderSpecialties = builder.specialties ?? [];
-  const builderCredentials = builder.credentials ?? [];
+  // Some legacy builder records store credentials/specialties as JSONB objects
+  // instead of arrays. Defensive guards prevent .filter() / .map() from
+  // crashing the screen when the shape is unexpected.
+  const builderSpecialties = Array.isArray(builder.specialties) ? builder.specialties : [];
+  // Resolve sub-trade specialisations from the JSONB map to display names.
+  // Shape is { [tradeSlug]: string[] }; resolve each slug scoped to its trade
+  // (slugs can collide across trades). Guarded so a malformed map can't crash.
+  const builderTrades = Array.isArray(builder.trade_categories) && builder.trade_categories.length > 0
+    ? builder.trade_categories
+    : [builder.trade_category];
+  const specialisationsMap =
+    builder.specialisations && typeof builder.specialisations === 'object' && !Array.isArray(builder.specialisations)
+      ? builder.specialisations
+      : {};
+  const resolvedSpecialisations: string[] = [];
+  for (const trade of builderTrades) {
+    const slugs = specialisationsMap[trade];
+    if (!Array.isArray(slugs)) continue;
+    for (const slug of slugs) {
+      const name = getSpecialisationName(trade, slug);
+      if (name && !resolvedSpecialisations.includes(name)) resolvedSpecialisations.push(name);
+    }
+  }
+  // Prefer structured specialisations; fall back to legacy free-form specialties.
+  const useResolvedSpecialisations = resolvedSpecialisations.length > 0;
+  const builderCredentials = Array.isArray(builder.credentials) ? builder.credentials : [];
   const estYear = builder.established_year;
   const yearsInBusiness = estYear ? new Date().getFullYear() - estYear : null;
   const totalPhotos = builderProjects.reduce((acc: number, p) => acc + p.media.length, 0);
@@ -1072,18 +1099,24 @@ export default function BuilderProfileScreen() {
         </View>
 
         {/* ─── SPECIALTIES ─── */}
-        {builderSpecialties.length > 0 && (
+        {(useResolvedSpecialisations || builderSpecialties.length > 0) && (
           <View style={[styles.sectionContainer, styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <SectionHeader title="Specialties" colors={colors} />
             <View style={styles.chipWrap}>
-              {builderSpecialties.map(spec => {
-                const titleCase = spec.replace(/\b\w/g, c => c.toUpperCase());
-                return (
-                  <View key={spec} style={[styles.chip, { borderColor: teal, backgroundColor: tealBg }]}>
-                    <Text style={[styles.chipText, { color: teal }]}>{titleCase}</Text>
-                  </View>
-                );
-              })}
+              {useResolvedSpecialisations
+                ? resolvedSpecialisations.map(name => (
+                    <View key={name} style={[styles.chip, { borderColor: teal, backgroundColor: tealBg }]}>
+                      <Text style={[styles.chipText, { color: teal }]}>{name}</Text>
+                    </View>
+                  ))
+                : builderSpecialties.map(spec => {
+                    const titleCase = spec.replace(/\b\w/g, c => c.toUpperCase());
+                    return (
+                      <View key={spec} style={[styles.chip, { borderColor: teal, backgroundColor: tealBg }]}>
+                        <Text style={[styles.chipText, { color: teal }]}>{titleCase}</Text>
+                      </View>
+                    );
+                  })}
             </View>
           </View>
         )}
@@ -1185,7 +1218,7 @@ export default function BuilderProfileScreen() {
         </View>
 
         {/* ─── TEAM MEMBERS ─── */}
-        {(builder.team_members ?? []).length > 0 && (
+        {(Array.isArray(builder.team_members) ? builder.team_members : []).length > 0 && (
           <View style={[styles.sectionContainer, styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <SectionHeader title="Meet the Team" colors={colors} />
             <ScrollView
@@ -1412,7 +1445,7 @@ export default function BuilderProfileScreen() {
         )}
 
         {/* ─── FAQ (fold-out) ─── */}
-        {(builder.faqs ?? []).length > 0 && (
+        {(Array.isArray(builder.faqs) ? builder.faqs : []).length > 0 && (
           <View style={[styles.sectionContainer, styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Pressable
               onPress={() => setFaqOpen(!faqOpen)}
@@ -1424,7 +1457,7 @@ export default function BuilderProfileScreen() {
               <Text style={[styles.foldoutTitle, { color: colors.text }]}>FAQ</Text>
               <Ionicons name={faqOpen ? 'chevron-up' : 'chevron-down'} size={20} color={teal} />
             </Pressable>
-            {faqOpen && (builder.faqs ?? []).map((faq, idx) => {
+            {faqOpen && (Array.isArray(builder.faqs) ? builder.faqs : []).map((faq, idx) => {
               const isOpen = expandedFAQs.has(faq.id);
               return (
                 <Pressable

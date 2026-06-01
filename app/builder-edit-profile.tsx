@@ -24,6 +24,7 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { ThemedText } from '@/components/themed-text';
 import { AppShell } from '@/components/layout';
+import { useToast } from '@/components/ui';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { geocode } from '@/lib/geo';
@@ -33,6 +34,17 @@ import { useUser } from '@/lib/auth-context';
 import { VerifyCredentialsForm } from '@/components/builder/verify-credentials-form';
 import { InsuranceSlots } from '@/components/builder/insurance-slots';
 import { friendlyError } from '@/lib/error-messages';
+import {
+  TRADE_CATALOGUE,
+  tradeDisplayName,
+} from '@/components/builder/trade-catalogue';
+import {
+  getSpecialisationsForTrade,
+  hasSpecialisations,
+  sanitiseSpecialisations,
+  type BuilderSpecialisations,
+} from '@/lib/trade-specialisations';
+import { requiresLicence, licenceCoversTrade } from '@/lib/licence-coverage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COVER_HEIGHT = 180;
@@ -66,24 +78,10 @@ const AVAILABILITY_OPTIONS = [
   { label: 'Unavailable', value: 'unavailable', icon: '🔴' },
 ];
 
-const SPECIALTY_SUGGESTIONS = [
-  'Knock Down Rebuild',
-  'Granny Flats',
-  'Second Storey Extensions',
-  'Bathroom Renovations',
-  'Kitchen Renovations',
-  'Decks & Pergolas',
-  'Custom Homes',
-  'Heritage Restorations',
-  'Commercial Fit-outs',
-  'Roofing',
-  'Landscaping',
-  'Fencing',
-  'Painting',
-  'Tiling',
-  'Concrete Work',
-  'Retaining Walls',
-];
+// State options for the inline "verify & add a licensed trade" flow. Mirrors
+// the segmented states used in verify-credentials-form.tsx (verify-credentials
+// currently supports NSW + QLD registers).
+const ADD_TRADE_STATES = ['NSW', 'QLD'] as const;
 
 const TEAM_SIZE_OPTIONS = ['Solo', '2-3 people', '4-5 people', '6-10 people', '10+ people'];
 
@@ -158,6 +156,7 @@ export default function EditProfileScreen() {
   const bgCanvas = colors.canvas;
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const toast = useToast();
   const { userId } = useUser();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -168,7 +167,7 @@ export default function EditProfileScreen() {
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const dotWidths = useRef(
-    [1, 2, 3, 4, 5].map((i) => new Animated.Value(i === 1 ? 24 : 8)),
+    STEP_LABELS.map((_, i) => new Animated.Value(i === 0 ? 24 : 8)),
   ).current;
 
   function animateToStep(from: number, to: number) {
@@ -207,6 +206,20 @@ export default function EditProfileScreen() {
   const [bio, setBio] = useState('');
   const [tradeCategory, setTradeCategory] = useState('');
 
+  // Trades — multi-trade. selectedTrades[0] is the primary trade. tradeCategory
+  // (single) is still tracked for the legacy column + VerifyCredentialsForm prop.
+  const [selectedTrades, setSelectedTrades] = useState<string[]>([]);
+
+  // Add-trade UI state
+  const [tradePickerOpen, setTradePickerOpen] = useState(false);
+  // When a picked trade needs a licence we don't yet hold, we stage it here and
+  // show an inline verify form instead of adding immediately.
+  const [pendingTrade, setPendingTrade] = useState<{ slug: string; name: string } | null>(null);
+  const [pendingState, setPendingState] = useState<(typeof ADD_TRADE_STATES)[number]>('NSW');
+  const [pendingLicenceNumber, setPendingLicenceNumber] = useState('');
+  const [verifyingTrade, setVerifyingTrade] = useState(false);
+  const [tradeVerifyError, setTradeVerifyError] = useState<string | null>(null);
+
   // Credentials
   const [abn, setAbn] = useState('');
   const [licenceNumber, setLicenceNumber] = useState('');
@@ -229,9 +242,9 @@ export default function EditProfileScreen() {
   const [availabilityNote, setAvailabilityNote] = useState('');
   const [responseTime, setResponseTime] = useState('Within 2 hours');
 
-  // Specialties
-  const [specialties, setSpecialties] = useState<string[]>([]);
-  const [customSpecialty, setCustomSpecialty] = useState('');
+  // Specialisations — structured, per-trade sub-trade slugs.
+  // Shape: { [tradeSlug]: string[] } (builder_profiles.specialisations JSONB).
+  const [specialisations, setSpecialisations] = useState<BuilderSpecialisations>({});
 
   // Projects
   const [projects, setProjects] = useState<ProjectDraft[]>([]);
@@ -261,7 +274,7 @@ export default function EditProfileScreen() {
 
     const { data, error } = await supabase
       .from('builder_profiles')
-      .select('id, user_id, business_name, trade_category, suburb, postcode, bio, phone, email, website, profile_photo_url, cover_photo_url, projects, specialties, credentials, credentials_verified, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km')
+      .select('id, user_id, business_name, trade_category, trade_categories, suburb, postcode, bio, phone, email, website, profile_photo_url, cover_photo_url, projects, specialties, specialisations, credentials, credentials_verified, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km')
       .eq('user_id', userId)
       .maybeSingle();
 
@@ -279,7 +292,17 @@ export default function EditProfileScreen() {
       setAvailability(data.availability ?? 'available');
       setAbn(data.abn ?? '');
       setLicenceNumber(data.license_key ?? '');
-      setSpecialties(Array.isArray(data.specialties) ? data.specialties : []);
+
+      // Multi-trade: prefer the array column; fall back to the single legacy
+      // column so existing single-trade profiles keep working.
+      const trades: string[] = Array.isArray(data.trade_categories) && data.trade_categories.length
+        ? data.trade_categories.filter((t: unknown): t is string => typeof t === 'string')
+        : (data.trade_category ? [data.trade_category] : []);
+      setSelectedTrades(trades);
+
+      // Structured specialisations, sanitised against the loaded trades (drops
+      // any slugs for trades the builder no longer holds).
+      setSpecialisations(sanitiseSpecialisations(data.specialisations, trades));
 
       // Extended fields (stored in profile_meta jsonb or separate columns)
       setEstablishedYear(data.established_year ? String(data.established_year) : '');
@@ -320,20 +343,149 @@ export default function EditProfileScreen() {
     }
   }
 
-  // ─── Specialties management ──────────────────────────────────────────
+  // ─── Trade management (multi-trade) ──────────────────────────────────
 
-  function toggleSpecialty(spec: string) {
-    setSpecialties(prev =>
-      prev.includes(spec) ? prev.filter(s => s !== spec) : [...prev, spec],
-    );
+  /** Verified licences the builder currently holds (from credentials_verified). */
+  function heldLicences() {
+    const list = credentialsVerified?.licences;
+    return Array.isArray(list) ? list : [];
   }
 
-  function addCustomSpecialty() {
-    const trimmed = customSpecialty.trim();
-    if (trimmed && !specialties.includes(trimmed)) {
-      setSpecialties(prev => [...prev, trimmed]);
+  /** Make a non-primary trade the primary one by moving it to the front. */
+  function makePrimaryTrade(slug: string) {
+    setSelectedTrades(prev => {
+      if (prev[0] === slug || !prev.includes(slug)) return prev;
+      return [slug, ...prev.filter(t => t !== slug)];
+    });
+  }
+
+  /** Remove a trade; block removing the last one. Also drops its specialisations. */
+  function removeTrade(slug: string) {
+    if (selectedTrades.length <= 1) {
+      toast.show('You need at least one trade', { variant: 'warning' });
+      return;
     }
-    setCustomSpecialty('');
+    setSelectedTrades(prev => prev.filter(t => t !== slug));
+    setSpecialisations(prev => {
+      if (!(slug in prev)) return prev;
+      const next = { ...prev };
+      delete next[slug];
+      return next;
+    });
+  }
+
+  /** Append a trade (assumes licence checks already passed) and close the picker. */
+  function commitAddTrade(slug: string) {
+    setSelectedTrades(prev => (prev.includes(slug) ? prev : [...prev, slug]));
+    closeTradePicker();
+  }
+
+  function closeTradePicker() {
+    setTradePickerOpen(false);
+    setPendingTrade(null);
+    setPendingLicenceNumber('');
+    setPendingState('NSW');
+    setTradeVerifyError(null);
+  }
+
+  /**
+   * Decide how to add a trade picked from the catalogue:
+   *  - no licence required → add now
+   *  - already covered by a held/verified licence → add now (with a note)
+   *  - otherwise → stage it and show the inline verify form
+   */
+  function handlePickTrade(slug: string, name: string) {
+    if (selectedTrades.includes(slug)) return;
+    setTradeVerifyError(null);
+
+    if (!requiresLicence(slug) || licenceCoversTrade(slug, heldLicences())) {
+      commitAddTrade(slug);
+      return;
+    }
+
+    // Needs a licence we don't hold yet — stage for inline verification.
+    setPendingTrade({ slug, name });
+    setPendingLicenceNumber('');
+    setPendingState('NSW');
+  }
+
+  /** Verify the staged trade's licence, then add it if verification succeeds. */
+  async function verifyAndAddTrade() {
+    if (!pendingTrade) return;
+    const licence = pendingLicenceNumber.trim();
+    if (!licence) {
+      setTradeVerifyError('Enter your licence number to verify.');
+      return;
+    }
+
+    setVerifyingTrade(true);
+    setTradeVerifyError(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setTradeVerifyError('You must be signed in to verify a licence.');
+        setVerifyingTrade(false);
+        return;
+      }
+
+      const res = await supabase.functions.invoke('verify-credentials', {
+        body: {
+          licence_number: licence,
+          state: pendingState,
+          trade_category: pendingTrade.slug,
+        },
+      });
+
+      if (res.error) {
+        setTradeVerifyError(res.error.message || 'Verification failed — check the details and try again.');
+        setVerifyingTrade(false);
+        return;
+      }
+
+      // Re-fetch the profile's credentials_verified so coverage reflects the
+      // freshly-verified licence (verify-credentials persists server-side).
+      let latestCreds = res.data?.credentials_verified ?? null;
+      if (profileId) {
+        const { data: refetched } = await supabase
+          .from('builder_profiles')
+          .select('credentials_verified')
+          .eq('id', profileId)
+          .maybeSingle();
+        if (refetched?.credentials_verified) latestCreds = refetched.credentials_verified;
+      }
+      if (latestCreds) setCredentialsVerified(latestCreds);
+
+      const licenceList: any[] = Array.isArray(latestCreds?.licences) ? latestCreds.licences : [];
+      const nowVerified =
+        licenceList.some((l: any) => (l?.type ?? '').toLowerCase() === pendingTrade.slug && l?.verified) ||
+        licenceCoversTrade(pendingTrade.slug, licenceList);
+
+      if (nowVerified) {
+        commitAddTrade(pendingTrade.slug);
+      } else {
+        setTradeVerifyError("Couldn't verify a licence for this trade. Check the number and state, then try again.");
+      }
+    } catch {
+      setTradeVerifyError('Network error — check your connection and try again.');
+    }
+
+    setVerifyingTrade(false);
+  }
+
+  // ─── Specialisations management (structured, per-trade) ──────────────
+
+  /** Toggle a specialisation slug for a given trade. Removes the trade key when emptied. */
+  function toggleSpecialisation(trade: string, slug: string) {
+    setSpecialisations(prev => {
+      const current = prev[trade] ?? [];
+      const has = current.includes(slug);
+      const nextSlugs = has ? current.filter(s => s !== slug) : [...current, slug];
+      const next = { ...prev };
+      if (nextSlugs.length === 0) delete next[trade];
+      else next[trade] = nextSlugs;
+      return next;
+    });
   }
 
   // ─── Projects management ─────────────────────────────────────────────
@@ -551,6 +703,10 @@ export default function EditProfileScreen() {
       Alert.alert('Missing fields', 'Business name, phone, suburb, and postcode are required.');
       return;
     }
+    if (selectedTrades.length < 1) {
+      Alert.alert('Add a trade', 'You need at least one trade before publishing.');
+      return;
+    }
     Alert.alert(
       'Publish Changes',
       'Your profile changes will be visible to customers. Publish now?',
@@ -566,6 +722,11 @@ export default function EditProfileScreen() {
 
     if (!businessName.trim() || !phone.trim() || !suburb.trim() || !postcode.trim()) {
       Alert.alert('Missing fields', 'Business name, phone, suburb, and postcode are required.');
+      return;
+    }
+
+    if (selectedTrades.length < 1) {
+      Alert.alert('Add a trade', 'You need at least one trade before saving.');
       return;
     }
 
@@ -642,17 +803,28 @@ export default function EditProfileScreen() {
       // Update local state with uploaded URLs
       setProjects(finalProjects);
 
-      // Team member photos — upload any local URIs
+      // Team member photos — upload any local URIs. If an upload fails we
+      // keep the local URI so the user can retry, and surface a single toast
+      // at the end rather than silently dropping the photo from the record.
+      let teamUploadFailures = 0;
       const finalTeamMembers = await Promise.all(
         teamMembers.map(async (member) => {
           if (member.photoUri && isLocalUri(member.photoUri)) {
             const uploaded = await uploadImage(member.photoUri, userId, 'team');
-            return { ...member, photoUri: uploaded || null };
+            if (uploaded) return { ...member, photoUri: uploaded };
+            teamUploadFailures += 1;
+            return member; // keep local URI so retry is possible
           }
           return member;
         }),
       );
       setTeamMembers(finalTeamMembers);
+      if (teamUploadFailures > 0) {
+        toast.show(
+          `Couldn't upload ${teamUploadFailures} team photo${teamUploadFailures > 1 ? 's' : ''} — try again`,
+          { variant: 'error', duration: 4000 },
+        );
+      }
 
       // ─── Re-geocode if location changed ──────────────────────────
       const geo = await geocode(`${suburb.trim()} ${postcode.trim()}`);
@@ -670,7 +842,12 @@ export default function EditProfileScreen() {
           postcode: postcode.trim(),
           radius_km: parseInt(radiusKm, 10) || 25,
           availability,
-          specialties: specialties.length > 0 ? specialties : null,
+          // Multi-trade: array column is source of truth; keep the single
+          // legacy column in sync with the primary trade.
+          trade_categories: selectedTrades,
+          trade_category: selectedTrades[0] ?? null,
+          // Structured sub-trade specialisations (replaces legacy `specialties`).
+          specialisations: sanitiseSpecialisations(specialisations, selectedTrades),
           abn: abn.trim() || null,
           license_key: licenceNumber.trim() || null,
           latitude: geo?.latitude ?? null,
@@ -789,7 +966,7 @@ export default function EditProfileScreen() {
       { label: 'Profile photo', done: !!profilePhoto },
       { label: 'Bio', done: bio.trim().length > 0 },
       { label: 'Phone', done: phone.trim().length > 0 },
-      { label: 'Specialty', done: specialties.length > 0 },
+      { label: 'Specialty', done: Object.values(specialisations).some(s => s.length > 0) },
       { label: 'Project', done: projects.length > 0 },
       { label: 'ABN', done: abn.trim().length > 0 },
       { label: 'Credential', done: credentials.length > 0 },
@@ -818,6 +995,217 @@ export default function EditProfileScreen() {
                 <Text style={{ fontSize: 11, color: teal, fontWeight: '600' }}>+ {m.label}</Text>
               </View>
             ))}
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  // ─── Trades editor (Step 1) ──────────────────────────────────────────
+
+  function renderTradesEditor() {
+    const held = heldLicences();
+    return (
+      <View>
+        {/* Selected trade chips — first is Primary; each removable; tap a
+            non-primary chip to promote it to primary. */}
+        <View style={styles.chipWrap}>
+          {selectedTrades.map((slug, idx) => {
+            const isPrimary = idx === 0;
+            return (
+              <View
+                key={slug}
+                style={[
+                  styles.tradeChip,
+                  { backgroundColor: tealBg, borderColor: teal },
+                ]}
+              >
+                {isPrimary && (
+                  <View style={[styles.primaryBadge, { backgroundColor: teal }]}>
+                    <Text style={styles.primaryBadgeText}>Primary</Text>
+                  </View>
+                )}
+                <Pressable
+                  onPress={() => (isPrimary ? undefined : makePrimaryTrade(slug))}
+                  disabled={isPrimary}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    isPrimary
+                      ? `${tradeDisplayName(slug)} (primary trade)`
+                      : `Make ${tradeDisplayName(slug)} your primary trade`
+                  }
+                  style={({ pressed }) => [pressed && !isPrimary && { opacity: 0.7 }]}
+                >
+                  <Text style={[styles.tradeChipText, { color: teal }]}>
+                    {tradeDisplayName(slug)}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => removeTrade(slug)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${tradeDisplayName(slug)}`}
+                >
+                  <Text style={{ fontSize: 12, color: teal, fontWeight: '700', marginLeft: 2 }}>✕</Text>
+                </Pressable>
+              </View>
+            );
+          })}
+
+          {/* Add trade toggle */}
+          <Pressable
+            onPress={() => (tradePickerOpen ? closeTradePicker() : setTradePickerOpen(true))}
+            style={({ pressed }) => [
+              styles.tradeChip,
+              styles.addTradeChip,
+              { borderColor: teal },
+              pressed && { opacity: 0.7 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={tradePickerOpen ? 'Close add trade' : 'Add trade'}
+          >
+            <Text style={[styles.tradeChipText, { color: teal }]}>
+              {tradePickerOpen ? '× Close' : '+ Add trade'}
+            </Text>
+          </Pressable>
+        </View>
+
+        {selectedTrades.length > 1 && (
+          <Text style={[styles.fieldHint, { color: colors.icon }]}>
+            Your primary trade leads your profile. Tap another trade to make it primary.
+          </Text>
+        )}
+
+        {/* Catalogue picker */}
+        {tradePickerOpen && !pendingTrade && (
+          <View style={[styles.tradePicker, { borderColor: colors.border, backgroundColor: colors.background }]}>
+            {TRADE_CATALOGUE.map(group => {
+              const options = group.trades.filter(t => !selectedTrades.includes(t.slug));
+              if (options.length === 0) return null;
+              return (
+                <View key={group.title} style={{ marginBottom: Spacing.md }}>
+                  <Text style={[styles.tradeGroupLabel, { color: colors.textSecondary }]}>
+                    {group.title.toUpperCase()}
+                  </Text>
+                  <View style={styles.chipWrap}>
+                    {options.map(t => {
+                      const needsLicence = requiresLicence(t.slug);
+                      const covered = needsLicence && licenceCoversTrade(t.slug, held);
+                      return (
+                        <Pressable
+                          key={t.slug}
+                          onPress={() => handlePickTrade(t.slug, t.name)}
+                          style={({ pressed }) => [
+                            styles.specChip,
+                            { backgroundColor: colors.surface, borderColor: colors.border },
+                            pressed && { opacity: 0.7 },
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Add ${t.name}`}
+                        >
+                          {needsLicence && (
+                            <MaterialIcons
+                              name={covered ? 'verified' : 'lock-outline'}
+                              size={13}
+                              color={covered ? colors.success : colors.textSecondary}
+                            />
+                          )}
+                          <Text style={[styles.specChipText, { color: colors.text }]}>{t.name}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Inline licence verify form for a staged licensed trade */}
+        {pendingTrade && (
+          <View style={[styles.tradePicker, { borderColor: teal, backgroundColor: colors.background }]}>
+            <Text style={[styles.tradeChipText, { color: colors.text, marginBottom: 4 }]}>
+              {pendingTrade.name} requires a licence
+            </Text>
+            <Text style={[styles.fieldHint, { color: colors.icon, marginTop: 0, marginBottom: Spacing.sm }]}>
+              Verify a licence for this trade to add it to your profile.
+            </Text>
+
+            <FieldLabel label="State" colors={colors} />
+            <View style={[styles.chipRow, { flexWrap: 'wrap' }]}>
+              {ADD_TRADE_STATES.map(s => (
+                <Pressable
+                  key={s}
+                  onPress={() => setPendingState(s)}
+                  style={({ pressed }) => [
+                    styles.miniChip,
+                    {
+                      backgroundColor: pendingState === s ? tealBg : colors.surface,
+                      borderColor: pendingState === s ? teal : colors.border,
+                    },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={s}
+                  accessibilityState={{ selected: pendingState === s }}
+                >
+                  <Text style={[styles.miniChipText, { color: pendingState === s ? teal : colors.textSecondary }]}>
+                    {s}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <FieldLabel label="Licence Number" colors={colors} />
+            <TextInput
+              style={[styles.input, inputStyle(colors)]}
+              value={pendingLicenceNumber}
+              onChangeText={setPendingLicenceNumber}
+              placeholder="Enter your licence number"
+              placeholderTextColor={colors.icon}
+              autoCapitalize="characters"
+              editable={!verifyingTrade}
+            />
+
+            {tradeVerifyError && (
+              <View style={[styles.tradeVerifyError, { backgroundColor: colors.errorLight }]}>
+                <MaterialIcons name="error" size={16} color={colors.error} />
+                <Text style={{ flex: 1, fontSize: 13, color: colors.error }}>{tradeVerifyError}</Text>
+              </View>
+            )}
+
+            <View style={[styles.row, { marginTop: Spacing.md }]}>
+              <Pressable
+                onPress={() => { setPendingTrade(null); setTradeVerifyError(null); }}
+                disabled={verifyingTrade}
+                style={({ pressed }) => [
+                  styles.addCardBtn,
+                  { flex: 1, marginTop: 0, borderColor: colors.border },
+                  pressed && { opacity: 0.7 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel adding trade"
+              >
+                <Text style={{ color: colors.textSecondary, fontWeight: '700', fontSize: 14 }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={verifyAndAddTrade}
+                disabled={verifyingTrade}
+                style={({ pressed }) => [
+                  styles.addCardBtn,
+                  { flex: 1, marginTop: 0, borderStyle: 'solid', backgroundColor: teal, borderColor: teal },
+                  (pressed || verifyingTrade) && { opacity: 0.7 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Verify and add trade"
+              >
+                {verifyingTrade ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Verify & add</Text>
+                )}
+              </Pressable>
+            </View>
           </View>
         )}
       </View>
@@ -907,15 +1295,8 @@ export default function EditProfileScreen() {
             placeholderTextColor={colors.icon}
           />
 
-          <FieldLabel label="Trade Category" colors={colors} />
-          <View style={[styles.tradeDisplay, { backgroundColor: tealBg, borderColor: teal }]}>
-            <Text style={[styles.tradeText, { color: teal }]}>
-              {tradeCategory ? tradeCategory.charAt(0).toUpperCase() + tradeCategory.slice(1) : 'Not set'}
-            </Text>
-          </View>
-          <Text style={[styles.fieldHint, { color: colors.icon }]}>
-            Trade category is set during signup and cannot be changed here.
-          </Text>
+          <FieldLabel label="Trades *" colors={colors} />
+          {renderTradesEditor()}
 
           <FieldLabel label="About / Bio" colors={colors} />
           <TextInput
@@ -997,78 +1378,59 @@ export default function EditProfileScreen() {
           <SectionHeader
             title="Specialties"
             colors={colors}
-            subtitle="What are you best at? Tap to select, or add your own."
+            subtitle="Tap the sub-trades you offer for each of your trades."
           />
 
-          <View style={styles.chipWrap}>
-            {SPECIALTY_SUGGESTIONS.map(spec => {
-              const selected = specialties.includes(spec);
+          {(() => {
+            const tradesWithSpecs = selectedTrades.filter(hasSpecialisations);
+            if (tradesWithSpecs.length === 0) {
               return (
-                <Pressable
-                  key={spec}
-                  onPress={() => toggleSpecialty(spec)}
-                  style={({ pressed }) => [
-                    styles.specChip,
-                    {
-                      backgroundColor: selected ? tealBg : colors.background,
-                      borderColor: selected ? teal : colors.border,
-                    },
-                    pressed && { opacity: 0.7 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={spec}
-                  accessibilityState={{ selected }}
-                >
-                  {selected && <Text style={{ fontSize: 12, color: teal }}>✓</Text>}
-                  <Text style={[styles.specChipText, { color: selected ? teal : colors.text }]}>
-                    {spec}
-                  </Text>
-                </Pressable>
+                <Text style={[styles.fieldHint, { color: colors.icon, marginTop: 0 }]}>
+                  {selectedTrades.length === 0
+                    ? 'Add a trade in step 1 to choose specialties.'
+                    : "Your selected trades don't have specialties to choose from."}
+                </Text>
               );
-            })}
-
-            {/* Custom specialties the user added */}
-            {specialties
-              .filter(s => !SPECIALTY_SUGGESTIONS.includes(s))
-              .map(spec => (
-                <Pressable
-                  key={spec}
-                  onPress={() => toggleSpecialty(spec)}
-                  style={[styles.specChip, { backgroundColor: tealBg, borderColor: teal }]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${spec}`}
-                >
-                  <Text style={{ fontSize: 12, color: teal }}>✓</Text>
-                  <Text style={[styles.specChipText, { color: teal }]}>{spec}</Text>
-                  <Text style={{ fontSize: 10, color: teal, marginLeft: 2 }}>✕</Text>
-                </Pressable>
-              ))}
-          </View>
-
-          {/* Add custom */}
-          <View style={[styles.addCustomRow, { borderTopColor: colors.border }]}>
-            <TextInput
-              style={[styles.input, inputStyle(colors), { flex: 1 }]}
-              value={customSpecialty}
-              onChangeText={setCustomSpecialty}
-              placeholder="Add a custom specialty..."
-              placeholderTextColor={colors.icon}
-              onSubmitEditing={addCustomSpecialty}
-              returnKeyType="done"
-            />
-            <Pressable
-              onPress={addCustomSpecialty}
-              style={({ pressed }) => [
-                styles.addBtn,
-                { backgroundColor: teal },
-                pressed && { opacity: 0.7 },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Add specialty"
-            >
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>+</Text>
-            </Pressable>
-          </View>
+            }
+            return tradesWithSpecs.map((trade, idx) => {
+              const options = getSpecialisationsForTrade(trade);
+              const chosen = specialisations[trade] ?? [];
+              return (
+                <View key={trade} style={idx > 0 ? { marginTop: Spacing.lg } : undefined}>
+                  <Text style={[styles.tradeGroupLabel, { color: colors.textSecondary }]}>
+                    {tradeDisplayName(trade).toUpperCase()}
+                  </Text>
+                  <View style={styles.chipWrap}>
+                    {options.map(spec => {
+                      const selected = chosen.includes(spec.slug);
+                      return (
+                        <Pressable
+                          key={spec.slug}
+                          onPress={() => toggleSpecialisation(trade, spec.slug)}
+                          style={({ pressed }) => [
+                            styles.specChip,
+                            {
+                              backgroundColor: selected ? tealBg : colors.background,
+                              borderColor: selected ? teal : colors.border,
+                            },
+                            pressed && { opacity: 0.7 },
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${spec.name}${selected ? ', selected' : ''}`}
+                          accessibilityState={{ selected }}
+                        >
+                          {selected && <Text style={{ fontSize: 12, color: teal }}>✓</Text>}
+                          <Text style={[styles.specChipText, { color: selected ? teal : colors.text }]}>
+                            {spec.name}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            });
+          })()}
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -1912,7 +2274,7 @@ export default function EditProfileScreen() {
 
   return (
     <AppShell
-      title={`Edit Profile · ${step}/5`}
+      title={`Edit Profile · ${step}/${STEP_LABELS.length}`}
       showBack
       onBackPress={() => (step > 1 ? animateToStep(step, step - 1) : router.back())}
       background={bgCanvas}
@@ -1935,13 +2297,13 @@ export default function EditProfileScreen() {
             {step === 4 && renderStep4()}
             {step === 5 && renderStep5()}
             {step === 6 && (
-              <View style={styles.stepContainer}>
+              <View style={[styles.stepContent, { paddingHorizontal: Spacing.lg, gap: Spacing['2xl'] }]}>
                 <VerifyCredentialsForm
-                  tradeCategory={tradeCategory}
+                  tradeCategory={selectedTrades[0] ?? tradeCategory}
                   existingCredentials={credentialsVerified}
                   onVerified={(creds) => setCredentialsVerified(creds)}
                 />
-                <View style={{ marginTop: Spacing['2xl'], gap: Spacing.md }}>
+                <View style={{ gap: Spacing.md }}>
                   <Text style={[Type.h2, { color: colors.text }]}>Insurance</Text>
                   <Text style={[Type.caption, { color: colors.textSecondary }]}>
                     Upload your Certificate of Currency for each policy. Our AI extracts insurer, coverage and expiry, then verifies it against known providers.
@@ -2263,16 +2625,55 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
 
-  // Trade display
-  tradeDisplay: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: Radius.md,
+  // Trades editor (multi-trade)
+  tradeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: Radius.full,
     borderWidth: 1,
   },
-  tradeText: {
-    fontSize: 15,
-    fontWeight: '600',
+  tradeChipText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  addTradeChip: {
+    borderStyle: 'dashed',
+    backgroundColor: 'transparent',
+  },
+  primaryBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+  },
+  primaryBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  tradePicker: {
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    marginTop: Spacing.md,
+  },
+  tradeGroupLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  tradeVerifyError: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    marginTop: Spacing.sm,
   },
 
   // Chips
@@ -2309,21 +2710,6 @@ const styles = StyleSheet.create({
   specChipText: {
     fontSize: 13,
     fontWeight: '600',
-  },
-  addCustomRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: Spacing.lg,
-    paddingTop: Spacing.lg,
-    borderTopWidth: 1,
-    alignItems: 'center',
-  },
-  addBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 
   // Credentials

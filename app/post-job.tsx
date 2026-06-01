@@ -35,6 +35,7 @@ import { useUser } from '@/lib/auth-context';
 import { getSuburbSuggestions, getPostcodeForSuburb } from '@/lib/geo';
 import { uploadJobPhoto, uploadJobDocument } from '@/lib/storage';
 import { isSubscriptionActive, useEnterpriseSubscription } from '@/lib/subscription';
+import { getSpecialisationsForTrade, hasSpecialisations } from '@/lib/trade-specialisations';
 
 /* ───────────────────────── Constants ───────────────────────── */
 
@@ -104,6 +105,7 @@ type State = {
   title: string;
   tradeType: string;
   otherTrade: string;
+  specialisations: string[];
   urgency: string;
   aiSuggestion: AISuggestion;
   aiLoading: boolean;
@@ -135,6 +137,8 @@ type State = {
 type Action =
   | { type: 'SET'; field: keyof State; value: any }
   | { type: 'SET_MANY'; payload: Partial<State> }
+  | { type: 'SELECT_TRADE'; trade: string }
+  | { type: 'TOGGLE_SPEC'; slug: string }
   | { type: 'ADD_PHOTOS'; photos: PhotoItem[] }
   | { type: 'REMOVE_PHOTO'; index: number }
   | { type: 'SET_COVER'; index: number }
@@ -147,6 +151,7 @@ const initialState: State = {
   title: '',
   tradeType: '',
   otherTrade: '',
+  specialisations: [],
   urgency: '',
   aiSuggestion: null,
   aiLoading: false,
@@ -178,6 +183,19 @@ function reducer(state: State, action: Action): State {
       return { ...state, [action.field]: action.value };
     case 'SET_MANY':
       return { ...state, ...action.payload };
+    case 'SELECT_TRADE':
+      // Reset specialisations whenever the selected trade changes — they're
+      // scoped to one trade's catalogue and don't carry across.
+      return { ...state, tradeType: action.trade, specialisations: [] };
+    case 'TOGGLE_SPEC': {
+      const has = state.specialisations.includes(action.slug);
+      return {
+        ...state,
+        specialisations: has
+          ? state.specialisations.filter((s) => s !== action.slug)
+          : [...state.specialisations, action.slug],
+      };
+    }
     case 'ADD_PHOTOS': {
       const existing = state.photos;
       const newPhotos = action.photos.map((p, i) => ({
@@ -352,7 +370,7 @@ export default function PostJobScreen() {
   function acceptTradeSuggestion(trade: string) {
     const matched = TRADE_TYPES.find((t) => t.toLowerCase() === trade.toLowerCase());
     if (matched) {
-      dispatch({ type: 'SET', field: 'tradeType', value: matched });
+      dispatch({ type: 'SELECT_TRADE', trade: matched });
     }
     dispatch({ type: 'SET', field: 'aiAssisted', value: true });
   }
@@ -486,6 +504,7 @@ export default function PostJobScreen() {
         title: s.title.trim(),
         description: s.description.trim(),
         trade_category: (s.tradeType === 'Other' ? s.otherTrade : s.tradeType).toLowerCase(),
+        specialisations: s.specialisations,
         urgency: s.urgency || null,
         suburb: s.suburb.trim(),
         postcode: s.postcode.trim(),
@@ -564,6 +583,7 @@ export default function PostJobScreen() {
         title: s.title.trim(),
         description: s.description.trim(),
         trade_category: tradeValue,
+        specialisations: s.specialisations,
         urgency: s.urgency,
         suburb: s.suburb.trim(),
         postcode: s.postcode.trim(),
@@ -860,6 +880,13 @@ export default function PostJobScreen() {
   /* ───────────── Step 1: Basics ───────────── */
 
   function renderStep1() {
+    // Slug for the specialisations catalogue lookup. Mirror exactly how the
+    // job's trade_category is derived on save (lowercased) so the catalogue key
+    // matches what gets persisted. "Other" → free-text, never in the catalogue,
+    // so hasSpecialisations() returns false and the picker hides itself.
+    const tradeSlug = (s.tradeType === 'Other' ? s.otherTrade : s.tradeType).toLowerCase();
+    const specialisations = getSpecialisationsForTrade(tradeSlug);
+
     return (
       <View style={styles.stepContent}>
         <ThemedText type="subtitle" style={{ marginBottom: 4 }}>
@@ -968,7 +995,7 @@ export default function PostJobScreen() {
                       },
                       pressed && { opacity: 0.7 },
                     ]}
-                    onPress={() => dispatch({ type: 'SET', field: 'tradeType', value: trade })}
+                    onPress={() => dispatch({ type: 'SELECT_TRADE', trade })}
                   >
                     <Text
                       style={[
@@ -999,6 +1026,48 @@ export default function PostJobScreen() {
             Need multiple trades? Post a separate job for each.
           </Text>
         </View>
+
+        {/* Specialities — shown only when the selected trade has sub-trades */}
+        {hasSpecialisations(tradeSlug) && (
+          <View style={styles.fieldGroup}>
+            <ThemedText style={[styles.label, { color: colors.textSecondary }]}>
+              SPECIALITIES (OPTIONAL)
+            </ThemedText>
+            <Text style={[styles.fieldHint, { color: colors.textSecondary, marginBottom: 8 }]}>
+              Pick any that apply to match with the right specialists.
+            </Text>
+            <View style={styles.specChipWrap}>
+              {specialisations.map((spec) => {
+                const selected = s.specialisations.includes(spec.slug);
+                return (
+                  <Pressable
+                    key={spec.slug}
+                    style={({ pressed }) => [
+                      styles.chip,
+                      styles.specChip,
+                      {
+                        backgroundColor: selected ? '#0F6E56' : '#fff',
+                        borderColor: selected ? '#0F6E56' : colors.border,
+                      },
+                      pressed && { opacity: 0.7 },
+                    ]}
+                    onPress={() => dispatch({ type: 'TOGGLE_SPEC', slug: spec.slug })}
+                  >
+                    {selected && <MaterialIcons name="check" size={14} color="#fff" />}
+                    <Text
+                      style={[
+                        styles.chipText,
+                        { color: selected ? '#fff' : colors.text },
+                      ]}
+                    >
+                      {spec.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
         {/* Urgency */}
         <View style={styles.fieldGroup}>
@@ -1404,6 +1473,18 @@ export default function PostJobScreen() {
             </View>
           )}
 
+          {/* Site requirements — pinned to the bottom of the preview so
+              tradies see the checklist they need to meet last, after the
+              "what" and "where". */}
+          {s.isEnterprise && s.siteRequirements.trim() ? (
+            <View style={styles.previewReqRow}>
+              <Ionicons name="shield-checkmark-outline" size={14} color={colors.textSecondary} />
+              <Text style={[styles.previewReqText, { color: colors.textSecondary }]}>
+                Site requirements: {s.siteRequirements.trim()}
+              </Text>
+            </View>
+          ) : null}
+
           <Text style={[styles.previewTimestamp, { color: colors.textSecondary }]}>
             Posted just now
           </Text>
@@ -1689,6 +1770,15 @@ const styles = StyleSheet.create({
   },
   chipText: {
     ...Type.bodySemiBold,
+  },
+  specChipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  specChip: {
+    flexDirection: 'row',
+    gap: 6,
   },
   aiSuggestedLabel: {
     ...Type.micro,
@@ -1995,6 +2085,20 @@ const styles = StyleSheet.create({
   },
   previewDocText: {
     ...Type.caption,
+  },
+  previewReqRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.06)',
+  },
+  previewReqText: {
+    ...Type.caption,
+    flex: 1,
+    lineHeight: 18,
   },
   previewTimestamp: {
     ...Type.label,

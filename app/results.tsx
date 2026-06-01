@@ -34,6 +34,11 @@ import { friendlyError } from '@/lib/error-messages';
 import { useUser } from '@/lib/auth-context';
 import { getCached, setCache } from '@/lib/query-cache';
 import { TRADE_ICONS, getTradeIcon, getCarouselImages } from '@/lib/trade-utils';
+import {
+  getSpecialisationsForTrade,
+  getSpecialisationName,
+  hasSpecialisations,
+} from '@/lib/trade-specialisations';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PAGE_SIZE = 10;
@@ -78,6 +83,7 @@ type BuilderResult = {
   cover_photo_url: string | null;
   projects: any[] | null;
   specialties: string[] | null;
+  specialisations: Record<string, string[]> | null;
   abn: string | null;
   license_key: string | null;
   credentials: any[] | null;
@@ -105,6 +111,8 @@ function computeMatchScore(
   maxDistance: number,
   searchTrade?: string,
   urgency?: string,
+  specTrade?: string,
+  selectedSpecs?: string[],
 ): { score: number; label: string } {
   let total = 0;
   const DEFAULT_RADIUS_KM = 30;
@@ -130,6 +138,24 @@ function computeMatchScore(
       if (searchable.includes(kw.toLowerCase())) kwPoints += perKw;
     }
     total += Math.min(kwPoints, 25);
+  }
+
+  // 2b. Specialisation overlap (soft boost, up to ~20 pts) — scaled by the
+  // fraction of the searcher's selected sub-trades this builder tags for the
+  // searched trade. Purely additive (like keywords above): never filters anyone
+  // out, just lifts better-matched builders. Relies on the final 99 clamp.
+  if (specTrade && selectedSpecs && selectedSpecs.length > 0) {
+    const builderSpecs = builder.specialisations?.[specTrade] ?? [];
+    if (builderSpecs.length > 0) {
+      const builderSet = new Set<string>(builderSpecs);
+      let matched = 0;
+      for (const s of selectedSpecs) {
+        if (builderSet.has(s)) matched += 1;
+      }
+      if (matched > 0) {
+        total += Math.round(20 * (matched / selectedSpecs.length));
+      }
+    }
   }
 
   // 3. Availability (12 pts) — urgency-aware
@@ -185,10 +211,12 @@ function PhotoCarousel({
   images,
   tradeCategory,
   isDark,
+  onImagePress,
 }: {
   images: string[];
   tradeCategory: string;
   isDark: boolean;
+  onImagePress?: () => void;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
@@ -241,12 +269,19 @@ function PhotoCarousel({
         snapToInterval={imageWidth}
         decelerationRate="fast"
         renderItem={({ item }) => (
-          <Image
-            source={{ uri: item }}
-            style={[styles.carouselImage, { width: imageWidth }]}
-            cachePolicy="disk"
-            placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }}
-          />
+          <Pressable
+            onPress={onImagePress}
+            // Pressable inside a horizontal FlatList — tap navigates, swipe
+            // lets the FlatList own the pan gesture.
+            style={{ width: imageWidth }}
+          >
+            <Image
+              source={{ uri: item }}
+              style={[styles.carouselImage, { width: imageWidth }]}
+              cachePolicy="disk"
+              placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }}
+            />
+          </Pressable>
         )}
       />
       {images.length > 1 && (
@@ -347,12 +382,14 @@ function FilterSheet({
   onApply,
   filters,
   colors,
+  specTrade,
 }: {
   visible: boolean;
   onClose: () => void;
   onApply: (f: FilterState) => void;
   filters: FilterState;
   colors: any;
+  specTrade: string | null;
 }) {
   const [local, setLocal] = useState(filters);
   const insets = useSafeAreaInsets();
@@ -363,6 +400,16 @@ function FilterSheet({
 
   const DISTANCE_OPTIONS = [5, 10, 25, 50, 100];
   const AVAILABILITY_OPTIONS = ['Any', 'Available now', 'This week', 'This month'];
+  const specOptions = specTrade ? getSpecialisationsForTrade(specTrade) : [];
+
+  function toggleSpec(slug: string) {
+    setLocal((p) => ({
+      ...p,
+      specialisations: p.specialisations.includes(slug)
+        ? p.specialisations.filter((s) => s !== slug)
+        : [...p.specialisations, slug],
+    }));
+  }
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
@@ -438,6 +485,38 @@ function FilterSheet({
           </View>
         </ScrollView>
 
+        {/* Specialisations (sub-trades) — only when the searched trade has them */}
+        {specOptions.length > 0 && (
+          <>
+            <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>Specialisations</Text>
+            <View style={[styles.specFilterWrap, { marginBottom: 16 }]}>
+              {specOptions.map((spec) => {
+                const selected = local.specialisations.includes(spec.slug);
+                return (
+                  <Pressable
+                    key={spec.slug}
+                    onPress={() => toggleSpec(spec.slug)}
+                    style={[
+                      styles.filterChip,
+                      {
+                        backgroundColor: selected ? colors.teal : colors.surface,
+                        borderColor: selected ? colors.teal : colors.border,
+                      },
+                    ]}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: selected }}
+                    accessibilityLabel={spec.name}
+                  >
+                    <Text style={[styles.filterChipText, { color: selected ? '#fff' : colors.text }]}>
+                      {spec.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        )}
+
         {/* Verified only */}
         <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>Verification</Text>
         <Pressable
@@ -472,7 +551,7 @@ function FilterSheet({
         <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
           <Pressable
             onPress={() => {
-              setLocal({ maxDistance: 0, availabilityFilter: 'Any', verifiedOnly: false });
+              setLocal({ maxDistance: 0, availabilityFilter: 'Any', verifiedOnly: false, specialisations: [] });
             }}
             style={[styles.filterResetBtn, { borderColor: colors.border }]}
           >
@@ -497,6 +576,7 @@ type FilterState = {
   maxDistance: number;
   availabilityFilter: string;
   verifiedOnly: boolean;
+  specialisations: string[];
 };
 
 // ─── Main Component ──────────────────────────────────────────────────────────
@@ -530,6 +610,7 @@ export default function ResultsScreen() {
     maxDistance: 0,
     availabilityFilter: 'Any',
     verifiedOnly: false,
+    specialisations: [],
   });
   const [savedBuilders, setSavedBuilders] = useState<Set<string>>(new Set());
 
@@ -538,6 +619,17 @@ export default function ResultsScreen() {
     ? params.trade_category.split(',').map((t) => t.trim().charAt(0).toUpperCase() + t.trim().slice(1)).join(', ')
     : 'All Trades';
   const locationName = params.suburb ?? 'Nearby';
+
+  // First searched trade (slug), used to scope sub-trade specialisation filtering
+  // + match boosting. null when "all"/empty or the trade has no sub-trades.
+  const rawFirstTrade = (params.trade_category ?? '')
+    .split(',')[0]
+    ?.trim()
+    .toLowerCase();
+  const specTrade =
+    rawFirstTrade && rawFirstTrade !== 'all' && hasSpecialisations(rawFirstTrade)
+      ? rawFirstTrade
+      : null;
 
   // ─── Fetch builders ──────────────────────────────────────────────────
 
@@ -582,7 +674,7 @@ export default function ResultsScreen() {
     let query = supabase
       .from('builder_profiles')
       .select(
-        'id, business_name, trade_category, suburb, postcode, latitude, longitude, radius_km, availability, availability_note, response_time, profile_photo_url, specialties, abn, license_key, credentials_verified',
+        'id, business_name, trade_category, suburb, postcode, latitude, longitude, radius_km, availability, availability_note, response_time, profile_photo_url, cover_photo_url, projects, specialties, specialisations, abn, license_key, credentials_verified',
       )
       .eq('approved', true);
 
@@ -603,7 +695,7 @@ export default function ResultsScreen() {
       return;
     }
 
-    let results: BuilderResult[] = (data ?? []).map((b) => ({
+    let results: BuilderResult[] = (data ?? []).map((b: any) => ({
       ...b,
       _distance: null as number | null,
       _matchScore: 0,
@@ -639,7 +731,7 @@ export default function ResultsScreen() {
     const urgencyOrder = params.urgency ? URGENCY_PRIORITY[params.urgency] : null;
     const maxDist = Math.max(...results.map((b) => b._distance ?? 0), 1);
     results = results.map((b) => {
-      const { score, label } = computeMatchScore(b, searchKeywords, urgencyOrder, maxDist, params.trade, params.urgency);
+      const { score, label } = computeMatchScore(b, searchKeywords, urgencyOrder, maxDist, params.trade_category, params.urgency);
       return { ...b, _matchScore: score, _matchLabel: label };
     });
 
@@ -672,6 +764,28 @@ export default function ResultsScreen() {
         );
       }
 
+      // Specialisation soft boost (NOT a filter): re-score via computeMatchScore
+      // with the searcher's selected sub-trades so the boost stays the single
+      // source of truth in the algorithm. Recomputed from cached base inputs, so
+      // it's idempotent across repeated calls (loadMore etc). Builders that don't
+      // overlap keep their base score — never removed.
+      if (specTrade && f.specialisations.length > 0) {
+        const urgencyOrder = params.urgency ? URGENCY_PRIORITY[params.urgency] : null;
+        filtered = filtered.map((b) => {
+          const { score, label } = computeMatchScore(
+            b,
+            searchKeywords,
+            urgencyOrder,
+            0,
+            params.trade_category,
+            params.urgency,
+            specTrade,
+            f.specialisations,
+          );
+          return { ...b, _matchScore: score, _matchLabel: label };
+        });
+      }
+
       switch (sort) {
         case 'best':
           filtered.sort((a, b) => b._matchScore - a._matchScore);
@@ -692,7 +806,9 @@ export default function ResultsScreen() {
 
       return filtered;
     },
-    [],
+    // searchKeywords is derived from params.keywords; listing the primitive keeps
+    // the closure honest without a fresh-array identity churning the callback.
+    [specTrade, params.keywords, params.urgency, params.trade_category],
   );
 
   useEffect(() => {
@@ -814,26 +930,45 @@ export default function ResultsScreen() {
       item.profile_photo_url ??
       `https://ui-avatars.com/api/?name=${encodeURIComponent(item.business_name)}&background=0d9488&color=fff&size=120`;
 
-    // Top specialties (show 3, title case)
-    const topSpecs = (item.specialties ?? []).slice(0, 3).map(
-      (s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(),
-    );
+    // Specialisation chips: prefer the builder's tagged sub-trades for the
+    // searched trade (resolved to display names), else fall back to the legacy
+    // free-text `specialties` so nothing regresses for builders without them.
+    const builderSpecSlugs =
+      specTrade ? item.specialisations?.[specTrade] ?? [] : [];
+    let specLabels: string[];
+    if (builderSpecSlugs.length > 0) {
+      specLabels = builderSpecSlugs
+        .map((slug) => getSpecialisationName(specTrade!, slug))
+        .filter((name): name is string => name != null);
+    } else {
+      specLabels = (item.specialties ?? []).map(
+        (s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(),
+      );
+    }
+    const topSpecs = specLabels.slice(0, 3);
+    const specMoreCount = Math.max(0, specLabels.length - 3);
     const images = getCarouselImages(item);
+
+    const goToProfile = () =>
+      router.push({ pathname: '/builder-profile', params: { id: item.id } });
 
     return (
       <AnimatedCard index={index}>
-        <Pressable
-          onPress={() => router.push({ pathname: '/builder-profile', params: { id: item.id } })}
-          style={({ pressed }) => [
+        <View
+          style={[
             styles.card,
             Shadows.md,
             { backgroundColor: colors.surface, borderColor: colors.border },
-            pressed && { opacity: 0.95, transform: [{ scale: 0.98 }] },
           ]}
         >
           {/* ─── Photo carousel ─── */}
           <View style={styles.carouselWrapper}>
-            <PhotoCarousel images={images} tradeCategory={item.trade_category} isDark={isDark} />
+            <PhotoCarousel
+              images={images}
+              tradeCategory={item.trade_category}
+              isDark={isDark}
+              onImagePress={goToProfile}
+            />
 
             {/* Bottom gradient overlay */}
             <LinearGradient
@@ -859,6 +994,12 @@ export default function ResultsScreen() {
             )}
           </View>
 
+          {/* Everything below the carousel is one tap target. Nested Pressables
+              in the action row still capture their own taps. */}
+          <Pressable
+            onPress={goToProfile}
+            style={({ pressed }) => (pressed ? { opacity: 0.95 } : null)}
+          >
           {/* ─── Profile info section ─── */}
           <View style={styles.profileSection}>
             {/* Avatar */}
@@ -931,9 +1072,9 @@ export default function ResultsScreen() {
                     <Text style={[styles.specChipText, { color: colors.textSecondary }]}>{spec}</Text>
                   </View>
                 ))}
-                {(item.specialties ?? []).length > 3 && (
+                {specMoreCount > 0 && (
                   <Text style={[styles.specMore, { color: colors.textSecondary }]}>
-                    +{(item.specialties ?? []).length - 3} more
+                    +{specMoreCount} more
                   </Text>
                 )}
               </View>
@@ -947,7 +1088,7 @@ export default function ResultsScreen() {
                   { backgroundColor: teal },
                   pressed && { opacity: 0.85 },
                 ]}
-                onPress={() => router.push({ pathname: '/builder-profile', params: { id: item.id } })}
+                onPress={goToProfile}
               >
                 <MaterialIcons name="person" size={16} color="#fff" />
                 <Text style={styles.btnPrimaryText}>View Profile</Text>
@@ -958,14 +1099,15 @@ export default function ResultsScreen() {
                   { borderColor: colors.border },
                   pressed && { opacity: 0.7 },
                 ]}
-                onPress={() => router.push({ pathname: '/builder-profile', params: { id: item.id } })}
+                onPress={goToProfile}
               >
                 <MaterialIcons name="chat-bubble-outline" size={15} color={teal} />
                 <Text style={[styles.btnOutlineText, { color: teal }]}>Request Quote</Text>
               </Pressable>
             </View>
           </View>
-        </Pressable>
+          </Pressable>
+        </View>
       </AnimatedCard>
     );
   }
@@ -983,6 +1125,7 @@ export default function ResultsScreen() {
     filters.maxDistance > 0,
     filters.availabilityFilter !== 'Any',
     filters.verifiedOnly,
+    filters.specialisations.length > 0,
   ].filter(Boolean).length;
 
   // ─── Render ───────────────────────────────────────────────────────
@@ -1147,6 +1290,7 @@ export default function ResultsScreen() {
         onApply={setFilters}
         filters={filters}
         colors={colors}
+        specTrade={specTrade}
       />
       </View>
     </AppShell>
@@ -1659,6 +1803,11 @@ const styles = StyleSheet.create({
   },
   filterChipText: {
     ...Type.captionSemiBold,
+  },
+  specFilterWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   filterRow: {
     flexDirection: 'row',
