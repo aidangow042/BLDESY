@@ -13,17 +13,17 @@
 
 import { useState } from 'react';
 import {
-  Image,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 
 import { Colors, FontFamily, Radius, Shadows, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { SearchOverlay } from '@/components/search/search-overlay';
 
 type Mode = 'homeowner' | 'tradie';
 
@@ -35,15 +35,13 @@ export function HeroSection() {
   const router = useRouter();
 
   const [mode, setMode] = useState<Mode>('homeowner');
-  const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
 
-  function submit() {
-    const trimmed = query.trim();
-    if (mode === 'tradie') {
-      router.push(trimmed ? `/builder-jobs?keywords=${encodeURIComponent(trimmed)}` as any : '/builder-jobs' as any);
-    } else {
-      router.push(trimmed ? `/results?location=${encodeURIComponent(trimmed)}` as any : '/results' as any);
-    }
+  function openSearch() {
+    // Homeowner → structured "find a tradie" search overlay (like the website).
+    // Tradie → the jobs feed, which has its own search/filters.
+    if (mode === 'tradie') router.push('/builder-jobs' as any);
+    else setSearchOpen(true);
   }
 
   const placeholder = mode === 'tradie' ? 'Search jobs by keyword…' : 'Suburb, postcode, or trade';
@@ -53,7 +51,7 @@ export function HeroSection() {
     <View style={styles.section}>
       {/* Photo banner */}
       <View style={styles.banner}>
-        <Image source={HERO_IMAGE} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <Image source={HERO_IMAGE} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.18)' }]} />
         <View style={styles.headlineWrap}>
           <Text style={styles.headline}>Find your tradie. Fast.</Text>
@@ -117,27 +115,27 @@ export function HeroSection() {
             </Pressable>
           </View>
 
-          {/* Search input + CTA */}
+          {/* Search bar (tap → opens the structured search) + CTA */}
           <View style={styles.searchRow}>
-            <View
+            <Pressable
+              onPress={openSearch}
               style={[
                 styles.inputWrap,
                 { backgroundColor: c.canvas, borderColor: c.border },
               ]}
+              accessibilityRole="button"
+              accessibilityLabel={placeholder}
             >
               <Text style={[styles.searchIcon, { color: c.textSecondary }]}>🔍</Text>
-              <TextInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder={placeholder}
-                placeholderTextColor={c.textSecondary + '99'}
-                onSubmitEditing={submit}
-                style={[styles.input, { color: c.textPrimary, fontFamily: FontFamily.body }]}
-                returnKeyType="search"
-              />
-            </View>
+              <Text
+                style={[styles.input, styles.placeholderText, { color: c.textSecondary }]}
+                numberOfLines={1}
+              >
+                {placeholder}
+              </Text>
+            </Pressable>
             <Pressable
-              onPress={submit}
+              onPress={openSearch}
               style={({ pressed }) => [
                 styles.cta,
                 { backgroundColor: c.primary },
@@ -161,6 +159,8 @@ export function HeroSection() {
           </Pressable>
         </View>
       </View>
+
+      <SearchOverlay visible={searchOpen} onClose={() => setSearchOpen(false)} />
     </View>
   );
 }
@@ -250,6 +250,9 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 14,
+  },
+  placeholderText: {
+    fontFamily: FontFamily.body,
   },
   cta: {
     height: 48,
