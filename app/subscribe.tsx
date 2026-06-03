@@ -27,14 +27,21 @@ import { AppShell } from '@/components/layout';
 import { Badge, Button, Card, useToast } from '@/components/ui';
 import { Colors, FontFamily, Radius, Shadows, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useUser } from '@/lib/auth-context';
+import { useRoles, useUser } from '@/lib/auth-context';
 import { api, ApiError } from '@/lib/api';
-import { invalidateSubscriptionCache } from '@/lib/subscription';
+import {
+  invalidateSubscriptionCache,
+  isSubscriptionActive,
+  useTradieSubscription,
+} from '@/lib/subscription';
+import { supabase } from '@/lib/supabase';
+import { CAN_SELL_IN_APP } from '@/lib/iap-policy';
 import {
   TRADIE_TIERS,
   ENTERPRISE_TIERS,
   annualSavings,
   annualSavingsPercent,
+  pickTierForTrades,
   type BillingInterval,
   type EnterpriseTierKey,
   type TradieTierKey,
@@ -62,6 +69,7 @@ export default function SubscribeScreen() {
   const router = useRouter();
   const toast = useToast();
   const { userId } = useUser();
+  const { isBuilder, isEnterprise } = useRoles();
   const params = useLocalSearchParams<{
     side?: string;
     tier?: string;
@@ -70,7 +78,20 @@ export default function SubscribeScreen() {
   }>();
   const stripe = useStripe();
 
-  const initialSide: Side = params.side === 'enterprise' ? 'enterprise' : 'tradie';
+  // Lock the side to whichever role the user already has. A user with only
+  // one role (the common case) sees only their tier set and no toggle — they
+  // upgrade/swap within their own category. URL params override the lock so
+  // deep links keep working. Users with both roles or guests see the toggle.
+  const lockedSide: Side | null =
+    params.side === 'enterprise' || params.side === 'tradie'
+      ? (params.side as Side)
+      : isBuilder && !isEnterprise
+        ? 'tradie'
+        : isEnterprise && !isBuilder
+          ? 'enterprise'
+          : null;
+
+  const initialSide: Side = lockedSide ?? 'tradie';
   const initialInterval: BillingInterval = params.interval === 'annual' ? 'annual' : 'monthly';
 
   const [side, setSide] = useState<Side>(initialSide);
@@ -81,7 +102,60 @@ export default function SubscribeScreen() {
   });
   const [processing, setProcessing] = useState(false);
 
-  const tiers = useMemo(() => (side === 'tradie' ? TRADIE_TIERS : ENTERPRISE_TIERS), [side]);
+  // When an unsubscribed tradie lands here, restrict the visible tiers to the
+  // single tier their trade qualifies them for (via pickTierForTrades). They
+  // can't pick "commercial" if they're a tiler, etc. A deep link with ?tier=
+  // or an already-subscribed user bypasses the lock so they can switch tiers.
+  const tradieSub = useTradieSubscription();
+  const [eligibleTradieTier, setEligibleTradieTier] = useState<TradieTierKey | null>(null);
+
+  useEffect(() => {
+    if (side !== 'tradie' || !userId || params.tier) {
+      setEligibleTradieTier(null);
+      return;
+    }
+    if (isSubscriptionActive(tradieSub.status)) {
+      setEligibleTradieTier(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('builder_profiles')
+        .select('trade_category')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (cancelled) return;
+      const trade = data?.trade_category;
+      if (!trade) {
+        setEligibleTradieTier(null);
+        return;
+      }
+      setEligibleTradieTier(pickTierForTrades([trade]));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [side, userId, params.tier, tradieSub.status]);
+
+  const tiers = useMemo(() => {
+    if (side !== 'tradie') return ENTERPRISE_TIERS;
+    if (eligibleTradieTier) {
+      const match = TRADIE_TIERS.find((t) => t.key === eligibleTradieTier);
+      return match ? [match] : TRADIE_TIERS;
+    }
+    return TRADIE_TIERS;
+  }, [side, eligibleTradieTier]);
+
+  // Auto-select the single eligible tier so the CTA is ready to press.
+  useEffect(() => {
+    if (eligibleTradieTier) setSelected(eligibleTradieTier);
+  }, [eligibleTradieTier]);
+
+  // When roles resolve async and reveal a locked side, snap the toggle to it.
+  useEffect(() => {
+    if (lockedSide && lockedSide !== side) setSide(lockedSide);
+  }, [lockedSide, side]);
 
   // Reset selection when switching sides.
   useEffect(() => {
@@ -193,6 +267,26 @@ export default function SubscribeScreen() {
 
   const selectedTier = tiers.find((t) => t.key === selected);
 
+  // iOS: we don't sell subscriptions in-app (App Store Guideline 3.1.1). Show
+  // an informational placeholder instead of the purchase flow — no prices, no
+  // purchase button, no external link.
+  if (!CAN_SELL_IN_APP) {
+    return (
+      <AppShell title="Subscriptions" showBack>
+        <View style={styles.iosNotice}>
+          <Text style={[styles.iosNoticeTitle, { color: c.textPrimary }]}>
+            Manage your subscription on the web
+          </Text>
+          <Text style={[styles.iosNoticeBody, { color: c.textSecondary }]}>
+            BLDESY subscriptions aren&apos;t purchased in the app. Your current plan and
+            features are shown in your dashboard, and any active subscription works here
+            automatically.
+          </Text>
+        </View>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell title="Pick your plan" showBack>
       <ScrollView
@@ -205,28 +299,31 @@ export default function SubscribeScreen() {
           </Text>
         </View>
 
-        {/* Side toggle */}
-        <View style={[styles.toggle, { backgroundColor: c.canvas }]}>
-          {(['tradie', 'enterprise'] as Side[]).map((s) => {
-            const active = side === s;
-            return (
-              <Pressable
-                key={s}
-                onPress={() => setSide(s)}
-                style={[styles.togglePill, active && { backgroundColor: c.surface, ...Shadows.sm }]}
-              >
-                <Text
-                  style={[
-                    styles.togglePillText,
-                    { color: active ? c.primary : c.textSecondary },
-                  ]}
+        {/* Side toggle — hidden when the user's role already determines which
+            tier set applies. They upgrade/swap inside their own category. */}
+        {!lockedSide ? (
+          <View style={[styles.toggle, { backgroundColor: c.canvas }]}>
+            {(['tradie', 'enterprise'] as Side[]).map((s) => {
+              const active = side === s;
+              return (
+                <Pressable
+                  key={s}
+                  onPress={() => setSide(s)}
+                  style={[styles.togglePill, active && { backgroundColor: c.surface, ...Shadows.sm }]}
                 >
-                  {s === 'tradie' ? 'For tradies' : 'For builders'}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+                  <Text
+                    style={[
+                      styles.togglePillText,
+                      { color: active ? c.primary : c.textSecondary },
+                    ]}
+                  >
+                    {s === 'tradie' ? 'For tradies' : 'For builders'}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
 
         {/* Billing interval toggle */}
         <View style={styles.intervalRow}>
@@ -358,6 +455,25 @@ export default function SubscribeScreen() {
 }
 
 const styles = StyleSheet.create({
+  iosNotice: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing['2xl'],
+    gap: Spacing.md,
+  },
+  iosNoticeTitle: {
+    fontSize: 18,
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  iosNoticeBody: {
+    fontSize: 14,
+    lineHeight: 21,
+    fontFamily: FontFamily.body,
+    textAlign: 'center',
+  },
   scroll: {
     padding: Spacing.lg,
     paddingBottom: Spacing['5xl'],

@@ -24,6 +24,7 @@ import { Colors, Radius, Spacing, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
+import { CAN_SELL_IN_APP } from '@/lib/iap-policy';
 
 type Plan = {
   key: string;
@@ -165,7 +166,19 @@ export default function EnterpriseBillingScreen() {
           )}
         </View>
 
-        {/* Plan options */}
+        {/* Plan options — hidden on iOS (App Store Guideline 3.1.1: no in-app
+            sale of digital subscriptions and no purchase CTAs). */}
+        {!CAN_SELL_IN_APP ? (
+          <View style={[styles.emptyCard, { backgroundColor: isDark ? colors.surface : '#fff', borderColor: colors.border }]}>
+            <Ionicons name="information-circle-outline" size={28} color={colors.icon} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>Manage your plan on the web</Text>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              Company subscriptions aren&apos;t purchased in the app. Any active plan works here
+              automatically and your status is shown above.
+            </Text>
+          </View>
+        ) : (
+          <>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Choose a Plan</Text>
 
         {PLANS.map(plan => {
@@ -226,14 +239,16 @@ export default function EnterpriseBillingScreen() {
             </View>
           );
         })}
+          </>
+        )}
 
-        {/* Payment history placeholder */}
+        {/* Payment history */}
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Payment History</Text>
         <View style={[styles.emptyCard, { backgroundColor: isDark ? colors.surface : '#fff', borderColor: colors.border }]}>
           <Ionicons name="receipt-outline" size={28} color={colors.icon} />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>Coming Soon</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>No payments yet</Text>
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            Payment history and invoice downloads will be available here once billing is connected.
+            Your invoices and payment history will appear here.
           </Text>
         </View>
       </ScrollView>

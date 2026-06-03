@@ -90,8 +90,13 @@ export const termsOfService = {
     <li>Infringes on the intellectual property rights, privacy rights, or any other rights of any third party;</li>
     <li>Contains viruses, malware, or other harmful computer code;</li>
     <li>Violates any applicable law, regulation, or ordinance;</li>
-    <li>Impersonates any person or entity, or falsely states or misrepresents your affiliation with any person or entity.</li>
+    <li>Impersonates any person or entity, or falsely states or misrepresents your affiliation with any person or entity;</li>
+    <li>Constitutes hate speech, or vilifies, demeans, or discriminates against any person or group on the basis of race, ethnicity, national origin, religion, disability, sex, gender identity, sexual orientation, or age;</li>
+    <li>Depicts, promotes, or incites violence, self-harm, or terrorism, or threatens harm to any person;</li>
+    <li>Is sexually explicit, or sexualises, exploits, or endangers minors in any way;</li>
+    <li>Is otherwise abusive, hateful, or objectionable.</li>
   </ol>
+  <p>We have <strong>zero tolerance</strong> for objectionable content and abusive users. There is no place on BLDESY! for harassment, hate speech, sexual content, threats, or illegal material.</p>
   <p>8.5. BLDESY! reserves the right, but has no obligation, to monitor, review, edit, or remove any User Content at our sole discretion, with or without notice.</p>
   <p>8.6. You must not:</p>
   <ol type="a">
@@ -101,6 +106,9 @@ export const termsOfService = {
     <li>Use the Platform for any purpose that is unlawful or prohibited by these Terms;</li>
     <li>Reverse-engineer, decompile, disassemble, or otherwise attempt to derive the source code of the Platform.</li>
   </ol>
+  <p>8.7. <strong>Reporting.</strong> Every builder profile, review, job post, and message includes a Report control. If you see content that breaks these Terms, please report it. We review every report and remove content that breaches our rules. You can also email <a href="mailto:hello@bldesy.com.au">hello@bldesy.com.au</a>.</p>
+  <p>8.8. <strong>Blocking.</strong> You may block any other user at any time from their profile, a message, or Settings &gt; Blocked users. Blocking hides that user's reviews from you and prevents them from messaging you. You can unblock from Settings &gt; Blocked users.</p>
+  <p>8.9. <strong>Filtering and enforcement.</strong> We screen submitted content for objectionable language before it is published and reject content that fails. We remove violating content and may suspend or permanently ban accounts that breach these Terms. We act on reports within a reasonable time.</p>
 
   <h2>9. Intellectual Property</h2>
   <p>9.1. The Platform, including all software, code, algorithms, designs, graphics, logos, trademarks, trade names (including "BLDESY!"), user interfaces, visual interfaces, text, images, audio, video, and all other content and materials provided by BLDESY! (collectively, "Platform IP"), is owned by or licensed to BLDESY Pty Ltd and is protected by copyright, trademark, patent, trade secret, and other intellectual property laws of Australia and international conventions.</p>
@@ -245,7 +253,7 @@ export const termsOfService = {
     { heading: '3. Account & Security', body: 'You are responsible for your credentials and all activity under your account. One account per person. You must notify us immediately of any unauthorised access.' },
     { heading: '4. Builder Listing Terms', body: 'Builders pay a flat subscription. Listings are never ranked by payment \u2014 visibility is based on relevance and proximity only. BLDESY! reserves the right to suspend or remove any listing for any reason.' },
     { heading: '5. Customer Obligations', body: 'Job postings must be accurate. You may not solicit builders off-platform to avoid fees, post fake jobs, or collect builder information for marketing purposes.' },
-    { heading: '6. User Content & Conduct', body: 'No defamation, spam, harassment, fake reviews, or illegal activity. You retain ownership of your content but grant BLDESY! a licence to display it on the platform.' },
+    { heading: '6. User Content & Conduct', body: 'Zero tolerance for objectionable content — no defamation, spam, harassment, hate speech, sexual content, threats, fake reviews, or illegal activity. Every profile, review, job post, and message has a Report control, and you can block any user (Settings > Blocked users). We filter content before it goes live, remove what breaches the rules, and may ban abusive accounts. You retain ownership of your content but grant BLDESY! a licence to display it.' },
     { heading: '7. Intellectual Property', body: 'BLDESY! owns all platform IP including the name, logo, design, and code. You may not copy, reverse-engineer, or create derivative works from the platform.' },
     { heading: '8. Payments & Fees', body: 'Subscriptions auto-renew and are processed via Stripe. Cancel anytime via the app, App Store, or Play Store. All fees in AUD, non-refundable unless required by Australian Consumer Law.' },
     { heading: '9. Disclaimers & Liability', body: 'The platform is provided "as is". To the maximum extent permitted by Australian Consumer Law, our liability is capped at fees paid in the last 12 months or AU$100, whichever is greater. We exclude indirect, consequential, and special damages.' },

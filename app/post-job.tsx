@@ -31,6 +31,9 @@ import { useToast } from '@/components/ui';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useAiConsent } from '@/components/ai-consent-modal';
+import { hasAiConsent } from '@/lib/ai-consent';
+import { CAN_SELL_IN_APP } from '@/lib/iap-policy';
 import { useUser } from '@/lib/auth-context';
 import { getSuburbSuggestions, getPostcodeForSuburb } from '@/lib/geo';
 import { uploadJobPhoto, uploadJobDocument } from '@/lib/storage';
@@ -236,6 +239,7 @@ export default function PostJobScreen() {
   const insets = useSafeAreaInsets();
   const toast = useToast();
   const { userId } = useUser();
+  const { ensureConsent, consentModal } = useAiConsent();
   const enterpriseSub = useEnterpriseSubscription();
   const params = useLocalSearchParams<{
     editId?: string;
@@ -346,6 +350,10 @@ export default function PostJobScreen() {
   }
 
   async function fetchAISuggestion(title: string) {
+    // Silent gate: don't send text to the AI provider until the user has
+    // consented elsewhere (the explicit "write it for me" button or AI chat).
+    // No modal here — it would interrupt typing.
+    if (!(await hasAiConsent())) return;
     dispatch({ type: 'SET', field: 'aiLoading', value: true });
     try {
       const { data, error } = await supabase.functions.invoke('ai-job-suggest', {
@@ -385,6 +393,8 @@ export default function PostJobScreen() {
   /* ───────────── AI describe (Step 2) ───────────── */
 
   async function handleAIDescribe() {
+    // Explicit AI action — show the third-party disclosure on first use.
+    if (!(await ensureConsent())) return;
     dispatch({ type: 'SET', field: 'aiDescLoading', value: true });
     try {
       const { data, error } = await supabase.functions.invoke('ai-job-suggest', {
@@ -558,21 +568,30 @@ export default function PostJobScreen() {
       // Enterprise posters need an active subscription to post.
       if (s.isEnterprise && !isSubscriptionActive(enterpriseSub.status)) {
         dispatch({ type: 'SET', field: 'submitting', value: false });
-        Alert.alert(
-          'Subscribe to post',
-          'Pick a plan to start posting jobs and reaching verified tradies.',
-          [
-            { text: 'Not now', style: 'cancel' },
-            {
-              text: 'See plans',
-              onPress: () =>
-                router.push({
-                  pathname: '/subscribe',
-                  params: { side: 'enterprise', tier: 'builder', interval: 'monthly' },
-                } as any),
-            },
-          ],
-        );
+        if (CAN_SELL_IN_APP) {
+          Alert.alert(
+            'Subscribe to post',
+            'Pick a plan to start posting jobs and reaching verified tradies.',
+            [
+              { text: 'Not now', style: 'cancel' },
+              {
+                text: 'See plans',
+                onPress: () =>
+                  router.push({
+                    pathname: '/subscribe',
+                    params: { side: 'enterprise', tier: 'builder', interval: 'monthly' },
+                  } as any),
+              },
+            ],
+          );
+        } else {
+          // iOS: no in-app purchase or web-purchase link (App Store 3.1.1).
+          Alert.alert(
+            'Subscription required',
+            'Posting jobs needs an active subscription. Once your subscription is active it works here automatically.',
+            [{ text: 'OK' }],
+          );
+        }
         return;
       }
 
@@ -1612,6 +1631,7 @@ export default function PostJobScreen() {
           </Pressable>
         )}
       </View>
+      {consentModal}
     </AppShell>
   );
 }

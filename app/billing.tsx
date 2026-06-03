@@ -30,6 +30,7 @@ import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { api, ApiError } from '@/lib/api';
 import { useUser } from '@/lib/auth-context';
+import { CAN_SELL_IN_APP } from '@/lib/iap-policy';
 import {
   invalidateSubscriptionCache,
   useEnterpriseSubscription,
@@ -222,11 +223,15 @@ export default function BillingScreen() {
           </View>
           <Text style={[styles.emptyTitle, { color: c.textPrimary }]}>No active subscription</Text>
           <Text style={[styles.emptyCopy, { color: c.textSecondary }]}>
-            Pick a plan to unlock applications, dashboard analytics and verified badges.
+            {CAN_SELL_IN_APP
+              ? 'Pick a plan to unlock applications, dashboard analytics and verified badges.'
+              : 'A subscription unlocks applications, dashboard analytics and verified badges. Subscriptions are managed on the web — once active, your plan works here automatically.'}
           </Text>
-          <Button variant="primary" size="lg" onPress={() => router.push('/subscribe' as any)}>
-            See plans
-          </Button>
+          {CAN_SELL_IN_APP ? (
+            <Button variant="primary" size="lg" onPress={() => router.push('/subscribe' as any)}>
+              See plans
+            </Button>
+          ) : null}
         </View>
       </AppShell>
     );
@@ -285,14 +290,16 @@ export default function BillingScreen() {
               ) : null}
 
               <View style={styles.actionsRow}>
-                <Button
-                  variant="secondary"
-                  size="md"
-                  onPress={() => setPlanModalVisible(true)}
-                  disabled={actionLoading === 'swap'}
-                >
-                  Change plan
-                </Button>
+                {CAN_SELL_IN_APP ? (
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onPress={() => setPlanModalVisible(true)}
+                    disabled={actionLoading === 'swap'}
+                  >
+                    Change plan
+                  </Button>
+                ) : null}
                 {state.cancelAtPeriodEnd ? (
                   <Button
                     variant="primary"
@@ -337,15 +344,17 @@ export default function BillingScreen() {
               ) : (
                 <Text style={[styles.empty, { color: c.textSecondary }]}>No payment method on file.</Text>
               )}
-              <Button
-                variant="secondary"
-                size="sm"
-                onPress={handleUpdateCard}
-                disabled={actionLoading === 'update-card'}
-                leadingIcon={actionLoading === 'update-card' ? <ActivityIndicator color={c.primary} size="small" /> : null}
-              >
-                Update card
-              </Button>
+              {CAN_SELL_IN_APP ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onPress={handleUpdateCard}
+                  disabled={actionLoading === 'update-card'}
+                  leadingIcon={actionLoading === 'update-card' ? <ActivityIndicator color={c.primary} size="small" /> : null}
+                >
+                  Update card
+                </Button>
+              ) : null}
             </Card>
 
             {/* Invoices */}

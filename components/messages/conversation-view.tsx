@@ -14,11 +14,19 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useToast } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 import { fetchMessages, sendMessage } from '@/lib/messaging';
 import type { Conversation, Message } from '@/lib/messaging';
+import { ReportModal, type ReportContentType } from '@/components/report-modal';
 import { MessageBubble } from './message-bubble';
 import { MessageInput } from './message-input';
+
+type ReportTarget = {
+  contentType: ReportContentType;
+  contentId: string | null;
+  reportedUserId: string | null;
+};
 
 type Props = {
   conversation: Conversation;
@@ -31,9 +39,11 @@ export function ConversationView({ conversation, currentUserId, onBack }: Props)
   const isDark = colorScheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];
   const router = useRouter();
+  const toast = useToast();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
   const loadMessages = useCallback(async () => {
@@ -129,14 +139,28 @@ export function ConversationView({ conversation, currentUserId, onBack }: Props)
             <View style={[styles.dateLine, { backgroundColor: colors.border }]} />
           </View>
         )}
-        <MessageBubble
-          body={item.body}
-          isMine={item.sender_id === currentUserId}
-          timestamp={item.created_at}
-          attachmentUrl={item.attachment_url}
-          attachmentType={item.attachment_type}
-          isGrouped={isGrouped}
-        />
+        <Pressable
+          onLongPress={
+            item.sender_id === currentUserId
+              ? undefined
+              : () =>
+                  setReportTarget({
+                    contentType: 'message',
+                    contentId: item.id,
+                    reportedUserId: item.sender_id,
+                  })
+          }
+          delayLongPress={300}
+        >
+          <MessageBubble
+            body={item.body}
+            isMine={item.sender_id === currentUserId}
+            timestamp={item.created_at}
+            attachmentUrl={item.attachment_url}
+            attachmentType={item.attachment_type}
+            isGrouped={isGrouped}
+          />
+        </Pressable>
       </>
     );
   }
@@ -193,6 +217,18 @@ export function ConversationView({ conversation, currentUserId, onBack }: Props)
             )}
           </View>
         </Pressable>
+
+        <Pressable
+          onPress={() =>
+            setReportTarget({ contentType: 'user', contentId: null, reportedUserId: other_user.id })
+          }
+          style={styles.backBtn}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Report or block this user"
+        >
+          <MaterialIcons name="flag" size={22} color={colors.textSecondary} />
+        </Pressable>
       </View>
 
       {/* Messages */}
@@ -220,6 +256,24 @@ export function ConversationView({ conversation, currentUserId, onBack }: Props)
 
       {/* Input */}
       <MessageInput onSend={handleSend} disabled={loading} />
+
+      {/* Report / block */}
+      <ReportModal
+        visible={reportTarget !== null}
+        onClose={() => setReportTarget(null)}
+        contentType={reportTarget?.contentType ?? 'user'}
+        contentId={reportTarget?.contentId ?? null}
+        reportedUserId={reportTarget?.reportedUserId ?? other_user.id}
+        onSubmitted={(didBlock) => {
+          setReportTarget(null);
+          toast.show(
+            didBlock ? 'Reported and blocked.' : 'Report submitted. Thanks for letting us know.',
+            { variant: 'success', duration: 4000 },
+          );
+          // Blocking hides this conversation — return to the list.
+          if (didBlock) onBack();
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }

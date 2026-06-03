@@ -18,6 +18,7 @@ import {
   useTradieSubscription,
 } from '@/lib/subscription';
 import type { EnterpriseTierKey, TradieTierKey } from '@/lib/pricing-tiers-client';
+import { CAN_SELL_IN_APP } from '@/lib/iap-policy';
 
 interface Props {
   side: 'tradie' | 'enterprise';
@@ -63,14 +64,20 @@ export function PaymentGate({
 
   if (fallback) return <>{fallback}</>;
 
-  const headline =
-    lockedHeadline ??
-    (side === 'tradie' ? 'Subscribe to apply' : 'Subscribe to post jobs');
-  const subtitle =
-    lockedSubtitle ??
-    (side === 'tradie'
-      ? 'A flat monthly subscription unlocks unlimited job applications, no per-lead fees.'
-      : 'Pick a plan to start posting jobs and reaching verified tradies.');
+  // iOS sells nothing in-app (App Store Guideline 3.1.1): show a plain
+  // "needs an active subscription" message with no purchase CTA or link.
+  const headline = !CAN_SELL_IN_APP
+    ? (lockedHeadline ?? (side === 'tradie' ? 'Subscription required' : 'Subscription required'))
+    : (lockedHeadline ?? (side === 'tradie' ? 'Subscribe to apply' : 'Subscribe to post jobs'));
+  const subtitle = !CAN_SELL_IN_APP
+    ? (lockedSubtitle ??
+        (side === 'tradie'
+          ? 'Applying to jobs needs an active subscription. Once your subscription is active it works here automatically.'
+          : 'Posting jobs needs an active subscription. Once your subscription is active it works here automatically.'))
+    : (lockedSubtitle ??
+        (side === 'tradie'
+          ? 'A flat monthly subscription unlocks unlimited job applications, no per-lead fees.'
+          : 'Pick a plan to start posting jobs and reaching verified tradies.'));
 
   const defaultTier =
     recommendedTier ?? (side === 'tradie' ? 'trade' : 'builder');
@@ -92,17 +99,19 @@ export function PaymentGate({
       <Text style={[Type.caption, { color: colors.textSecondary, textAlign: 'center' }]}>
         {subtitle}
       </Text>
-      <Pressable
-        style={[styles.ctaBtn, { backgroundColor: colors.teal }]}
-        onPress={() =>
-          router.push({
-            pathname: '/subscribe',
-            params: { side, tier: defaultTier, interval: 'monthly' },
-          } as any)
-        }
-      >
-        <Text style={styles.ctaText}>See plans</Text>
-      </Pressable>
+      {CAN_SELL_IN_APP ? (
+        <Pressable
+          style={[styles.ctaBtn, { backgroundColor: colors.teal }]}
+          onPress={() =>
+            router.push({
+              pathname: '/subscribe',
+              params: { side, tier: defaultTier, interval: 'monthly' },
+            } as any)
+          }
+        >
+          <Text style={styles.ctaText}>See plans</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

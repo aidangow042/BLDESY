@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { Link, useLocalSearchParams } from 'expo-router';
+import { Link, router, useLocalSearchParams } from 'expo-router';
 
 import { AuthCard } from '@/components/auth/auth-card';
+import { AppleSignInButton } from '@/components/auth/apple-sign-in-button';
 import { Button, Input } from '@/components/ui';
 import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -82,13 +84,14 @@ export default function SignupScreen() {
             {'\n'}Verify your email to get started.
           </Text>
         </View>
-        <Link href="/(auth)/login" asChild>
-          <Pressable>
-            <Button variant="primary" size="lg" fullWidth onPress={() => {}}>
-              Back to login
-            </Button>
-          </Pressable>
-        </Link>
+        <Button
+          variant="primary"
+          size="lg"
+          fullWidth
+          onPress={() => router.replace('/(auth)/login')}
+        >
+          Back to login
+        </Button>
       </AuthCard>
     );
   }
@@ -169,6 +172,15 @@ export default function SignupScreen() {
         {loading ? 'Creating account…' : 'Create Account'}
       </Button>
 
+      {/* Sign up with Apple (iOS only). The Apple path bypasses the terms
+          checkbox, so the disclosure below records acceptance on continue. */}
+      <AppleSignInButton type="signUp" onError={setError} />
+      {Platform.OS === 'ios' ? (
+        <Text style={[styles.appleDisclosure, { color: c.textSecondary }]}>
+          By continuing with Apple you confirm you are 18+ and agree to the BLDESY Terms of Service and Privacy Policy.
+        </Text>
+      ) : null}
+
       <View style={styles.footerRow}>
         <Text style={[styles.footerText, { color: c.textSecondary }]}>Already have an account?{' '}</Text>
         <Link href="/(auth)/login" asChild>
@@ -248,6 +260,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: FontFamily.bodySemiBold,
     fontWeight: '600',
+  },
+  appleDisclosure: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontFamily: FontFamily.body,
+    textAlign: 'center',
+    marginTop: -Spacing.xs,
   },
   successBlock: {
     alignItems: 'center',

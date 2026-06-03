@@ -8,7 +8,7 @@
  *   • Error banner with retry
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Image,
   Pressable,
@@ -18,6 +18,10 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
+
+import { ReportModal } from '@/components/report-modal';
+import { useToast } from '@/components/ui';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -62,6 +66,9 @@ export function ChatMessages({
   const c = Colors[scheme];
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
+  const toast = useToast();
+  // Which AI response (if any) is being reported.
+  const [reportText, setReportText] = useState<string | null>(null);
 
   // Auto-scroll to bottom on new content.
   useEffect(() => {
@@ -73,6 +80,7 @@ export function ChatMessages({
   const isEmpty = messages.length === 0 && !loading;
 
   return (
+    <>
     <ScrollView
       ref={scrollRef}
       style={{ flex: 1 }}
@@ -168,6 +176,25 @@ export function ChatMessages({
             </View>
           </View>
 
+          {/* AI-generated label + report (assistant messages only) */}
+          {msg.role === 'assistant' ? (
+            <View style={styles.aiFooter}>
+              <Text style={[styles.aiLabel, { color: c.textSecondary }]}>✦ AI-generated</Text>
+              <Text style={[styles.aiDot, { color: c.textSecondary }]}>·</Text>
+              <Pressable
+                onPress={() => setReportText(msg.content)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Report this AI response"
+              >
+                <View style={styles.aiReportRow}>
+                  <Ionicons name="flag-outline" size={12} color={c.textSecondary} />
+                  <Text style={[styles.aiLabel, { color: c.textSecondary }]}>Report</Text>
+                </View>
+              </Pressable>
+            </View>
+          ) : null}
+
           {/* Builder recommendation cards */}
           {msg.role === 'assistant' && msg.builders && msg.builders.length > 0 ? (
             <View style={styles.builderList}>
@@ -240,6 +267,19 @@ export function ChatMessages({
         </View>
       ) : null}
     </ScrollView>
+
+      <ReportModal
+        visible={reportText !== null}
+        onClose={() => setReportText(null)}
+        contentType="ai_response"
+        allowBlock={false}
+        prefillDetail={reportText ?? undefined}
+        onSubmitted={() => {
+          setReportText(null);
+          toast.show('Thanks — we\'ll review this response.', { variant: 'success', duration: 4000 });
+        }}
+      />
+    </>
   );
 }
 
@@ -406,6 +446,25 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: 14,
     lineHeight: 20,
+  },
+  aiFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingLeft: 36,
+    marginTop: 2,
+  },
+  aiReportRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  aiLabel: {
+    fontFamily: FontFamily.body,
+    fontSize: 11,
+  },
+  aiDot: {
+    fontSize: 11,
   },
 
   /* Builder recs */

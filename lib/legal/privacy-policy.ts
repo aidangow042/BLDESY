@@ -66,7 +66,7 @@ export const privacyPolicy = {
     <li><strong>Cookies and local storage:</strong> We use session tokens, authentication tokens, and local storage to maintain your login state, remember your preferences, and improve your experience (see our Cookie &amp; Tracking Policy);</li>
     <li><strong>Third-party services:</strong> We may receive information from third-party services integrated with the Platform, including Supabase (authentication and database hosting) and Stripe (payment processing);</li>
     <li><strong>Direct communications:</strong> When you contact us via email, in-app support, or other channels;</li>
-    <li><strong>AI Assist interactions:</strong> When you use the AI Assist feature, your queries and the responses generated are processed to provide the service. Conversation content may be retained to improve service quality.</li>
+    <li><strong>AI feature interactions:</strong> When you use AI Assist or "write it for me", the text you enter is sent to Anthropic (Claude) to generate a response, after your first-use consent (see Section 4). It is processed in real time under Anthropic's commercial terms, including zero-data-retention where applicable.</li>
   </ol>
 
   <h2>3. Purpose of Data Use</h2>
@@ -82,11 +82,15 @@ export const privacyPolicy = {
 
   <h2>4. Data Sharing and Disclosure</h2>
   <p>4.1. <strong>We never sell your personal information.</strong> We do not sell, rent, lease, or trade your personal information to any third party for their marketing or commercial purposes.</p>
-  <p>4.2. We may share your personal information with the following categories of recipients, solely for the purposes described in this Privacy Policy:</p>
+  <p>4.2. <strong>Service providers (Australia and overseas).</strong> We use trusted third-party providers to operate the Platform. Several are located outside Australia, primarily in the United States (see Section 9). The current providers are:</p>
   <ol type="a">
-    <li><strong>Supabase (database and authentication hosting):</strong> Your account data, profile information, and Platform data are stored in Supabase infrastructure hosted in the Sydney, Australia (ap-southeast-2) region. Supabase acts as our data processor and is contractually bound to protect your data;</li>
-    <li><strong>Stripe (payment processing):</strong> When you make a payment, your payment details are transmitted directly to Stripe for processing. We receive only a tokenised reference and transaction confirmation. Stripe is PCI-DSS Level 1 certified;</li>
-    <li><strong>Anthropic (AI services):</strong> When you use the AI Assist feature, your queries are processed through a Supabase Edge Function that communicates with Anthropic's Claude API. Queries are processed in real time and are subject to Anthropic's data handling policies;</li>
+    <li><strong>Supabase (database, authentication, and file storage):</strong> Your account data, profile information, and uploaded files are stored in Supabase. The database is provisioned in the Sydney, Australia (ap-southeast-2) region; Supabase Inc. is a United States company that may access data to provide the service. Supabase acts as our data processor and is contractually bound to protect your data;</li>
+    <li><strong>Vercel (application and API hosting):</strong> Vercel Inc. (United States) hosts our website and the server-side API endpoints the app communicates with;</li>
+    <li><strong>Anthropic (AI services):</strong> Our AI features (AI Assist chat and "write it for me" generation) are powered by Anthropic, PBC (United States) via the Claude API. Before you use an AI feature for the first time, we show a disclosure and ask you to consent to your input being sent to Anthropic, a third-party AI provider that processes data overseas (including in the United States). The text you enter is sent through a Supabase Edge Function to Anthropic, processed in real time under Anthropic's commercial terms (including zero-data-retention where applicable). AI-generated responses are labelled as such in the app and may be inaccurate. Do not enter sensitive personal information into AI features;</li>
+    <li><strong>Stripe (payment processing):</strong> Stripe Payments Australia Pty Ltd, with processing performed by Stripe Inc. (United States). Your card details are transmitted directly to Stripe; we receive only a tokenised reference and transaction confirmation. Stripe is PCI-DSS Level 1 certified;</li>
+    <li><strong>Resend (transactional email):</strong> Resend (United States) is used to send transactional emails such as account-confirmation, account-deletion confirmations, and notification emails. We share the recipient email address and the message content;</li>
+    <li><strong>Upstash (rate limiting and abuse prevention):</strong> Upstash Inc. (United States) for short-lived rate-limit counters keyed by user ID or IP address;</li>
+    <li><strong>Sentry (error and performance monitoring):</strong> Functional Software Inc. d/b/a Sentry (United States) may collect technical information about errors and requests. We configure it to mask form inputs and sensitive upload surfaces;</li>
     <li><strong>Other users:</strong> Certain information in your profile (e.g., Builder profile details, reviews, ratings) is visible to other users of the Platform as part of the normal operation of the service;</li>
     <li><strong>Law enforcement and government authorities:</strong> We may disclose your personal information if required to do so by law, subpoena, court order, or other legal process, or if we reasonably believe that disclosure is necessary to protect the rights, property, or safety of BLDESY!, our users, or the public;</li>
     <li><strong>Professional advisers:</strong> We may share information with our legal, accounting, and insurance advisers for the purpose of obtaining professional advice;</li>
@@ -106,7 +110,7 @@ export const privacyPolicy = {
   <ol type="a">
     <li><strong>Encryption in transit:</strong> All data transmitted between your device and our servers is encrypted using Transport Layer Security (TLS 1.2 or higher);</li>
     <li><strong>Encryption at rest:</strong> All personal data stored in our databases is encrypted at rest using AES-256 encryption;</li>
-    <li><strong>Hosting location:</strong> All Platform data is hosted on Supabase infrastructure in the Sydney, Australia (ap-southeast-2) region;</li>
+    <li><strong>Hosting location:</strong> Our primary database is provisioned in the Sydney, Australia (ap-southeast-2) region. Some service providers that support the Platform are located overseas, primarily in the United States (see Section 9);</li>
     <li><strong>Access controls:</strong> We implement strict role-based access controls and the principle of least privilege for all internal access to personal data;</li>
     <li><strong>Row-level security:</strong> Our database implements row-level security (RLS) policies to ensure users can only access data they are authorised to view;</li>
     <li><strong>Authentication security:</strong> User passwords are hashed using industry-standard algorithms and are never stored in plain text;</li>
@@ -132,15 +136,10 @@ export const privacyPolicy = {
   <p>8.2. If we become aware that we have collected personal information from a child under eighteen (18) without appropriate parental or guardian consent, we will take reasonable steps to delete that information as soon as practicable.</p>
   <p>8.3. If you are a parent or guardian and believe that your child has provided personal information to us without your consent, please contact us at hello@bldesy.com.au.</p>
 
-  <h2>9. International Data Transfers</h2>
-  <p>9.1. All Platform data is hosted on Supabase infrastructure in the Sydney, Australia (ap-southeast-2) region. We do not routinely transfer your personal information outside of Australia.</p>
-  <p>9.2. In limited circumstances, personal information may be processed outside Australia by third-party service providers (for example, Stripe for payment processing or Anthropic for AI services). Where such transfers occur:</p>
-  <ol type="a">
-    <li>We will ensure that the recipient is subject to a law or binding scheme that provides protections substantially similar to the Australian Privacy Principles; or</li>
-    <li>We will take reasonable steps to ensure that the recipient handles your personal information in accordance with the Australian Privacy Principles; or</li>
-    <li>You will be notified and your consent will be obtained before any such transfer.</li>
-  </ol>
-  <p>9.3. We will update this Privacy Policy to disclose any material changes to our international data transfer practices.</p>
+  <h2>9. International Data Transfers (Overseas Disclosure)</h2>
+  <p>9.1. Our primary database is provisioned in the Sydney, Australia (ap-southeast-2) region. However, several of the service providers listed in Section 4 are located outside Australia, primarily in the <strong>United States</strong> — including Vercel, Anthropic, Resend, Upstash, Sentry, Stripe (US processing), and Supabase Inc. as a US company. This means personal information we hold about you may be disclosed to, or accessed by, overseas recipients in the course of providing the Services.</p>
+  <p>9.2. We take reasonable steps to ensure overseas recipients handle your personal information in a manner consistent with the Australian Privacy Principles, including by selecting providers with established privacy and security programs, minimising the data sent (for example zero-data-retention AI agreements where available and masked inputs in error monitoring), and contracting on the providers' standard data-protection terms. By using the Platform you consent to the overseas disclosures described in this Privacy Policy.</p>
+  <p>9.3. We will update this Privacy Policy to disclose any material changes to our overseas disclosure practices.</p>
 
   <h2>10. Changes to This Privacy Policy</h2>
   <p>10.1. We may update this Privacy Policy from time to time to reflect changes in our practices, the Platform, or applicable law.</p>
@@ -170,11 +169,11 @@ export const privacyPolicy = {
     { heading: '1. Data We Collect', body: 'Personal info (name, email, phone, location), usage data (search queries, pages visited, interactions), device info (model, OS, IP address), and location data (suburb, postcode, coordinates when you grant permission).' },
     { heading: '2. How We Collect Data', body: 'Directly from you (registration, profile, job posts), automatically from app usage (analytics, device info), via local storage (session tokens, preferences), and from third parties (Stripe for payment verification).' },
     { heading: '3. Purpose of Use', body: 'To provide and improve the service, match customers with relevant builders, send notifications and communications, ensure platform safety and prevent fraud, and comply with legal obligations.' },
-    { heading: '4. Data Sharing', body: 'We never sell your data. We share with: Supabase (hosting, Sydney region), Stripe (payment processing), Anthropic (AI Assist \u2014 anonymised queries only), and law enforcement if legally required.' },
+    { heading: '4. Data Sharing', body: 'We never sell your data. We share with service providers, some overseas (mainly the US): Supabase (database, Sydney region), Vercel (hosting), Anthropic (AI features \u2014 your input is sent to Claude after first-use consent), Stripe (payments), Resend (transactional email), Upstash (rate limiting), and Sentry (error monitoring). Profile/reviews are visible to other users. We also disclose to law enforcement if legally required.' },
     { heading: '5. Data Retention', body: 'Active accounts: data retained while account exists. Deleted accounts: data purged within 30 days. Anonymised analytics: retained indefinitely. Backups: retained for 90 days, then destroyed.' },
     { heading: '6. Data Security', body: 'Encryption in transit (TLS 1.2+), at rest (AES-256). Hosted exclusively in Sydney ap-southeast-2 region. Role-based access controls. Regular security audits.' },
     { heading: '7. Your Rights', body: 'Under the Australian Privacy Act 1988, you can: access your data, correct inaccuracies, request deletion, request data export (JSON/CSV), withdraw consent, restrict processing, and lodge a complaint with the OAIC. Delete your account anytime via Settings > Account > Delete Account.' },
-    { heading: '8. Children & International', body: 'Not intended for under 18 without guardian consent. Data is stored in Australia (Sydney). No offshore transfer unless disclosed and consented to.' },
+    { heading: '8. Children & International', body: 'Not intended for under 18 without guardian consent. Our database is in the Sydney region, but several providers are overseas (mainly the US) — see Section 4/9. By using the Platform you consent to those overseas disclosures.' },
     { heading: '9. Policy Changes', body: '14 days email notice for material changes. Continued use after the notice period constitutes acceptance.' },
     { heading: '10. Contact', body: 'Privacy Officer \u2014 BLDESY Pty Ltd\nhello@bldesy.com.au\nOAIC: www.oaic.gov.au | 1300 363 992' },
   ],

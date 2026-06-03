@@ -29,6 +29,8 @@ import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
+import { ReportButton } from '@/components/report-button';
+import { CAN_SELL_IN_APP } from '@/lib/iap-policy';
 import { getRelativeTime, getDisplayName, getInitials, URGENCY_CONFIG } from '@/lib/trade-utils';
 import { isSubscriptionActive, useTradieSubscription } from '@/lib/subscription';
 
@@ -230,21 +232,30 @@ export default function JobDetailScreen() {
     // Gate the apply action on an active tradie subscription. Customers
     // posting jobs aren't gated — only tradies applying.
     if (!isSubscriptionActive(tradieSub.status)) {
-      Alert.alert(
-        'Subscribe to apply',
-        'A flat monthly subscription unlocks unlimited job applications.',
-        [
-          { text: 'Not now', style: 'cancel' },
-          {
-            text: 'See plans',
-            onPress: () =>
-              router.push({
-                pathname: '/subscribe',
-                params: { side: 'tradie', tier: 'trade', interval: 'monthly' },
-              } as any),
-          },
-        ],
-      );
+      if (CAN_SELL_IN_APP) {
+        Alert.alert(
+          'Subscribe to apply',
+          'A flat monthly subscription unlocks unlimited job applications.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            {
+              text: 'See plans',
+              onPress: () =>
+                router.push({
+                  pathname: '/subscribe',
+                  params: { side: 'tradie', tier: 'trade', interval: 'monthly' },
+                } as any),
+            },
+          ],
+        );
+      } else {
+        // iOS: no in-app purchase or web-purchase link (App Store 3.1.1).
+        Alert.alert(
+          'Subscription required',
+          'Applying to jobs needs an active subscription. Once your subscription is active it works here automatically.',
+          [{ text: 'OK' }],
+        );
+      }
       return;
     }
 
@@ -482,6 +493,18 @@ export default function JobDetailScreen() {
                 {displayName} · {job.suburb} · {getRelativeTime(job.created_at)}
               </Text>
             </View>
+
+            {job.customer_id && job.customer_id !== userId ? (
+              <View style={{ alignItems: 'flex-start', marginTop: 12 }}>
+                <ReportButton
+                  contentType="job"
+                  contentId={job.id}
+                  reportedUserId={job.customer_id}
+                  variant="label"
+                  size={16}
+                />
+              </View>
+            ) : null}
           </View>
 
           {/* ── 4. Plans & Documents — at the bottom ─────── */}

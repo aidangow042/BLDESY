@@ -19,12 +19,14 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useUser } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
+import { useAiConsent } from '@/components/ai-consent-modal';
 
 export default function AiScreen() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const { userId } = useUser();
   const toast = useToast();
+  const { ensureConsent, consentModal } = useAiConsent();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -40,6 +42,9 @@ export default function AiScreen() {
         toast.show('Please sign in to use AI Assist', { variant: 'warning' });
         return;
       }
+
+      // First-run disclosure: text is sent to Anthropic (third-party AI).
+      if (!(await ensureConsent())) return;
 
       const userMessage: ChatMessage = {
         id: `u-${Date.now()}`,
@@ -86,7 +91,7 @@ export default function AiScreen() {
         setLoading(false);
       }
     },
-    [input, loading, messages, toast, userId],
+    [input, loading, messages, toast, userId, ensureConsent],
   );
 
   const retry = useCallback(() => {
@@ -126,6 +131,7 @@ export default function AiScreen() {
           loading={loading}
         />
       </KeyboardAvoidingView>
+      {consentModal}
     </AppShell>
   );
 }

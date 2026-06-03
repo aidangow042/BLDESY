@@ -25,6 +25,7 @@ import type BottomSheet from '@gorhom/bottom-sheet';
 import { useUnreadCount } from '@/hooks/use-unread-count';
 import { computeCoachTip } from '@/lib/dashboard-data';
 import { friendlyError } from '@/lib/error-messages';
+import { CAN_SELL_IN_APP } from '@/lib/iap-policy';
 
 type BuilderStatus = 'loading' | 'none' | 'pending' | 'approved' | 'error';
 
@@ -296,6 +297,14 @@ export default function PortalScreen() {
       title: 'Analytics',
       description: 'Track views, applications & profile performance',
       onPress: () => router.push('/builder-analytics'),
+    },
+    {
+      icon: 'card-outline',
+      title: CAN_SELL_IN_APP ? 'Billing & Pricing' : 'Billing',
+      description: CAN_SELL_IN_APP
+        ? 'Your plan, payment method, and tier upgrades'
+        : 'Your current plan and subscription status',
+      onPress: () => router.push('/billing'),
     },
     {
       icon: 'settings-outline',

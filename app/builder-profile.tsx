@@ -34,6 +34,8 @@ import { Colors, Spacing, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
+import { getBlockedIds } from '@/lib/blocking';
+import { ReportButton } from '@/components/report-button';
 import { addRecentProfile } from '@/lib/recent-profiles';
 import { CredentialBadges } from '@/components/builder/credential-badges';
 import { StarRating } from '@/components/ui/star-rating';
@@ -119,6 +121,7 @@ type Project = {
 
 type Review = {
   id: string;
+  reviewerId: string | null;
   reviewer: string;
   rating: number;
   date: string;
@@ -602,22 +605,29 @@ export default function BuilderProfileScreen() {
   async function fetchReviews() {
     const { data } = await supabase
       .from('reviews')
-      .select('id, rating, comment, reviewer_name, project_type, created_at')
+      .select('id, reviewer_id, rating, comment, reviewer_name, project_type, created_at')
       .eq('reviewee_id', builder?.user_id)
       .order('created_at', { ascending: false });
 
     if (data && data.length > 0) {
-      setReviews(data.map((r: any) => ({
+      // Hide reviews written by users the current user has blocked.
+      const blocked = userId ? await getBlockedIds(userId) : new Set<string>();
+      const visible = data.filter((r: any) => !r.reviewer_id || !blocked.has(r.reviewer_id));
+
+      setReviews(visible.map((r: any) => ({
         id: r.id,
+        reviewerId: r.reviewer_id ?? null,
         reviewer: r.reviewer_name ?? 'Anonymous',
         rating: r.rating ?? 5,
         date: new Date(r.created_at).toLocaleDateString('en-AU', { month: 'short', year: 'numeric' }),
         text: r.comment ?? '',
         projectType: r.project_type ?? undefined,
       })));
-      setReviewCount(data.length);
-      const sum = data.reduce((acc: number, r: any) => acc + (r.rating ?? 0), 0);
-      setAvgRating(Math.round((sum / data.length) * 10) / 10);
+      setReviewCount(visible.length);
+      if (visible.length > 0) {
+        const sum = visible.reduce((acc: number, r: any) => acc + (r.rating ?? 0), 0);
+        setAvgRating(Math.round((sum / visible.length) * 10) / 10);
+      }
     }
   }
 
@@ -1096,6 +1106,18 @@ export default function BuilderProfileScreen() {
               teal={teal}
             />
           </View>
+
+          {builder.user_id && builder.user_id !== userId ? (
+            <View style={{ alignItems: 'flex-start', marginTop: 12 }}>
+              <ReportButton
+                contentType="builder_profile"
+                contentId={builder.user_id}
+                reportedUserId={builder.user_id}
+                variant="label"
+                size={16}
+              />
+            </View>
+          ) : null}
         </View>
 
         {/* ─── SPECIALTIES ─── */}
@@ -1328,6 +1350,14 @@ export default function BuilderProfileScreen() {
                             <Text style={[styles.reviewDate, { color: colors.textSecondary }]}>{review.date}</Text>
                           </View>
                         </View>
+                        {review.reviewerId && review.reviewerId !== userId ? (
+                          <ReportButton
+                            contentType="review"
+                            contentId={review.id}
+                            reportedUserId={review.reviewerId}
+                            size={18}
+                          />
+                        ) : null}
                       </View>
                       {review.projectType && (
                         <View style={[styles.reviewProjectBadge, { backgroundColor: tealBg }]}>
@@ -1373,20 +1403,9 @@ export default function BuilderProfileScreen() {
               </>
             )}
 
-            {/* Write a review button */}
-            <Pressable
-              onPress={() => toast.show('Review submission coming soon')}
-              accessibilityRole="button"
-              accessibilityLabel={'Write a review for ' + builder.business_name}
-              style={({ pressed }) => [
-                styles.writeReviewBtn,
-                { borderColor: teal },
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Ionicons name="create-outline" size={18} color={teal} />
-              <Text style={[styles.writeReviewText, { color: teal }]}>Write a Review</Text>
-            </Pressable>
+            {/* Reviews are written from "My Jobs" after a completed job (the
+                customer + job context is required), so there's no standalone
+                "write a review" CTA here — that avoids a dead/placeholder button. */}
           </View>
         </View>
 

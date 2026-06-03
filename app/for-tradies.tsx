@@ -10,6 +10,7 @@ import { AppShell } from '@/components/layout';
 import { Badge, Button, Card, CountUp } from '@/components/ui';
 import { Colors, FontFamily, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { CAN_SELL_IN_APP } from '@/lib/iap-policy';
 
 const PERKS = [
   { glyph: '💸', title: 'No commission, no per-lead fees', body: 'Flat monthly subscription. Keep 100% of what you earn from every job you win.' },
@@ -52,9 +53,11 @@ export default function ForTradiesScreen() {
             <Button variant="primary" size="lg" onPress={() => router.push('/builder-signup' as any)}>
               Join BLDESY!
             </Button>
-            <Button variant="ghost" size="lg" onPress={() => router.push('/pricing' as any)}>
-              See pricing
-            </Button>
+            {CAN_SELL_IN_APP ? (
+              <Button variant="ghost" size="lg" onPress={() => router.push('/pricing' as any)}>
+                See pricing
+              </Button>
+            ) : null}
           </View>
         </View>
 

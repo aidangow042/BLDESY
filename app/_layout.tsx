@@ -147,6 +147,7 @@ export default function RootLayout() {
           <Stack.Screen name="messages" />
           <Stack.Screen name="billing" />
           <Stack.Screen name="settings" />
+          <Stack.Screen name="blocked-users" />
           <Stack.Screen name="help" />
           <Stack.Screen name="legal" />
           <Stack.Screen name="pricing" />

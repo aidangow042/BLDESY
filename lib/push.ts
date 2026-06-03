@@ -30,12 +30,28 @@ interface RegisterResult {
   token?: string;
 }
 
-export async function registerForPushNotifications(userId: string): Promise<RegisterResult> {
+/**
+ * Register the device for push.
+ *
+ * `prompt` controls whether we may show the iOS permission dialog:
+ *   - false (default): SILENT. Used on app launch / sign-in — we only refresh
+ *     the token if permission was already granted, and never prompt. Apple +
+ *     our own guidelines require permission requests at point of use, not on
+ *     launch.
+ *   - true: explicit user opt-in (e.g. the Settings "Push notifications"
+ *     toggle) — shows the system permission dialog if not yet decided.
+ */
+export async function registerForPushNotifications(
+  userId: string,
+  opts: { prompt?: boolean } = {},
+): Promise<RegisterResult> {
   if (!Device.isDevice) return { status: 'unsupported' };
 
   const { status: existing } = await Notifications.getPermissionsAsync();
   let permission = existing;
   if (permission !== 'granted') {
+    // Don't prompt on launch — only when the user explicitly opts in.
+    if (!opts.prompt) return { status: 'denied' };
     const { status } = await Notifications.requestPermissionsAsync();
     permission = status;
   }

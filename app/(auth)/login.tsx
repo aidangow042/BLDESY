@@ -9,6 +9,7 @@ import {
 import { Link, router } from 'expo-router';
 
 import { AuthCard } from '@/components/auth/auth-card';
+import { AppleSignInButton } from '@/components/auth/apple-sign-in-button';
 import { Button, Input } from '@/components/ui';
 import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -96,6 +97,9 @@ export default function LoginScreen() {
         <Text style={[styles.dividerText, { color: c.textSecondary }]}>or</Text>
         <View style={[styles.dividerLine, { backgroundColor: c.border }]} />
       </View>
+
+      {/* Sign in with Apple (iOS only) */}
+      <AppleSignInButton type="signIn" onError={setError} />
 
       <Pressable
         onPress={() => router.replace('/(tabs)' as any)}

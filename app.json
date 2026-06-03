@@ -11,6 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bldesy.app",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "BLDESY! needs camera access so you can take photos of your projects and job sites.",
         "NSPhotoLibraryUsageDescription": "BLDESY! needs photo library access so you can upload project photos and job images.",
@@ -51,10 +52,11 @@
     },
     "plugins": [
       "expo-router",
+      "expo-apple-authentication",
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "BLDESY! needs your location to show nearby tradies on the map."
+          "locationWhenInUsePermission": "BLDESY! uses your location to show nearby tradies on the map and to find and rank tradies near you when you search."
         }
       ],
       [

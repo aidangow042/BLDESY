@@ -4,6 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { DashboardColors, DashboardFonts, DashboardShadows } from '@/constants/dashboard-theme';
 import { useDashboardSubscription } from '@/lib/dashboard-data';
+import { CAN_SELL_IN_APP } from '@/lib/iap-policy';
 
 type Props = {
   userId: string | null;
@@ -16,6 +17,8 @@ export function SubscriptionCard({ userId, onManage, onUpgrade }: Props) {
   const isFree = sub.plan === 'Free';
 
   if (isFree) {
+    // iOS: no in-app upsell/purchase CTA (App Store Guideline 3.1.1).
+    if (!CAN_SELL_IN_APP) return null;
     return (
       <View style={styles.container}>
         <View style={[styles.card, styles.freeCard, DashboardShadows.subtle]}>

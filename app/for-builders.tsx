@@ -12,6 +12,7 @@ import { AppShell } from '@/components/layout';
 import { Badge, Button, Card, CountUp } from '@/components/ui';
 import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { CAN_SELL_IN_APP } from '@/lib/iap-policy';
 
 const STATS = [
   { value: 50,    suffix: '+',  label: 'Trade categories' },
@@ -54,9 +55,11 @@ export default function ForBuildersScreen() {
             <Button variant="primary" size="lg" onPress={() => router.push('/enterprise-signup' as any)}>
               Get started
             </Button>
-            <Button variant="ghost" size="lg" onPress={() => router.push('/pricing' as any)}>
-              See pricing
-            </Button>
+            {CAN_SELL_IN_APP ? (
+              <Button variant="ghost" size="lg" onPress={() => router.push('/pricing' as any)}>
+                See pricing
+              </Button>
+            ) : null}
           </View>
         </View>
 

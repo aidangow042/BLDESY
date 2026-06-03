@@ -19,6 +19,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { useRoles, useUser } from '@/lib/auth-context';
 import { DeleteAccountModal } from '@/components/delete-account-modal';
+import * as Notifications from 'expo-notifications';
+import { registerForPushNotifications, clearPushRegistration } from '@/lib/push';
 
 type SectionRow = {
   key: string;
@@ -45,9 +47,41 @@ export default function SettingsScreen() {
 
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [fullName, setFullName] = useState<string | null>(null);
-  const [pushNotifications, setPushNotifications] = useState(true);
+  const [pushNotifications, setPushNotifications] = useState(false);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(false);
+
+  // Reflect the real OS permission state in the toggle.
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        const { status } = await Notifications.getPermissionsAsync();
+        setPushNotifications(status === 'granted');
+      })();
+    }, []),
+  );
+
+  // The push toggle is the point-of-use opt-in: turning it on requests the
+  // iOS permission (we never prompt on launch). If the user previously denied,
+  // iOS won't re-prompt — send them to Settings.
+  async function handleTogglePush(value: boolean) {
+    if (!value) {
+      setPushNotifications(false);
+      await clearPushRegistration();
+      return;
+    }
+    if (!userId) {
+      toast.show('Please sign in to enable notifications', { variant: 'warning' });
+      return;
+    }
+    const result = await registerForPushNotifications(userId, { prompt: true });
+    if (result.status === 'registered' || result.status === 'cached') {
+      setPushNotifications(true);
+    } else {
+      setPushNotifications(false);
+      toast.show('Enable notifications for BLDESY in your iPhone Settings', { duration: 4000 });
+    }
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -192,7 +226,7 @@ export default function SettingsScreen() {
           rightElement: (
             <Switch
               value={pushNotifications}
-              onValueChange={setPushNotifications}
+              onValueChange={handleTogglePush}
               trackColor={{ false: c.border, true: c.primary + '66' }}
               thumbColor={pushNotifications ? c.primary : c.textSecondary}
             />
@@ -256,6 +290,13 @@ export default function SettingsScreen() {
           subtitle: 'Profile visibility and data sharing',
           icon: 'shield',
           onPress: () => router.push('/legal' as any),
+        },
+        {
+          key: 'blocked',
+          label: 'Blocked users',
+          subtitle: "Manage who you've blocked",
+          icon: 'block',
+          onPress: () => router.push('/blocked-users' as any),
         },
         {
           key: 'download',

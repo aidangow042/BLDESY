@@ -3,6 +3,7 @@
  * All functions accept userId to avoid redundant getUser() calls.
  */
 import { supabase } from './supabase';
+import { getMutualBlockIds, isBlockedEitherWay } from './blocking';
 
 export type Conversation = {
   id: string;
@@ -43,7 +44,18 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
 
   if (!conversations || conversations.length === 0) return [];
 
-  const otherUserIds = [...new Set(conversations.map((c: any) =>
+  // Hide conversations with anyone blocked in either direction.
+  const blockedIds = await getMutualBlockIds(userId);
+  const visibleConversations = blockedIds.size
+    ? conversations.filter((c: any) => {
+        const other = c.user1_id === userId ? c.user2_id : c.user1_id;
+        return !blockedIds.has(other);
+      })
+    : conversations;
+
+  if (visibleConversations.length === 0) return [];
+
+  const otherUserIds = [...new Set(visibleConversations.map((c: any) =>
     c.user1_id === userId ? c.user2_id : c.user1_id,
   ))];
 
@@ -62,7 +74,7 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
     }
   }
 
-  return conversations.map((c: any) => {
+  return visibleConversations.map((c: any) => {
     const isUser1 = c.user1_id === userId;
     const otherUserId = isUser1 ? c.user2_id : c.user1_id;
     const unreadCount = isUser1 ? c.unread_count_user1 : c.unread_count_user2;
@@ -82,6 +94,10 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
 /** Find or create a conversation with another user */
 export async function getOrCreateConversation(userId: string, recipientId: string): Promise<string | null> {
   if (recipientId === userId) return null;
+
+  // Can't start/continue a DM with someone either of you has blocked. The DB
+  // also rejects the message insert, but bail early for a clean UX.
+  if (await isBlockedEitherWay(userId, recipientId)) return null;
 
   const [user1_id, user2_id] = normalizeParticipants(userId, recipientId);
 
