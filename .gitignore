@@ -48,3 +48,7 @@ app-example
 
 # Supabase local temp
 supabase/.temp/
+
+# Local scraped/outreach data (not app code)
+/sunshine-coast-tilers.csv
+/scripts/sunshine-coast-tilers.js

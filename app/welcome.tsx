@@ -8,9 +8,10 @@
  * screen entirely (root layout handles that).
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,6 +27,30 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRoles, useUser } from '@/lib/auth-context';
 
 type Role = 'customer' | 'builder' | 'enterprise';
+
+/** "What you'll need" checklist shown before a tradie/enterprise signup so
+ *  people arrive prepared (and don't bail when the web form asks for docs). */
+const REQUIREMENTS: Record<'builder' | 'enterprise', { intro: string; items: string[] }> = {
+  builder: {
+    intro: 'Setting up takes about 5 minutes. Have these handy:',
+    items: [
+      'Your ABN',
+      'Trade licence number (if your trade needs one)',
+      'White Card (for NSW construction work)',
+      'Photo ID — driver\'s licence or passport',
+      'Insurance certificate (optional — boosts your profile)',
+    ],
+  },
+  enterprise: {
+    intro: 'Have these handy to finish your company listing:',
+    items: [
+      'Company ABN',
+      'Contractor / builder licence (if you do construction work)',
+      'Photo ID — driver\'s licence or passport',
+      'Insurance certificate (optional)',
+    ],
+  },
+};
 
 interface RoleCard {
   role: Role;
@@ -100,6 +125,8 @@ export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const { user, userId } = useUser();
   const { isBuilder, isEnterprise, loading } = useRoles();
+  // Which role's "what you'll need" checklist is open (tradie/enterprise only).
+  const [requirements, setRequirements] = useState<'builder' | 'enterprise' | null>(null);
 
   // If the user already has an active role row, skip welcome.
   useEffect(() => {
@@ -117,9 +144,19 @@ export default function WelcomeScreen() {
   }
 
   function handlePick(role: Role) {
-    if (role === 'customer') router.replace('/(tabs)' as any);
-    else if (role === 'builder') router.push('/builder-signup' as any);
-    else router.push('/enterprise-signup' as any);
+    if (role === 'customer') {
+      router.replace('/(tabs)' as any);
+      return;
+    }
+    // Tradie / enterprise → show the "what you'll need" checklist first.
+    setRequirements(role);
+  }
+
+  function proceed() {
+    const role = requirements;
+    setRequirements(null);
+    if (role === 'builder') router.push('/builder-signup' as any);
+    else if (role === 'enterprise') router.push('/enterprise-signup' as any);
   }
 
   const firstName =
@@ -204,6 +241,45 @@ export default function WelcomeScreen() {
           You can change or add roles anytime from your account menu. All accounts include free messaging and saved tradies.
         </Text>
       </ScrollView>
+
+      {/* "What you'll need" checklist — tradie / enterprise only */}
+      <Modal
+        visible={!!requirements}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRequirements(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setRequirements(null)}>
+          <Pressable style={[styles.modalCard, { backgroundColor: c.surface }]} onPress={() => {}}>
+            <Text style={[styles.modalTitle, { color: c.textPrimary }]}>Before you start</Text>
+            <Text style={[styles.modalIntro, { color: c.textSecondary }]}>
+              {requirements ? REQUIREMENTS[requirements].intro : ''}
+            </Text>
+            <View style={styles.modalList}>
+              {(requirements ? REQUIREMENTS[requirements].items : []).map((item) => (
+                <View key={item} style={styles.modalRow}>
+                  <Text style={[styles.modalCheck, { color: requirements === 'enterprise' ? c.indigo : c.primary }]}>✓</Text>
+                  <Text style={[styles.modalItem, { color: c.textPrimary }]}>{item}</Text>
+                </View>
+              ))}
+            </View>
+            <Text style={[styles.modalNote, { color: c.textSecondary }]}>
+              {"Don't have everything yet? You can save and come back anytime."}
+            </Text>
+            <Button
+              variant={requirements === 'enterprise' ? 'indigo' : 'primary'}
+              size="lg"
+              fullWidth
+              onPress={proceed}
+            >
+              {"I'm ready — continue"}
+            </Button>
+            <Pressable onPress={() => setRequirements(null)} style={styles.modalCancel}>
+              <Text style={[styles.modalCancelText, { color: c.textSecondary }]}>Not now</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -309,5 +385,64 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
     paddingHorizontal: Spacing.lg,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.lg,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: Radius.lg,
+    padding: Spacing['2xl'],
+    gap: Spacing.md,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '800',
+  },
+  modalIntro: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: FontFamily.body,
+  },
+  modalList: {
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  modalRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    alignItems: 'flex-start',
+  },
+  modalCheck: {
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 21,
+  },
+  modalItem: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 21,
+    fontFamily: FontFamily.body,
+  },
+  modalNote: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: FontFamily.body,
+    marginTop: Spacing.xs,
+  },
+  modalCancel: {
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+  },
+  modalCancelText: {
+    fontSize: 14,
+    fontFamily: FontFamily.bodyMedium,
+    fontWeight: '600',
   },
 });
