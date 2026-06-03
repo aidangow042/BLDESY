@@ -18,7 +18,9 @@ import * as WebBrowser from 'expo-web-browser';
 
 import { supabase } from './supabase';
 
-const WEB_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://bldesy.com.au';
+// www host directly — the apex 307-redirects to www and the in-app browser
+// drops the token fragment across that redirect, landing the user logged out.
+const WEB_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://www.bldesy.com.au';
 
 export type OnboardingTarget = 'builder' | 'enterprise';
 

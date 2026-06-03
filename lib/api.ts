@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://bldesy.com.au';
+// Use the www host directly — the apex (bldesy.com.au) 307-redirects to www,
+// and that cross-origin redirect strips the Authorization header on POSTs.
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://www.bldesy.com.au';
 
 export class ApiError extends Error {
   status: number;

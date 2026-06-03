@@ -10,7 +10,7 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://scyqrttqzxdviizgavon.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjeXFydHRxenhkdmlpemdhdm9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzOTExMDEsImV4cCI6MjA4ODk2NzEwMX0.SVOd4Oh9N_iwH5AGPQpvdjWl6wuZGADcI1bdFTnD_gc",
-        "EXPO_PUBLIC_API_BASE_URL": "https://bldesy.com.au",
+        "EXPO_PUBLIC_API_BASE_URL": "https://www.bldesy.com.au",
         "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51TDyPI3dfoi15lvrsSYSnqFiEoHLiA5MuVPSgPDb0N6344OvP5hO0pOkUj7YwXj7V6bsuuUMZEcOYEOLxwSHZqfK008nsrfjva"
       }
     },
@@ -19,7 +19,7 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://scyqrttqzxdviizgavon.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjeXFydHRxenhkdmlpemdhdm9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzOTExMDEsImV4cCI6MjA4ODk2NzEwMX0.SVOd4Oh9N_iwH5AGPQpvdjWl6wuZGADcI1bdFTnD_gc",
-        "EXPO_PUBLIC_API_BASE_URL": "https://bldesy.com.au",
+        "EXPO_PUBLIC_API_BASE_URL": "https://www.bldesy.com.au",
         "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51TDyPI3dfoi15lvrsSYSnqFiEoHLiA5MuVPSgPDb0N6344OvP5hO0pOkUj7YwXj7V6bsuuUMZEcOYEOLxwSHZqfK008nsrfjva"
       }
     },
@@ -28,7 +28,7 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://scyqrttqzxdviizgavon.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjeXFydHRxenhkdmlpemdhdm9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzOTExMDEsImV4cCI6MjA4ODk2NzEwMX0.SVOd4Oh9N_iwH5AGPQpvdjWl6wuZGADcI1bdFTnD_gc",
-        "EXPO_PUBLIC_API_BASE_URL": "https://bldesy.com.au",
+        "EXPO_PUBLIC_API_BASE_URL": "https://www.bldesy.com.au",
         "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51TDyPI3dfoi15lvrsSYSnqFiEoHLiA5MuVPSgPDb0N6344OvP5hO0pOkUj7YwXj7V6bsuuUMZEcOYEOLxwSHZqfK008nsrfjva"
       }
     }
@@ -38,7 +38,7 @@
       "ios": {
         "appleId": "",
         "ascAppId": "",
-        "appleTeamId": ""
+        "appleTeamId": "6997TVZ2YR"
       },
       "android": {
         "serviceAccountKeyPath": "",
