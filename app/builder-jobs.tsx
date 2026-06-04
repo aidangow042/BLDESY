@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -10,6 +10,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -28,6 +29,7 @@ import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
 import { TRADE_ICONS, getTradeIcon } from '@/lib/trade-utils';
 import { friendlyError } from '@/lib/error-messages';
+import { filterJobsByBuilderRadius } from '@/lib/job-feed-filter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CAROUSEL_HEIGHT = 160;
@@ -84,6 +86,13 @@ type Job = {
   budget: string | null;
   created_at: string;
   photos: string[];
+  // Contract / enterprise detail fields (present on contract posts)
+  workers_needed: number | null;
+  day_rate: string | null;
+  contract_duration: string | null;
+  start_date: string | null;
+  // Soft "recommended" signal — the job's wanted sub-trades overlap the builder's
+  specMatch: boolean;
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -100,6 +109,14 @@ function timeAgo(dateString: string): string {
 
 function capitalise(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function formatStartDate(dateString: string): string {
+  try {
+    return new Date(dateString).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+  } catch {
+    return dateString;
+  }
 }
 
 // ─── Skeleton card ───────────────────────────────────────────────────────────
@@ -254,6 +271,7 @@ function JobCard({
   colors,
   teal,
   isDark,
+  isContract,
   onPress,
   onApply,
 }: {
@@ -262,6 +280,7 @@ function JobCard({
   colors: any;
   teal: string;
   isDark: boolean;
+  isContract: boolean;
   onPress: () => void;
   onApply: () => void;
 }) {
@@ -308,6 +327,12 @@ function JobCard({
               <View style={[styles.tradePill, { backgroundColor: colors.tealBg }]}>
                 <Text style={[styles.tradePillText, { color: teal }]}>{tradeLabel}</Text>
               </View>
+              {item.specMatch ? (
+                <View style={styles.specPill}>
+                  <MaterialIcons name="star" size={11} color="#059669" />
+                  <Text style={styles.specPillText}>Matches your speciality</Text>
+                </View>
+              ) : null}
               <View style={styles.locationRow}>
                 <MaterialIcons name="location-on" size={12} color={colors.textSecondary} />
                 <Text style={[styles.locationText, { color: colors.textSecondary }]} numberOfLines={1}>
@@ -340,6 +365,34 @@ function JobCard({
             <Text style={[styles.statText, { color: colors.text }]}>{postedText}</Text>
           </View>
         </View>
+
+        {/* ─── Contract details ─── */}
+        {isContract &&
+        ((item.workers_needed ?? 0) > 1 || item.day_rate || item.contract_duration || item.start_date) ? (
+          <View style={styles.contractChips}>
+            {(item.workers_needed ?? 0) > 1 ? (
+              <View style={[styles.contractChip, { backgroundColor: colors.tealBg }]}>
+                <MaterialIcons name="groups" size={12} color={teal} />
+                <Text style={[styles.contractChipText, { color: teal }]}>{item.workers_needed} workers</Text>
+              </View>
+            ) : null}
+            {item.day_rate ? (
+              <View style={[styles.contractChip, { backgroundColor: colors.tealBg }]}>
+                <Text style={[styles.contractChipText, { color: teal }]}>{item.day_rate}</Text>
+              </View>
+            ) : null}
+            {item.contract_duration ? (
+              <View style={[styles.contractChip, { backgroundColor: colors.tealBg }]}>
+                <Text style={[styles.contractChipText, { color: teal }]}>{item.contract_duration}</Text>
+              </View>
+            ) : null}
+            {item.start_date ? (
+              <View style={[styles.contractChip, { backgroundColor: colors.tealBg }]}>
+                <Text style={[styles.contractChipText, { color: teal }]}>Start: {formatStartDate(item.start_date)}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
 
         {/* ─── Description ─── */}
         {item.description ? (
@@ -396,12 +449,18 @@ export default function BuilderJobsFeed() {
   const jobType = params.type || 'all'; // 'commercial', 'residential', 'contracts', or 'all'
   const { userId } = useUser();
 
+  const isContracts = jobType === 'contracts';
+
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [builderTrade, setBuilderTrade] = useState<string | null>(null);
   const [filterUrgency, setFilterUrgency] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Contracts feed only: "My" (applied to) vs "Explore" (available) + search
+  const [contractTab, setContractTab] = useState<'explore' | 'my'>('explore');
+  const [search, setSearch] = useState('');
+  const [appliedJobIds, setAppliedJobIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!userId) return;
@@ -424,41 +483,65 @@ export default function BuilderJobsFeed() {
         return;
       }
 
+      // The builder's trade(s), service area and sub-trade specialities drive
+      // which jobs we surface — same model as the website portal feeds.
       const { data: profile } = await supabase
         .from('builder_profiles')
-        .select('trade_category')
+        .select('latitude, longitude, radius_km, trade_category, trade_categories, specialisations')
         .eq('user_id', userId)
         .maybeSingle();
 
       const trade = profile?.trade_category ?? null;
       setBuilderTrade(trade);
 
-      // Build query: show matching trade first, then all other open jobs
+      // Prefer the multi-trade array; fall back to the legacy single trade.
+      const builderTrades: string[] =
+        Array.isArray(profile?.trade_categories) && profile!.trade_categories.length > 0
+          ? profile!.trade_categories.filter((t: unknown): t is string => typeof t === 'string')
+          : trade
+            ? [trade]
+            : [];
+
+      const builderSpecs = (profile?.specialisations ?? {}) as Record<string, string[]>;
+
       let query = supabase
         .from('jobs')
-        .select('id, title, description, trade_category, suburb, postcode, urgency, budget, status, created_at, customer_id, photo_urls')
+        .select(
+          'id, title, description, trade_category, suburb, postcode, urgency, budget, status, created_at, customer_id, photo_urls, poster_type, posting_kind, workers_needed, day_rate, contract_duration, start_date, specialisations',
+        )
         .eq('status', 'open')
         .order('created_at', { ascending: false });
 
-      // Filter by job type.
-      //   commercial   → posted by an enterprise (project work)
-      //   residential  → posted by a customer (home jobs)
-      //   contracts    → posting_kind = 'contract' (ongoing / multi-week)
+      // Separate the feeds cleanly by poster + posting kind (matches the website):
+      //   commercial   → enterprise project jobs   (poster=enterprise, kind=job)
+      //   residential  → customer home jobs         (poster=customer)
+      //   contracts    → enterprise ongoing work    (poster=enterprise, kind=contract)
       if (jobType === 'commercial') {
-        query = query.eq('poster_type', 'enterprise');
+        query = query.eq('poster_type', 'enterprise').eq('posting_kind', 'job');
       } else if (jobType === 'residential') {
         query = query.eq('poster_type', 'customer');
       } else if (jobType === 'contracts') {
-        query = query.eq('posting_kind', 'contract');
+        query = query.eq('poster_type', 'enterprise').eq('posting_kind', 'contract');
+      }
+
+      // Hard-filter to the builder's trade(s). With no trades set, show all.
+      if (builderTrades.length > 0) {
+        query = query.in('trade_category', builderTrades);
       }
 
       if (filterUrgency) {
         query = query.eq('urgency', filterUrgency);
       }
 
-      const { data: jobsData, error: fetchError } = await query;
+      // Fetch jobs + the builder's own applications (for the contracts My/Explore tab).
+      const [jobsRes, appsRes] = await Promise.all([
+        query,
+        supabase.from('applications').select('job_id').eq('builder_id', userId),
+      ]);
 
-      // RLS filters to open jobs visible to approved builders
+      // RLS already limits this to open jobs visible to approved builders; the
+      // trade + radius narrowing below is the same client-side model as the web.
+      const { data: jobsData, error: fetchError } = jobsRes;
 
       if (fetchError) {
         setError(friendlyError(fetchError));
@@ -466,41 +549,55 @@ export default function BuilderJobsFeed() {
         return;
       }
 
-      if (jobsData?.length) {
-        // Fetch photos for all jobs in one query
-        const jobIds = jobsData.map((j: any) => j.id);
-        const { data: photosData } = await supabase
-          .from('job_photos')
-          .select('job_id, file_path')
-          .in('job_id', jobIds)
-          .order('is_cover', { ascending: false });
+      setAppliedJobIds(new Set((appsRes.data ?? []).map((a: any) => a.job_id)));
 
-        // Group photos by job_id
-        const photoMap = new Map<string, string[]>();
-        for (const photo of photosData ?? []) {
-          const arr = photoMap.get(photo.job_id) ?? [];
-          arr.push(photo.file_path);
-          photoMap.set(photo.job_id, arr);
-        }
+      if (!jobsData?.length) {
+        setJobs([]);
+        return;
+      }
 
-        const allJobs = jobsData.map((j: any) => ({
+      // Fetch photos for all jobs in one query
+      const jobIds = jobsData.map((j: any) => j.id);
+      const { data: photosData } = await supabase
+        .from('job_photos')
+        .select('job_id, file_path')
+        .in('job_id', jobIds)
+        .order('is_cover', { ascending: false });
+
+      const photoMap = new Map<string, string[]>();
+      for (const photo of photosData ?? []) {
+        const arr = photoMap.get(photo.job_id) ?? [];
+        arr.push(photo.file_path);
+        photoMap.set(photo.job_id, arr);
+      }
+
+      let allJobs: Job[] = jobsData.map((j: any) => {
+        const jobSpecs: string[] = Array.isArray(j.specialisations) ? j.specialisations : [];
+        const mine = builderSpecs[j.trade_category] ?? [];
+        return {
           ...j,
           photos: (photoMap.get(j.id) ?? []).length > 0
             ? photoMap.get(j.id)!
-            : Array.isArray(j.photo_urls) ? j.photo_urls : [],
-        }));
-        // Sort: matching trade jobs first, then the rest
-        if (trade) {
-          const tradeLower = trade.toLowerCase();
-          const matchingTrade = allJobs.filter((j: any) => j.trade_category?.toLowerCase() === tradeLower);
-          const otherJobs = allJobs.filter((j: any) => j.trade_category?.toLowerCase() !== tradeLower);
-          setJobs([...matchingTrade, ...otherJobs]);
-        } else {
-          setJobs(allJobs);
-        }
-      } else {
-        setJobs([]);
+            : Array.isArray(j.photo_urls)
+              ? j.photo_urls
+              : [],
+          specMatch: jobSpecs.length > 0 && jobSpecs.some((s) => mine.includes(s)),
+        };
+      });
+
+      // Only show work inside the builder's service radius.
+      allJobs = await filterJobsByBuilderRadius(allJobs, {
+        latitude: profile?.latitude ?? null,
+        longitude: profile?.longitude ?? null,
+        radius_km: profile?.radius_km ?? null,
+      });
+
+      // Project Jobs: float speciality matches ("recommended") to the top.
+      if (jobType === 'commercial') {
+        allJobs = [...allJobs].sort((a, b) => Number(b.specMatch) - Number(a.specMatch));
       }
+
+      setJobs(allJobs);
     } catch (err: any) {
       setError(friendlyError(err));
     } finally {
@@ -521,49 +618,56 @@ export default function BuilderJobsFeed() {
     [router],
   );
 
-  // Find the index where "other jobs" start
-  const otherJobsStartIndex = builderTrade
-    ? jobs.findIndex((j) => j.trade_category?.toLowerCase() !== builderTrade.toLowerCase())
-    : -1;
-  const hasMatchingJobs = builderTrade && otherJobsStartIndex !== 0;
-  const hasOtherJobs = otherJobsStartIndex > 0 && otherJobsStartIndex < jobs.length;
+  // The feed is already hard-filtered to the builder's trade(s) + radius. The
+  // contracts feed adds a My/Explore + search layer on top (matches the web).
+  const displayedJobs = useMemo(() => {
+    if (!isContracts) return jobs;
+    let list = contractTab === 'my' ? jobs.filter((j) => appliedJobIds.has(j.id)) : jobs;
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (j) =>
+          j.title.toLowerCase().includes(q) ||
+          (j.description ?? '').toLowerCase().includes(q) ||
+          j.suburb.toLowerCase().includes(q),
+      );
+    }
+    return list;
+  }, [jobs, isContracts, contractTab, search, appliedJobIds]);
 
   const renderJob = useCallback(
     ({ item, index }: { item: Job; index: number }) => (
-      <>
-        {/* Section header: Your Trade */}
-        {index === 0 && hasMatchingJobs && builderTrade ? (
-          <View style={styles.sectionHeader}>
-            <View style={[styles.sectionHeaderDot, { backgroundColor: teal }]} />
-            <Text style={[styles.sectionHeaderText, { color: colors.text }]}>
-              {capitalise(builderTrade)} Jobs
-            </Text>
-          </View>
-        ) : null}
-        {/* Section header: Other Jobs */}
-        {index === otherJobsStartIndex && hasOtherJobs ? (
-          <View style={[styles.sectionHeader, { marginTop: Spacing.lg }]}>
-            <View style={[styles.sectionHeaderDot, { backgroundColor: colors.textSecondary }]} />
-            <Text style={[styles.sectionHeaderText, { color: colors.textSecondary }]}>
-              Other Trades
-            </Text>
-          </View>
-        ) : null}
-        <JobCard
-          item={item}
-          index={index}
-          colors={colors}
-          teal={teal}
-          isDark={isDark}
-          onPress={() => handleJobPress(item.id)}
-          onApply={() => handleJobPress(item.id)}
-        />
-      </>
+      <JobCard
+        item={item}
+        index={index}
+        colors={colors}
+        teal={teal}
+        isDark={isDark}
+        isContract={isContracts}
+        onPress={() => handleJobPress(item.id)}
+        onApply={() => handleJobPress(item.id)}
+      />
     ),
-    [colors, teal, isDark, handleJobPress, builderTrade, otherJobsStartIndex, hasMatchingJobs, hasOtherJobs],
+    [colors, teal, isDark, isContracts, handleJobPress],
   );
 
   const keyExtractor = useCallback((item: Job) => item.id, []);
+
+  const unit = isContracts ? 'contract' : 'job';
+  const emptyTitle = isContracts
+    ? contractTab === 'my'
+      ? 'No applications yet'
+      : 'No contracts right now'
+    : 'No open jobs right now';
+  const emptySubtext = search.trim()
+    ? 'No results for your search. Try a different term.'
+    : isContracts
+      ? contractTab === 'my'
+        ? "You haven't applied to any contracts yet."
+        : 'No contracts in your trade and area right now. Pull down to refresh.'
+      : filterUrgency
+        ? `No ${URGENCY_CONFIG[filterUrgency]?.label ?? filterUrgency} jobs at the moment. Try a different filter.`
+        : 'New jobs are posted regularly. Pull down to refresh.';
 
   const screenTitle =
     jobType === 'commercial'
@@ -577,51 +681,92 @@ export default function BuilderJobsFeed() {
   return (
     <AppShell title={screenTitle} showBack>
       <View style={{ flex: 1, backgroundColor: colors.canvas }}>
-        {/* Meta strip — job count */}
+        {/* Meta strip — count */}
         <View style={[styles.metaStrip, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
           <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-            {loading ? '...' : `${jobs.length} job${jobs.length !== 1 ? 's' : ''} available`}
+            {loading ? '...' : `${displayedJobs.length} ${unit}${displayedJobs.length !== 1 ? 's' : ''}`}
             {builderTrade ? ` · ${capitalise(builderTrade)}` : ''}
           </Text>
         </View>
 
-        {/* ─── Filter/sort bar ─── */}
-        <View style={[styles.sortBar, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortScroll}>
-            {FILTER_OPTIONS.map((opt) => {
-              const active = filterUrgency === opt.key;
-              return (
-                <Pressable
-                  key={String(opt.key)}
-                  onPress={() => setFilterUrgency(opt.key)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  accessibilityLabel={`Filter: ${opt.label}`}
-                  style={[
-                    styles.sortPill,
-                    active
-                      ? { backgroundColor: teal, borderColor: teal, borderWidth: 1.5 }
-                      : { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 },
-                  ]}
-                >
-                  <MaterialIcons
-                    name={opt.icon as any}
-                    size={14}
-                    color={active ? '#fff' : colors.icon}
-                  />
-                  <Text
+        {isContracts ? (
+          /* ─── Contracts: My / Explore subtabs + search ─── */
+          <View style={[styles.contractControls, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+            <View style={styles.subtabRow}>
+              {(['explore', 'my'] as const).map((t) => {
+                const active = contractTab === t;
+                return (
+                  <Pressable
+                    key={t}
+                    onPress={() => setContractTab(t)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    style={[styles.subtab, { borderBottomColor: active ? teal : 'transparent' }]}
+                  >
+                    <Text style={[styles.subtabText, { color: active ? teal : colors.textSecondary }]}>
+                      {t === 'my' ? 'My Contracts' : 'Explore'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={[styles.searchWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <MaterialIcons name="search" size={18} color={colors.textSecondary} />
+              <TextInput
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search title, suburb…"
+                placeholderTextColor={colors.textSecondary}
+                style={[styles.searchInput, { color: colors.text }]}
+                returnKeyType="search"
+                accessibilityLabel="Search contracts"
+              />
+              {search ? (
+                <Pressable onPress={() => setSearch('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
+                  <MaterialIcons name="close" size={16} color={colors.textSecondary} />
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        ) : (
+          /* ─── Jobs: urgency filter/sort bar ─── */
+          <View style={[styles.sortBar, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortScroll}>
+              {FILTER_OPTIONS.map((opt) => {
+                const active = filterUrgency === opt.key;
+                return (
+                  <Pressable
+                    key={String(opt.key)}
+                    onPress={() => setFilterUrgency(opt.key)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={`Filter: ${opt.label}`}
                     style={[
-                      styles.sortPillText,
-                      { color: active ? '#fff' : colors.textSecondary, fontWeight: active ? '700' : '500' },
+                      styles.sortPill,
+                      active
+                        ? { backgroundColor: teal, borderColor: teal, borderWidth: 1.5 }
+                        : { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 },
                     ]}
                   >
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
+                    <MaterialIcons
+                      name={opt.icon as any}
+                      size={14}
+                      color={active ? '#fff' : colors.icon}
+                    />
+                    <Text
+                      style={[
+                        styles.sortPillText,
+                        { color: active ? '#fff' : colors.textSecondary, fontWeight: active ? '700' : '500' },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
       {/* ─── Content ─── */}
       <ReAnimated.View entering={FadeInUp.duration(300).delay(100)} style={{ flex: 1 }}>
@@ -652,17 +797,13 @@ export default function BuilderJobsFeed() {
             <Text style={styles.stateCtaText}>Try Again</Text>
           </Pressable>
         </View>
-      ) : jobs.length === 0 ? (
+      ) : displayedJobs.length === 0 ? (
         <View style={styles.centeredState}>
           <View style={[styles.stateIconWrap, { backgroundColor: colors.tealBg }]}>
-            <Ionicons name="briefcase-outline" size={36} color={teal} />
+            <Ionicons name={isContracts ? 'reader-outline' : 'briefcase-outline'} size={36} color={teal} />
           </View>
-          <Text style={[styles.stateTitle, { color: colors.text }]}>No open jobs right now</Text>
-          <Text style={[styles.stateSubtext, { color: colors.textSecondary }]}>
-            {filterUrgency
-              ? `No ${URGENCY_CONFIG[filterUrgency]?.label ?? filterUrgency} jobs at the moment. Try a different filter.`
-              : 'New jobs are posted regularly. Pull down to refresh.'}
-          </Text>
+          <Text style={[styles.stateTitle, { color: colors.text }]}>{emptyTitle}</Text>
+          <Text style={[styles.stateSubtext, { color: colors.textSecondary }]}>{emptySubtext}</Text>
           <Pressable
             onPress={loadJobs}
             style={({ pressed }) => [
@@ -672,12 +813,12 @@ export default function BuilderJobsFeed() {
             ]}
           >
             <MaterialIcons name="refresh" size={18} color="#fff" />
-            <Text style={styles.stateCtaText}>Refresh Jobs</Text>
+            <Text style={styles.stateCtaText}>Refresh</Text>
           </Pressable>
         </View>
       ) : (
         <FlatList
-          data={jobs}
+          data={displayedJobs}
           keyExtractor={keyExtractor}
           renderItem={renderJob}
           contentContainerStyle={styles.listContent}
@@ -685,6 +826,7 @@ export default function BuilderJobsFeed() {
           windowSize={5}
           maxToRenderPerBatch={8}
           removeClippedSubviews
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={teal} />
           }
@@ -692,8 +834,8 @@ export default function BuilderJobsFeed() {
             <View style={styles.resultCountRow}>
               <MaterialIcons name="format-list-numbered" size={14} color={colors.textSecondary} />
               <Text style={[styles.resultCounter, { color: colors.textSecondary }]}>
-                {jobs.length} open job{jobs.length !== 1 ? 's' : ''}
-                {filterUrgency ? ` · ${URGENCY_CONFIG[filterUrgency]?.label ?? filterUrgency}` : ''}
+                {displayedJobs.length} {unit}{displayedJobs.length !== 1 ? 's' : ''}
+                {!isContracts && filterUrgency ? ` · ${URGENCY_CONFIG[filterUrgency]?.label ?? filterUrgency}` : ''}
               </Text>
             </View>
           }
@@ -701,7 +843,7 @@ export default function BuilderJobsFeed() {
             <View style={styles.endRow}>
               <View style={[styles.endLine, { backgroundColor: colors.border }]} />
               <Text style={[styles.endText, { color: colors.textSecondary }]}>
-                All {jobs.length} results shown
+                All {displayedJobs.length} results shown
               </Text>
               <View style={[styles.endLine, { backgroundColor: colors.border }]} />
             </View>
@@ -1071,20 +1213,75 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // ─── Section headers ────────────────────────────
-  sectionHeader: {
+  // ─── Speciality badge ──────────────────────────
+  specPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.full,
+  },
+  specPillText: {
+    ...Type.label,
+    color: '#059669',
+    fontWeight: '700',
+  },
+
+  // ─── Contract detail chips ─────────────────────
+  contractChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+  },
+  contractChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+  },
+  contractChipText: {
+    ...Type.label,
+    fontWeight: '600',
+  },
+
+  // ─── Contracts controls (My/Explore + search) ──
+  contractControls: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+    gap: Spacing.sm,
+  },
+  subtabRow: {
+    flexDirection: 'row',
+    gap: Spacing.lg,
+  },
+  subtab: {
+    paddingVertical: 6,
+    borderBottomWidth: 2,
+  },
+  subtabText: {
+    ...Type.bodySemiBold,
+    fontWeight: '700',
+  },
+  searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
+    paddingHorizontal: 12,
+    height: 40,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
   },
-  sectionHeaderDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  sectionHeaderText: {
-    ...Type.h3,
-    fontWeight: '700',
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 0,
   },
 });

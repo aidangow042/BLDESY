@@ -1,13 +1,11 @@
 /**
- * SearchOverlay — structured "find a tradie" search, opened by tapping the
- * home hero search bar. Mirrors the website's slide-up SearchForm: location
- * (suburb autocomplete) + urgency + keywords + trade → pushes /results with
- * the params the results screen already reads (suburb, trade_category,
- * urgency, keywords).
+ * Full-page "Find a tradie" search — the app's main search page, mirroring the
+ * website's /search form. Same fields as the home search bar opens to, but a
+ * full screen. Submits to /results with the params the results screen reads
+ * (suburb, trade_category, urgency, keywords, specialisations).
  */
 import { useState } from 'react';
 import {
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,10 +17,12 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
+import { AppShell } from '@/components/layout';
 import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getSuburbSuggestions } from '@/lib/geo';
 import { TRADE_CATALOGUE } from '@/components/builder/trade-catalogue';
+import { hasSpecialisations, getSpecialisationsForTrade } from '@/lib/trade-specialisations';
 
 // Urgency values match what app/results.tsx scores against.
 const URGENCY_OPTIONS = [
@@ -32,12 +32,15 @@ const URGENCY_OPTIONS = [
   { label: 'Flexible', value: 'flexible' },
 ];
 
-interface Props {
-  visible: boolean;
-  onClose: () => void;
+function tradeNameFor(slug: string): string {
+  for (const g of TRADE_CATALOGUE) {
+    const t = g.trades.find((x) => x.slug === slug);
+    if (t) return t.name;
+  }
+  return 'Any trade';
 }
 
-export function SearchOverlay({ visible, onClose }: Props) {
+export default function SearchScreen() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const router = useRouter();
@@ -47,6 +50,8 @@ export function SearchOverlay({ visible, onClose }: Props) {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [tradeSlug, setTradeSlug] = useState('');
+  const [tradeOpen, setTradeOpen] = useState(false);
+  const [specs, setSpecs] = useState<string[]>([]);
   const [urgency, setUrgency] = useState('');
   const [keywords, setKeywords] = useState<string[]>([]);
   const [keywordInput, setKeywordInput] = useState('');
@@ -69,15 +74,21 @@ export function SearchOverlay({ visible, onClose }: Props) {
     setKeywordInput('');
   }
 
+  function selectTrade(slug: string) {
+    setTradeSlug(slug);
+    setTradeOpen(false);
+    setSpecs([]); // specialities are trade-scoped — reset when the trade changes
+  }
+
   function submit() {
     const params: Record<string, string> = {};
     if (location.trim()) params.suburb = location.trim();
     if (tradeSlug) params.trade_category = tradeSlug;
+    if (tradeSlug && specs.length) params.specialisations = specs.join(',');
     if (urgency) params.urgency = urgency;
     const pending = keywordInput.trim().toLowerCase();
     const allKw = Array.from(new Set([...keywords, ...(pending ? [pending] : [])]));
     if (allKw.length) params.keywords = allKw.join(',');
-    onClose();
     router.push({ pathname: '/results', params } as any);
   }
 
@@ -85,17 +96,13 @@ export function SearchOverlay({ visible, onClose }: Props) {
   const inputBorder = c.border;
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={[styles.screen, { backgroundColor: c.canvas, paddingTop: insets.top || Spacing.md }]}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: c.textPrimary }]}>Find a tradie</Text>
-          <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn} accessibilityLabel="Close search">
-            <MaterialIcons name="close" size={24} color={c.textSecondary} />
-          </Pressable>
-        </View>
-
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+    <AppShell title="Find a tradie" showBack>
+      <View style={{ flex: 1, backgroundColor: c.canvas }}>
+        <ScrollView
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           {/* Location */}
           <Text style={[styles.label, { color: c.textSecondary }]}>LOCATION</Text>
           <View style={[styles.inputRow, { backgroundColor: inputBg, borderColor: inputBorder }]}>
@@ -103,7 +110,7 @@ export function SearchOverlay({ visible, onClose }: Props) {
             <TextInput
               value={location}
               onChangeText={onLocationChange}
-              onFocus={() => setShowSuggestions(true)}
+              onFocus={() => { setShowSuggestions(true); setTradeOpen(false); }}
               placeholder="Suburb or postcode"
               placeholderTextColor={c.textSecondary}
               style={[styles.input, { color: c.textPrimary }]}
@@ -125,6 +132,67 @@ export function SearchOverlay({ visible, onClose }: Props) {
                 </Pressable>
               ))}
             </View>
+          ) : null}
+
+          {/* Trade — dropdown select */}
+          <Text style={[styles.label, { color: c.textSecondary, marginTop: Spacing.lg }]}>TRADE</Text>
+          <Pressable
+            onPress={() => { setTradeOpen((o) => !o); setShowSuggestions(false); }}
+            style={[styles.inputRow, { backgroundColor: inputBg, borderColor: tradeOpen ? c.primary : inputBorder }]}
+          >
+            <MaterialIcons name="construction" size={18} color={c.textSecondary} />
+            <Text style={[styles.input, { color: tradeSlug ? c.textPrimary : c.textSecondary }]} numberOfLines={1}>
+              {tradeSlug ? tradeNameFor(tradeSlug) : 'Any trade'}
+            </Text>
+            <MaterialIcons name={tradeOpen ? 'expand-less' : 'expand-more'} size={22} color={c.textSecondary} />
+          </Pressable>
+          {tradeOpen ? (
+            <View style={[styles.dropdown, { backgroundColor: c.surface, borderColor: inputBorder }]}>
+              <ScrollView style={{ maxHeight: 280 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                <Pressable onPress={() => selectTrade('')} style={styles.tradeRow}>
+                  <Text style={[styles.tradeName, { color: !tradeSlug ? c.primary : c.textPrimary }]}>Any trade</Text>
+                  {!tradeSlug ? <MaterialIcons name="check" size={16} color={c.primary} /> : null}
+                </Pressable>
+                {TRADE_CATALOGUE.map((group) => (
+                  <View key={group.title}>
+                    <Text style={[styles.groupLabel, { color: c.textSecondary }]}>{group.title}</Text>
+                    {group.trades.map((t) => {
+                      const active = tradeSlug === t.slug;
+                      return (
+                        <Pressable key={t.slug} onPress={() => selectTrade(t.slug)} style={styles.tradeRow}>
+                          <Text style={[styles.tradeName, { color: active ? c.primary : c.textPrimary }]}>{t.name}</Text>
+                          {active ? <MaterialIcons name="check" size={16} color={c.primary} /> : null}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          {/* Specialities — only when the chosen trade has sub-trades */}
+          {tradeSlug && hasSpecialisations(tradeSlug) ? (
+            <>
+              <Text style={[styles.label, { color: c.textSecondary, marginTop: Spacing.lg }]}>SPECIALITY</Text>
+              <View style={styles.chipRow}>
+                {getSpecialisationsForTrade(tradeSlug).map((sp) => {
+                  const active = specs.includes(sp.slug);
+                  return (
+                    <Pressable
+                      key={sp.slug}
+                      onPress={() => setSpecs((p) => (active ? p.filter((x) => x !== sp.slug) : [...p, sp.slug]))}
+                      style={[
+                        styles.chip,
+                        { borderColor: active ? c.primary : inputBorder, backgroundColor: active ? c.primary : 'transparent' },
+                      ]}
+                    >
+                      <Text style={[styles.chipText, { color: active ? '#fff' : c.textPrimary }]}>{sp.name}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
           ) : null}
 
           {/* Urgency */}
@@ -159,46 +227,21 @@ export function SearchOverlay({ visible, onClose }: Props) {
             <TextInput
               value={keywordInput}
               onChangeText={setKeywordInput}
+              onFocus={() => setTradeOpen(false)}
               onSubmitEditing={() => addKeyword(keywordInput)}
               onBlur={() => { if (keywordInput.trim()) addKeyword(keywordInput); }}
               placeholder={keywords.length === 0 ? 'e.g. deck, bathroom' : 'Add another…'}
               placeholderTextColor={c.textSecondary}
               style={[styles.kwInput, { color: c.textPrimary }]}
-              blurOnSubmit={false}
+              submitBehavior="submit"
               returnKeyType="done"
             />
           </View>
 
-          {/* Trade */}
-          <Text style={[styles.label, { color: c.textSecondary, marginTop: Spacing.lg }]}>TRADE</Text>
-          <Pressable
-            onPress={() => setTradeSlug('')}
-            style={[styles.tradeRow, { borderColor: inputBorder, backgroundColor: !tradeSlug ? c.primaryBg : 'transparent' }]}
-          >
-            <Text style={[styles.tradeName, { color: !tradeSlug ? c.primary : c.textPrimary }]}>Any trade</Text>
-            {!tradeSlug ? <MaterialIcons name="check" size={18} color={c.primary} /> : null}
-          </Pressable>
-          {TRADE_CATALOGUE.map((group) => (
-            <View key={group.title}>
-              <Text style={[styles.groupLabel, { color: c.textSecondary }]}>{group.title}</Text>
-              {group.trades.map((t) => {
-                const active = tradeSlug === t.slug;
-                return (
-                  <Pressable
-                    key={t.slug}
-                    onPress={() => setTradeSlug(active ? '' : t.slug)}
-                    style={[styles.tradeRow, { borderColor: inputBorder, backgroundColor: active ? c.primaryBg : 'transparent' }]}
-                  >
-                    <Text style={[styles.tradeName, { color: active ? c.primary : c.textPrimary }]}>{t.name}</Text>
-                    {active ? <MaterialIcons name="check" size={18} color={c.primary} /> : null}
-                  </Pressable>
-                );
-              })}
-            </View>
-          ))}
+          <View style={{ height: Spacing.lg }} />
         </ScrollView>
 
-        {/* Footer */}
+        {/* Search button */}
         <View style={[styles.footer, { backgroundColor: c.canvas, borderTopColor: inputBorder, paddingBottom: Math.max(insets.bottom, Spacing.md) }]}>
           <Pressable onPress={submit} style={[styles.searchBtn, { backgroundColor: c.primary }]}>
             <MaterialIcons name="search" size={20} color="#fff" />
@@ -206,45 +249,30 @@ export function SearchOverlay({ visible, onClose }: Props) {
           </Pressable>
         </View>
       </View>
-    </Modal>
+    </AppShell>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-  },
-  title: { fontSize: 22, fontFamily: FontFamily.bodyBold, fontWeight: '800' },
-  closeBtn: { padding: 4 },
-  body: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing['3xl'] },
+  body: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg, paddingBottom: Spacing.md },
   label: {
     fontSize: 11,
     fontFamily: FontFamily.bodyBold,
     fontWeight: '700',
     letterSpacing: 0.6,
-    marginBottom: Spacing.sm,
+    marginBottom: 8,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    height: 50,
+    height: 52,
     borderRadius: Radius.lg,
     borderWidth: 1,
     paddingHorizontal: Spacing.md,
   },
   input: { flex: 1, fontSize: 15, fontFamily: FontFamily.body },
-  suggestions: {
-    marginTop: 6,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
+  suggestions: { marginTop: 6, borderRadius: Radius.md, borderWidth: 1, overflow: 'hidden' },
   suggestionItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -253,10 +281,30 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   suggestionText: { fontSize: 14, fontFamily: FontFamily.body },
+  dropdown: { marginTop: 6, borderRadius: Radius.md, borderWidth: 1, overflow: 'hidden' },
+  tradeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
+  },
+  tradeName: { fontSize: 15, fontFamily: FontFamily.body },
+  groupLabel: {
+    fontSize: 10,
+    fontFamily: FontFamily.bodySemiBold,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    opacity: 0.6,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: 2,
+  },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   chip: {
     paddingHorizontal: Spacing.md,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: Radius.full,
     borderWidth: 1,
   },
@@ -266,7 +314,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: Spacing.sm,
-    minHeight: 50,
+    minHeight: 52,
     borderRadius: Radius.lg,
     borderWidth: 1,
     paddingHorizontal: Spacing.md,
@@ -282,27 +330,6 @@ const styles = StyleSheet.create({
   },
   kwChipText: { color: '#fff', fontSize: 12, fontFamily: FontFamily.bodySemiBold, fontWeight: '600' },
   kwInput: { flex: 1, minWidth: 100, fontSize: 14, fontFamily: FontFamily.body, paddingVertical: 4 },
-  groupLabel: {
-    fontSize: 11,
-    fontFamily: FontFamily.bodySemiBold,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    marginTop: Spacing.md,
-    marginBottom: 4,
-    opacity: 0.7,
-  },
-  tradeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 12,
-    marginBottom: 6,
-  },
-  tradeName: { fontSize: 15, fontFamily: FontFamily.body },
   footer: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,

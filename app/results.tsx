@@ -595,6 +595,7 @@ export default function ResultsScreen() {
     trade_category?: string;
     urgency?: string;
     keywords?: string;
+    specialisations?: string;
   }>();
 
   const [allBuilders, setAllBuilders] = useState<BuilderResult[]>([]);
@@ -610,7 +611,8 @@ export default function ResultsScreen() {
     maxDistance: 0,
     availabilityFilter: 'Any',
     verifiedOnly: false,
-    specialisations: [],
+    // Seed from the search's specialities so the soft boost applies immediately.
+    specialisations: (params.specialisations ?? '').split(',').filter(Boolean),
   });
   const [savedBuilders, setSavedBuilders] = useState<Set<string>>(new Set());
 

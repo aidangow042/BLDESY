@@ -12,7 +12,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
@@ -23,7 +22,7 @@ import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://bldesy.com.au';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://www.bldesy.com.au';
 
 type Kind = 'public_liability' | 'professional_indemnity' | 'workers_compensation';
 
@@ -40,12 +39,6 @@ const KIND_HINT: Record<Kind, string> = {
     'Covers advice + design errors — common for designers, engineers, and trades who give technical advice.',
   workers_compensation:
     "Required by law if you employ anyone. Covers your employees if they're injured on the job.",
-};
-
-const KIND_PLACEHOLDER: Record<Kind, string> = {
-  public_liability: 'e.g. Public Liability $20M',
-  professional_indemnity: 'e.g. Professional Indemnity $2M',
-  workers_compensation: 'e.g. icare NSW Workers Insurance',
 };
 
 interface Check {
@@ -82,9 +75,13 @@ interface Props {
   abnEntityName: string | null;
   profileType: 'builder' | 'enterprise';
   onUpdated: (merged: CredentialsVerified) => void | Promise<void>;
+  /** Optional confirmation line shown once a certificate is uploaded. Used on
+   *  the signup flows to reassure the user the cert will appear in their
+   *  profile. Omitted on edit-profile, where it would be redundant. */
+  savedNote?: string;
 }
 
-export function InsuranceSlots({ credentials, abnEntityName, profileType, onUpdated }: Props) {
+export function InsuranceSlots({ credentials, abnEntityName, profileType, onUpdated, savedNote }: Props) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];
@@ -124,6 +121,7 @@ export function InsuranceSlots({ credentials, abnEntityName, profileType, onUpda
               abnEntityName={abnEntityName}
               profileType={profileType}
               onUpdated={onUpdated}
+              savedNote={savedNote}
               colors={colors}
               isDark={isDark}
             />
@@ -163,6 +161,7 @@ function InsuranceSlotCard({
   abnEntityName,
   profileType,
   onUpdated,
+  savedNote,
   colors,
   isDark,
 }: {
@@ -172,10 +171,10 @@ function InsuranceSlotCard({
   abnEntityName: string | null;
   profileType: 'builder' | 'enterprise';
   onUpdated: (merged: CredentialsVerified) => void | Promise<void>;
+  savedNote?: string;
   colors: typeof Colors.light;
   isDark: boolean;
 }) {
-  const [policyName, setPolicyName] = useState(record?.policy_name ?? '');
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [latest, setLatest] = useState<{
@@ -214,7 +213,6 @@ function InsuranceSlotCard({
       } as any);
       form.append('profile_type', profileType);
       form.append('kind', kind);
-      if (policyName.trim()) form.append('policy_name', policyName.trim());
       if (abnEntityName) form.append('abn_entity_name', abnEntityName);
 
       const upload = await fetch(`${API_BASE_URL}/api/verify-insurance`, {
@@ -337,31 +335,6 @@ function InsuranceSlotCard({
         </View>
       ) : null}
 
-      {/* Policy name input */}
-      <View>
-        <Text style={[styles.label, { color: colors.textSecondary }]}>
-          Policy name <Text style={{ color: colors.textSecondary }}>(optional)</Text>
-        </Text>
-        <TextInput
-          value={policyName}
-          onChangeText={setPolicyName}
-          placeholder={KIND_PLACEHOLDER[kind]}
-          placeholderTextColor={colors.textSecondary}
-          maxLength={120}
-          style={[
-            styles.input,
-            {
-              backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#f8fafc',
-              borderColor: colors.border,
-              color: colors.text,
-            },
-          ]}
-        />
-        <Text style={[styles.hint, { color: colors.textSecondary }]}>
-          Typing the product name (e.g. "Public Liability $20M") helps our AI find the right section if your certificate covers multiple policies.
-        </Text>
-      </View>
-
       {/* Upload */}
       <Pressable
         onPress={handlePickAndUpload}
@@ -444,6 +417,13 @@ function InsuranceSlotCard({
           ) : null}
         </View>
       ) : null}
+
+      {savedNote && (latest || record?.document_path) ? (
+        <View style={styles.savedRow}>
+          <MaterialIcons name="check-circle" size={14} color={colors.success} />
+          <Text style={[Type.caption, { color: colors.success, flex: 1 }]}>{savedNote}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -494,19 +474,6 @@ const styles = StyleSheet.create({
     padding: Spacing.sm,
     gap: 4,
   },
-  label: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    fontSize: 14,
-  },
-  hint: { fontSize: 11, lineHeight: 15, marginTop: 4 },
   uploadBtn: {
     borderWidth: 1,
     borderRadius: Radius.lg,
@@ -535,6 +502,7 @@ const styles = StyleSheet.create({
   checks: { gap: 6, marginTop: 4 },
   checkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   checkDetail: { fontSize: 11, lineHeight: 15, marginTop: 1 },
+  savedRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   addRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',

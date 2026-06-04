@@ -571,6 +571,7 @@ export default function BuilderProfileScreen() {
   const toast = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { userId } = useUser();
+  const viewRecordedRef = useRef<string | null>(null);
 
   const [builder, setBuilder] = useState<BuilderProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -686,6 +687,15 @@ export default function BuilderProfileScreen() {
         suburb: data.suburb,
         profile_photo_url: data.profile_photo_url,
       });
+
+      // Record a profile view — fire-and-forget. Deduped server-side (1 per
+      // viewer per builder per day) and self-views are ignored. Once per mount.
+      if (userId && data.user_id && data.user_id !== userId && viewRecordedRef.current !== data.id) {
+        viewRecordedRef.current = data.id;
+        supabase.functions
+          .invoke('record-profile-view', { body: { builder_user_id: data.user_id } })
+          .catch(() => { /* best-effort, never block the UI */ });
+      }
     }
     setLoading(false);
   }

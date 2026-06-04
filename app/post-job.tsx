@@ -39,6 +39,7 @@ import { getSuburbSuggestions, getPostcodeForSuburb } from '@/lib/geo';
 import { uploadJobPhoto, uploadJobDocument } from '@/lib/storage';
 import { isSubscriptionActive, useEnterpriseSubscription } from '@/lib/subscription';
 import { getSpecialisationsForTrade, hasSpecialisations } from '@/lib/trade-specialisations';
+import { StepWhenAndHow, INITIAL_WHEN_AND_HOW, type WhenAndHowFields } from '@/components/jobs/when-and-how-step';
 
 /* ───────────────────────── Constants ───────────────────────── */
 
@@ -78,8 +79,6 @@ const URGENCY_OPTIONS = [
   },
 ];
 
-const STEP_LABELS = ['Basics', 'Details', 'Review'];
-
 const NEXT_STEPS = [
   { icon: 'notifications-active' as const, text: 'Matching builders get notified' },
   { icon: 'message' as const, text: 'Builders send you their interest' },
@@ -103,7 +102,7 @@ type AISuggestion = {
 } | null;
 
 type State = {
-  step: 1 | 2 | 3;
+  step: number;
   // Step 1
   title: string;
   tradeType: string;
@@ -130,6 +129,12 @@ type State = {
   siteRequirements: string;
   // Meta
   isEnterprise: boolean;
+  // Poster-type flow (business vs personal → job vs contract)
+  posterMode: 'unset' | 'personal' | 'business';
+  canBeEnterprise: boolean;
+  posterChecked: boolean;
+  postingKind: 'job' | 'contract';
+  whenHow: WhenAndHowFields;
   draftId: string | null;
   submitting: boolean;
   aiAssisted: boolean;
@@ -173,6 +178,11 @@ const initialState: State = {
   startDate: '',
   siteRequirements: '',
   isEnterprise: false,
+  posterMode: 'unset',
+  canBeEnterprise: false,
+  posterChecked: false,
+  postingKind: 'job',
+  whenHow: INITIAL_WHEN_AND_HOW,
   draftId: null,
   submitting: false,
   aiAssisted: false,
@@ -224,7 +234,9 @@ function reducer(state: State, action: Action): State {
     case 'REMOVE_DOC':
       return { ...state, documents: state.documents.filter((_, i) => i !== action.index) };
     case 'RESET':
-      return { ...initialState };
+      // Keep the enterprise check result so "Post another" doesn't re-spinner;
+      // posterMode resets to 'unset' so a business user is re-asked per post.
+      return { ...initialState, canBeEnterprise: state.canBeEnterprise, posterChecked: state.posterChecked };
     default:
       return state;
   }
@@ -257,6 +269,14 @@ export default function PostJobScreen() {
 
   const [s, dispatch] = useReducer(reducer, initialState);
 
+  // Derived step config — business posters get an extra "When & How" step.
+  const stepLabels = s.isEnterprise
+    ? ['Basics', 'Details', 'When & How', 'Review']
+    : ['Basics', 'Details', 'Review'];
+  const totalSteps = stepLabels.length;
+  const isWhenHowStep = s.isEnterprise && s.step === 3;
+  const isReviewStep = s.step === totalSteps;
+
   // Pre-fill form when editing
   const hasPreFilled = useRef(false);
   useEffect(() => {
@@ -282,25 +302,40 @@ export default function PostJobScreen() {
     }
   }, [isEditMode]);
 
-  // Check if user is enterprise
+  // Resolve whether this user can post as a business, and drive the poster-type
+  // pre-step. Pure customers (and guests) go straight to the personal flow with
+  // zero change in behaviour.
   useEffect(() => {
-    if (!userId) return;
     (async () => {
+      if (!userId) {
+        dispatch({ type: 'SET_MANY', payload: { canBeEnterprise: false, posterMode: 'personal', posterChecked: true } });
+        return;
+      }
       const { data } = await supabase
         .from('enterprise_profiles')
         .select('status')
         .eq('user_id', userId)
         .maybeSingle();
-      if (data && ((data as any).status === 'approved' || (data as any).status === 'active')) {
-        dispatch({ type: 'SET', field: 'isEnterprise', value: true });
+      const can = !!data && ((data as any).status === 'approved' || (data as any).status === 'active');
+      if (isEditMode) {
+        // Preserve the existing edit behaviour: enterprise users editing keep the
+        // enterprise fields; skip the poster-type pre-step.
+        dispatch({ type: 'SET_MANY', payload: { canBeEnterprise: can, isEnterprise: can, posterMode: can ? 'business' : 'personal', posterChecked: true } });
+      } else if (can) {
+        // Show the Personal/Business pre-step (posterMode stays 'unset').
+        dispatch({ type: 'SET_MANY', payload: { canBeEnterprise: true, posterChecked: true } });
+      } else {
+        dispatch({ type: 'SET_MANY', payload: { canBeEnterprise: false, posterMode: 'personal', posterChecked: true } });
       }
     })();
-  }, [userId]);
+  }, [userId, isEditMode]);
 
   // Animations
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
-  const dotWidths = useRef([1, 2, 3].map((i) => new Animated.Value(i === 1 ? 24 : 8))).current;
+  // Allocate the max number of dots (4 = business) up front; only the first
+  // `totalSteps` are rendered (hooks can't be conditional).
+  const dotWidths = useRef([1, 2, 3, 4].map((i) => new Animated.Value(i === 1 ? 24 : 8))).current;
   const aiCardAnim = useRef(new Animated.Value(0)).current;
   const successScale = useRef(new Animated.Value(0)).current;
   const successOpacity = useRef(new Animated.Value(0)).current;
@@ -326,7 +361,7 @@ export default function PostJobScreen() {
       Animated.timing(slideAnim, { toValue: direction * 300, duration: 150, useNativeDriver: true }),
       Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
     ]).start(() => {
-      dispatch({ type: 'SET', field: 'step', value: to as 1 | 2 | 3 });
+      dispatch({ type: 'SET', field: 'step', value: to });
       slideAnim.setValue(-direction * 300);
       Animated.parallel([
         Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, friction: 8, tension: 60 }),
@@ -541,16 +576,12 @@ export default function PostJobScreen() {
   /* ───────────── Continue handler ───────────── */
 
   async function handleContinue() {
-    if (s.step === 1) {
-      // Check auth first
-      if (!userId) {
-        dispatch({ type: 'SET', field: 'noAuth', value: true });
-        return;
-      }
-      animateToStep(1, 2);
-    } else if (s.step === 2) {
-      animateToStep(2, 3);
+    // Auth is required before leaving Step 1 (guests can fill it, not submit).
+    if (s.step === 1 && !userId) {
+      dispatch({ type: 'SET', field: 'noAuth', value: true });
+      return;
     }
+    if (s.step < totalSteps) animateToStep(s.step, s.step + 1);
   }
 
   /* ───────────── Submit ───────────── */
@@ -595,6 +626,13 @@ export default function PostJobScreen() {
         return;
       }
 
+      // Contracts can only be posted from a business account (DB CHECK too).
+      if (s.postingKind === 'contract' && !s.isEnterprise) {
+        toast.show('Contracts can only be posted from a business account', { variant: 'error' });
+        dispatch({ type: 'SET', field: 'submitting', value: false });
+        return;
+      }
+
       const tradeValue = (s.tradeType === 'Other' ? s.otherTrade : s.tradeType).toLowerCase();
 
       // Create or update the job
@@ -619,6 +657,30 @@ export default function PostJobScreen() {
         } : {}),
       };
 
+      // posting_kind + the "When & How" columns — written on NEW business posts
+      // only (kept out of jobData so editing never wipes them). Empty → null so
+      // the time/enum-checked columns never receive ''.
+      const wh = s.whenHow;
+      const enterpriseExtra: Record<string, any> =
+        s.isEnterprise && !isEditMode
+          ? {
+              posting_kind: s.postingKind,
+              employment_type: wh.employmentType || null,
+              start_date: wh.startDate || s.startDate.trim() || null,
+              end_date: wh.isOngoing ? null : (wh.endDate || null),
+              is_ongoing: wh.isOngoing,
+              daily_start_time: wh.dailyStartTime || null,
+              daily_finish_time: wh.dailyFinishTime || null,
+              work_days: wh.workDays.length ? wh.workDays : null,
+              days_per_week: wh.workDays.length || null,
+              pay_type: wh.payType || null,
+              pay_rate_min: wh.payRateMin ? Number(wh.payRateMin) : null,
+              pay_rate_max: wh.payRateMax ? Number(wh.payRateMax) : null,
+              required_capabilities: wh.requiredCapabilities,
+              min_public_liability: wh.minPublicLiability,
+            }
+          : {};
+
       let jobId: string | null = null;
 
       if (isEditMode) {
@@ -636,7 +698,7 @@ export default function PostJobScreen() {
       } else {
         const { data, error: insertErr } = await supabase
           .from('jobs')
-          .insert({ ...jobData, customer_id: userId, status: 'open' })
+          .insert({ ...jobData, ...enterpriseExtra, customer_id: userId, status: 'open' })
           .select('id')
           .single();
         if (insertErr) {
@@ -659,15 +721,17 @@ export default function PostJobScreen() {
           const photoUrls = await Promise.all(
             s.photos.map((p) => uploadJobPhoto(p.uri, userId, jobId!)),
           );
-          const photoRecords = photoUrls
-            .filter((url): url is string => url !== null)
-            .map((url, i) => ({
-              job_id: jobId!,
-              file_path: url,
-              is_cover: s.photos[i]?.isCover ?? false,
-            }));
+          const validUrls = photoUrls.filter((url): url is string => url !== null);
+          const photoRecords = validUrls.map((url, i) => ({
+            job_id: jobId!,
+            file_path: url,
+            is_cover: s.photos[i]?.isCover ?? false,
+          }));
           if (photoRecords.length > 0) {
             await supabase.from('job_photos').insert(photoRecords);
+            // Mirror to the jobs.photo_urls array so the post also shows on the
+            // website feeds (which read photo_urls, not the job_photos table).
+            await supabase.from('jobs').update({ photo_urls: validUrls }).eq('id', jobId!);
           }
         }
       } catch {
@@ -713,6 +777,18 @@ export default function PostJobScreen() {
 
   const step1Valid = s.title.trim().length > 0 && (s.tradeType !== '' && (s.tradeType !== 'Other' || s.otherTrade.trim().length > 0));
   const step2Valid = s.description.trim().length > 0 && s.suburb.trim().length > 0;
+  // When & How (step 3, business) has no required fields.
+  const currentStepValid = s.step === 1 ? step1Valid : s.step === 2 ? step2Valid : true;
+
+  /* ───────────── Poster-type check (avoid pre-step flash) ───────────── */
+
+  if (userId && !s.posterChecked && !isEditMode) {
+    return (
+      <View style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
+        <ActivityIndicator color={colors.teal} style={{ marginTop: insets.top + 80 }} />
+      </View>
+    );
+  }
 
   /* ───────────── No auth screen ───────────── */
 
@@ -807,9 +883,7 @@ export default function PostJobScreen() {
                 dispatch({ type: 'RESET' });
                 successScale.setValue(0);
                 successOpacity.setValue(0);
-                dotWidths[0].setValue(24);
-                dotWidths[1].setValue(8);
-                dotWidths[2].setValue(8);
+                dotWidths.forEach((d, i) => d.setValue(i === 0 ? 24 : 8));
               }}
               style={({ pressed }) => [
                 styles.outlineBtn,
@@ -831,12 +905,59 @@ export default function PostJobScreen() {
     );
   }
 
+  /* ───────────── Poster-type pre-step (business users only) ───────────── */
+
+  if (!isEditMode && s.canBeEnterprise && s.posterMode === 'unset') {
+    return (
+      <AppShell title="Post a Job" showBack>
+        <ScrollView contentContainerStyle={styles.posterWrap} showsVerticalScrollIndicator={false}>
+          <ThemedText type="subtitle" style={{ marginBottom: 4 }}>Who&apos;s this job for?</ThemedText>
+          <ThemedText style={[styles.stepHint, { color: colors.textSecondary }]}>
+            Post for yourself, or on behalf of your business.
+          </ThemedText>
+
+          <Pressable
+            onPress={() => dispatch({ type: 'SET_MANY', payload: { posterMode: 'personal', isEnterprise: false, postingKind: 'job' } })}
+            style={({ pressed }) => [styles.posterCard, { backgroundColor: '#fff', borderColor: colors.border }, pressed && { opacity: 0.85 }, Shadows.sm]}
+          >
+            <View style={[styles.posterCardIcon, { backgroundColor: colors.tealBg }]}>
+              <Ionicons name="person-outline" size={24} color={colors.teal} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.posterCardTitle, { color: colors.text }]}>Personal</Text>
+              <Text style={[styles.posterCardDesc, { color: colors.textSecondary }]}>
+                A one-off job for your home or property.
+              </Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={colors.textSecondary} />
+          </Pressable>
+
+          <Pressable
+            onPress={() => dispatch({ type: 'SET_MANY', payload: { posterMode: 'business', isEnterprise: true } })}
+            style={({ pressed }) => [styles.posterCard, { backgroundColor: '#fff', borderColor: colors.border }, pressed && { opacity: 0.85 }, Shadows.sm]}
+          >
+            <View style={[styles.posterCardIcon, { backgroundColor: colors.tealBg }]}>
+              <Ionicons name="business-outline" size={24} color={colors.teal} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.posterCardTitle, { color: colors.text }]}>Business</Text>
+              <Text style={[styles.posterCardDesc, { color: colors.textSecondary }]}>
+                A project job or contract on behalf of your company. Choose Job or Contract next.
+              </Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={colors.textSecondary} />
+          </Pressable>
+        </ScrollView>
+      </AppShell>
+    );
+  }
+
   /* ───────────── Progress indicator ───────────── */
 
   function renderProgressBar() {
     return (
       <View style={styles.progressContainer}>
-        {STEP_LABELS.map((label, i) => {
+        {stepLabels.map((label, i) => {
           const stepNum = i + 1;
           const isCompleted = s.step > stepNum;
           const isCurrent = s.step === stepNum;
@@ -869,7 +990,7 @@ export default function PostJobScreen() {
                     <MaterialIcons name="check" size={12} color="#fff" />
                   )}
                 </Animated.View>
-                {i < 2 && (
+                {i < stepLabels.length - 1 && (
                   <View
                     style={[
                       styles.progressLine,
@@ -914,6 +1035,36 @@ export default function PostJobScreen() {
         <ThemedText style={[styles.stepHint, { color: colors.textSecondary }]}>
           Tell us the basics and we'll match you with the right tradies.
         </ThemedText>
+
+        {/* Job vs Contract — business posters only */}
+        {s.isEnterprise && (
+          <View style={styles.fieldGroup}>
+            <ThemedText style={[styles.label, { color: colors.textSecondary }]}>WHAT ARE YOU POSTING?</ThemedText>
+            <View style={styles.kindRow}>
+              {([
+                { key: 'job' as const, title: 'Job', desc: 'One specific project — a build, fit-out, or single site.' },
+                { key: 'contract' as const, title: 'Contract', desc: 'Ongoing work over weeks or months, across sites.' },
+              ]).map((opt) => {
+                const active = s.postingKind === opt.key;
+                return (
+                  <Pressable
+                    key={opt.key}
+                    onPress={() => dispatch({ type: 'SET', field: 'postingKind', value: opt.key })}
+                    style={[
+                      styles.kindCard,
+                      { borderColor: active ? colors.teal : colors.border, backgroundColor: active ? colors.tealBg : '#fff' },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={[styles.kindTitle, { color: active ? colors.teal : colors.text }]}>{opt.title}</Text>
+                    <Text style={[styles.kindDesc, { color: colors.textSecondary }]}>{opt.desc}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
         {/* Job title */}
         <View style={styles.fieldGroup}>
@@ -1370,7 +1521,7 @@ export default function PostJobScreen() {
         {s.isEnterprise && (
           <View style={styles.fieldGroup}>
             <ThemedText style={[styles.label, { color: colors.textSecondary }]}>
-              PROJECT DETAILS
+              {s.postingKind === 'contract' ? 'CONTRACT DETAILS' : 'PROJECT JOB DETAILS'}
             </ThemedText>
             <View style={[styles.locationInputWrap, { backgroundColor: '#fff', borderColor: colors.border }]}>
               <Ionicons name="cash-outline" size={18} color={colors.textSecondary} />
@@ -1398,7 +1549,7 @@ export default function PostJobScreen() {
               <Ionicons name="wallet-outline" size={18} color={colors.textSecondary} />
               <TextInput
                 style={[styles.locationInput, { color: colors.text }]}
-                placeholder="Day rate (e.g. $450/day)"
+                placeholder={s.postingKind === 'contract' ? 'Estimated contract worth (e.g. $90k, $1,800/wk)' : 'Day rate (e.g. $450/day)'}
                 placeholderTextColor={colors.textSecondary}
                 value={s.dayRate}
                 onChangeText={(t) => dispatch({ type: 'SET', field: 'dayRate', value: t })}
@@ -1408,7 +1559,7 @@ export default function PostJobScreen() {
               <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} />
               <TextInput
                 style={[styles.locationInput, { color: colors.text }]}
-                placeholder="Contract duration (e.g. 3 months)"
+                placeholder={s.postingKind === 'contract' ? 'Contract length (e.g. 6 months, ongoing)' : 'Contract duration (e.g. 3 months)'}
                 placeholderTextColor={colors.textSecondary}
                 value={s.contractDuration}
                 onChangeText={(t) => dispatch({ type: 'SET', field: 'contractDuration', value: t })}
@@ -1524,7 +1675,7 @@ export default function PostJobScreen() {
           ].map((item, i) => (
             <Pressable
               key={i}
-              onPress={() => animateToStep(3, item.step)}
+              onPress={() => animateToStep(s.step, item.step)}
               style={({ pressed }) => [
                 styles.editRow,
                 i > 0 && { borderTopWidth: 1, borderTopColor: colors.borderLight },
@@ -1549,9 +1700,17 @@ export default function PostJobScreen() {
 
   return (
     <AppShell
-      title={isEditMode ? 'Edit Job' : `Post a Job  ·  ${s.step}/3`}
+      title={isEditMode ? 'Edit Job' : `Post a Job  ·  ${s.step}/${totalSteps}`}
       showBack
-      onBackPress={() => (s.step > 1 ? animateToStep(s.step, (s.step - 1) as 1 | 2 | 3) : router.back())}
+      onBackPress={() => {
+        if (s.step > 1) { animateToStep(s.step, s.step - 1); return; }
+        // From Step 1, a business user goes back to the Personal/Business choice.
+        if (!isEditMode && s.canBeEnterprise && s.posterMode !== 'unset') {
+          dispatch({ type: 'SET', field: 'posterMode', value: 'unset' });
+          return;
+        }
+        router.back();
+      }}
     >
       <ReAnimated.View entering={FadeInUp.duration(300).delay(100)} style={{ flex: 1 }}>
       {/* Trust bar */}
@@ -1579,7 +1738,15 @@ export default function PostJobScreen() {
           >
             {s.step === 1 && renderStep1()}
             {s.step === 2 && renderStep2()}
-            {s.step === 3 && renderStep3()}
+            {isWhenHowStep && (
+              <View style={styles.stepContent}>
+                <StepWhenAndHow
+                  values={s.whenHow}
+                  onChange={(next) => dispatch({ type: 'SET', field: 'whenHow', value: next })}
+                />
+              </View>
+            )}
+            {isReviewStep && renderStep3()}
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -1587,18 +1754,18 @@ export default function PostJobScreen() {
 
       {/* Bottom button */}
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16), backgroundColor: colors.canvas }]}>
-        {s.step < 3 ? (
+        {s.step < totalSteps ? (
           <Pressable
             onPress={handleContinue}
-            disabled={s.step === 1 ? !step1Valid : !step2Valid}
+            disabled={!currentStepValid}
             style={({ pressed }) => [
               styles.primaryBtn,
-              (s.step === 1 ? !step1Valid : !step2Valid) && { opacity: 0.4 },
+              !currentStepValid && { opacity: 0.4 },
               pressed && { opacity: 0.85 },
             ]}
           >
             <LinearGradient
-              colors={(s.step === 1 ? step1Valid : step2Valid) ? ['#0d9488', '#0f766e'] : ['#9CA3AF', '#9CA3AF']}
+              colors={currentStepValid ? ['#0d9488', '#0f766e'] : ['#9CA3AF', '#9CA3AF']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.primaryBtnGrad}
@@ -1740,6 +1907,58 @@ const styles = StyleSheet.create({
   stepHint: {
     ...Type.body,
     marginBottom: 8,
+  },
+
+  /* Poster-type pre-step (Personal / Business) */
+  posterWrap: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    gap: 14,
+  },
+  posterCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    borderWidth: 1,
+    borderRadius: Radius.xl,
+    padding: 18,
+  },
+  posterCardIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  posterCardTitle: {
+    ...Type.h3,
+    fontWeight: '700',
+  },
+  posterCardDesc: {
+    ...Type.caption,
+    marginTop: 2,
+    lineHeight: 18,
+  },
+
+  /* Job vs Contract picker (Step 1, business) */
+  kindRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  kindCard: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderRadius: Radius.lg,
+    padding: 14,
+    gap: 4,
+  },
+  kindTitle: {
+    ...Type.bodySemiBold,
+    fontWeight: '700',
+  },
+  kindDesc: {
+    ...Type.caption,
+    lineHeight: 16,
   },
 
   /* Fields */

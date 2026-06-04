@@ -50,6 +50,10 @@ type Job = {
   urgency: string;
   status: string;
   workers_needed: number | null;
+  posting_kind: string | null;
+  day_rate: string | null;
+  contract_duration: string | null;
+  start_date: string | null;
   created_at: string;
   applicant_count: number;
   photos: string[];
@@ -85,6 +89,7 @@ export default function EnterpriseJobsScreen() {
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [loadingApplicants, setLoadingApplicants] = useState(false);
   const [updatingAppId, setUpdatingAppId] = useState<string | null>(null);
+  const [tab, setTab] = useState<'job' | 'contract'>('job');
 
   /* ── Data fetching ────────────────────────────────────────── */
 
@@ -94,7 +99,7 @@ export default function EnterpriseJobsScreen() {
     // Fetch jobs posted by this enterprise user
     const { data: jobsData, error: jobsErr } = await supabase
       .from('jobs')
-      .select('id, title, trade_category, suburb, urgency, status, workers_needed, created_at, photo_urls')
+      .select('id, title, trade_category, suburb, urgency, status, workers_needed, posting_kind, day_rate, contract_duration, start_date, created_at, photo_urls')
       .eq('customer_id', userId)
       .order('created_at', { ascending: false });
 
@@ -283,6 +288,30 @@ export default function EnterpriseJobsScreen() {
             <Text style={[styles.locationText, { color: colors.textSecondary }]}>{item.suburb}</Text>
           </View>
 
+          {/* Contract details */}
+          {item.posting_kind === 'contract' &&
+          (item.day_rate || item.contract_duration || item.start_date) ? (
+            <View style={styles.contractChips}>
+              {item.day_rate ? (
+                <View style={[styles.contractChip, { backgroundColor: indigoFaint }]}>
+                  <Text style={[styles.contractChipText, { color: indigo }]}>{item.day_rate}</Text>
+                </View>
+              ) : null}
+              {item.contract_duration ? (
+                <View style={[styles.contractChip, { backgroundColor: indigoFaint }]}>
+                  <Text style={[styles.contractChipText, { color: indigo }]}>{item.contract_duration}</Text>
+                </View>
+              ) : null}
+              {item.start_date ? (
+                <View style={[styles.contractChip, { backgroundColor: indigoFaint }]}>
+                  <Text style={[styles.contractChipText, { color: indigo }]}>
+                    Start: {new Date(item.start_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
           {/* Divider */}
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
@@ -389,14 +418,19 @@ export default function EnterpriseJobsScreen() {
   /* ── Empty state ──────────────────────────────────────────── */
 
   function renderEmpty() {
+    const isContractTab = tab === 'contract';
     return (
       <View style={styles.emptyContainer}>
         <View style={[styles.emptyIconCircle, { backgroundColor: indigoBg }]}>
-          <Ionicons name="briefcase-outline" size={48} color={indigo} />
+          <Ionicons name={isContractTab ? 'reader-outline' : 'briefcase-outline'} size={48} color={indigo} />
         </View>
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>No jobs posted yet</Text>
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>
+          {isContractTab ? 'No contracts posted yet' : 'No jobs posted yet'}
+        </Text>
         <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-          Post your first job to start finding qualified builders and tradies for your projects.
+          {isContractTab
+            ? 'Ongoing contracts you post will appear here. Post one to find tradies for multi-week work.'
+            : 'Post your first job to start finding qualified builders and tradies for your projects.'}
         </Text>
         <Pressable
           onPress={() => router.push('/post-job' as any)}
@@ -413,23 +447,61 @@ export default function EnterpriseJobsScreen() {
 
   /* ── Main render ──────────────────────────────────────────── */
 
+  // Split the enterprise's own posts into Jobs vs Contracts (legacy null → job).
+  const visible = jobs.filter((j) => (j.posting_kind ?? 'job') === tab);
+  const jobCount = jobs.filter((j) => (j.posting_kind ?? 'job') === 'job').length;
+  const contractCount = jobs.length - jobCount;
+
   return (
     <AppShell title="My Job Posts" showBack>
-      {/* Meta strip — job count */}
+      {/* Meta strip — count */}
       <View style={[styles.metaStrip, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-          {loading ? 'Loading...' : `${jobs.length} ${jobs.length === 1 ? 'job' : 'jobs'} posted`}
+          {loading
+            ? 'Loading...'
+            : `${visible.length} ${tab === 'contract' ? 'contract' : 'job'}${visible.length === 1 ? '' : 's'} posted`}
         </Text>
       </View>
+
+      {/* Jobs / Contracts segmented control */}
+      {!loading && jobs.length > 0 && (
+        <View style={[styles.segmentBar, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+          {[
+            { key: 'job' as const, label: 'Jobs', count: jobCount },
+            { key: 'contract' as const, label: 'Contracts', count: contractCount },
+          ].map((seg) => {
+            const active = tab === seg.key;
+            return (
+              <Pressable
+                key={seg.key}
+                onPress={() => { setTab(seg.key); setExpandedJobId(null); }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`${seg.label}, ${seg.count}`}
+                style={[
+                  styles.segment,
+                  active
+                    ? { backgroundColor: indigo, borderColor: indigo }
+                    : { backgroundColor: isDark ? colors.surface : '#fff', borderColor: colors.border },
+                ]}
+              >
+                <Text style={[styles.segmentText, { color: active ? '#fff' : colors.textSecondary }]}>
+                  {seg.label} ({seg.count})
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
 
       {/* Content */}
       {loading ? (
         <ActivityIndicator color={indigo} style={{ marginTop: 80 }} />
-      ) : jobs.length === 0 ? (
+      ) : visible.length === 0 ? (
         renderEmpty()
       ) : (
         <FlatList
-          data={jobs}
+          data={visible}
           keyExtractor={(item) => item.id}
           renderItem={renderJob}
           contentContainerStyle={styles.listContent}
@@ -480,6 +552,46 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
+
+  /* Jobs / Contracts segmented control */
+  segmentBar: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+  },
+  segment: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+  },
+  segmentText: {
+    ...Type.captionSemiBold,
+    fontWeight: '700',
+  },
+
+  /* Contract detail chips */
+  contractChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+  },
+  contractChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+  },
+  contractChipText: {
+    ...Type.label,
+    fontWeight: '600',
+  },
+
   container: {
     flex: 1,
   },

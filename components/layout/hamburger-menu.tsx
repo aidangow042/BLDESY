@@ -45,6 +45,10 @@ interface NavLink {
   emoji: string;
 }
 
+/* Always-on links shown to everyone. Role-conditional marketing links
+   ("For Tradies", "For Builders") and the standalone /pricing page are
+   filtered out for users who already have that role — they upgrade from
+   inside the portal, not via the general-pricing page. */
 const PUBLIC_LINKS: NavLink[] = [
   { href: '/(tabs)',       label: 'Home',          emoji: '🏠' },
   { href: '/results',      label: 'Search Tradies', emoji: '🔍' },
@@ -52,11 +56,15 @@ const PUBLIC_LINKS: NavLink[] = [
   { href: '/post-job',     label: 'Post a Job',    emoji: '➕' },
   { href: '/(tabs)/ai',    label: 'AI Assist',     emoji: '✨' },
   { href: '/(tabs)/map',   label: 'Map',           emoji: '🗺️' },
-  { href: '/for-tradies',  label: 'For Tradies',   emoji: '👷' },
-  { href: '/for-builders', label: 'For Builders',  emoji: '🏗️' },
-  { href: '/pricing',      label: 'Pricing',       emoji: '💰' },
   { href: '/about',        label: 'About',         emoji: 'ℹ️' },
 ];
+
+/* Shown only to users who DON'T already have the matching role. The
+   /for-builders page sells the enterprise/hirer side, so the menu label
+   reads "For Enterprise" — a tradie viewing the menu shouldn't be told to
+   "join as a builder", they should be told to "join as an enterprise". */
+const TRADIE_MARKETING: NavLink     = { href: '/for-tradies',  label: 'For Tradies',    emoji: '👷' };
+const ENTERPRISE_MARKETING: NavLink = { href: '/for-builders', label: 'For Enterprise', emoji: '🏗️' };
 
 const MY_STUFF_LINKS: NavLink[] = [
   { href: '/my-jobs',  label: 'My Jobs',       emoji: '📋' },
@@ -114,7 +122,9 @@ export function HamburgerMenu({ open, onClose }: HamburgerMenuProps) {
   async function handleLogout() {
     onClose();
     await supabase.auth.signOut();
-    router.replace('/(tabs)' as any);
+    // Replace to the explicit Home tab — `/(tabs)` alone keeps the
+    // MaterialTopTabNavigator's current tab (e.g. portal) active.
+    router.replace('/(tabs)/index' as any);
   }
 
   const headerOffset = insets.top + 56 + 4; // safe-area + header height + 4px gap
@@ -232,9 +242,15 @@ export function HamburgerMenu({ open, onClose }: HamburgerMenuProps) {
             </View>
           ) : null}
 
-          {/* Main nav */}
+          {/* Main nav — role-aware: marketing pages are filtered out for
+              users who already have that role (they upgrade from inside the
+              portal instead). */}
           <View style={{ paddingVertical: 4 }}>
-            {PUBLIC_LINKS.map((link) => (
+            {[
+              ...PUBLIC_LINKS,
+              ...(builderStatus !== 'approved' ? [TRADIE_MARKETING] : []),
+              ...(enterpriseStatus !== 'approved' ? [ENTERPRISE_MARKETING] : []),
+            ].map((link) => (
               <Pressable
                 key={link.href + link.label}
                 onPress={() => go(link.href)}

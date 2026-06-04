@@ -121,6 +121,7 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', gestureEnabled: true, fullScreenGestureEnabled: true }}>
           <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
           <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
+          <Stack.Screen name="search" />
           <Stack.Screen name="results" />
           <Stack.Screen name="post-job" />
           <Stack.Screen name="builder-profile" options={{ fullScreenGestureEnabled: false }} />

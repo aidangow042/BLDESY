@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from './supabase';
+import { filterJobsByBuilderRadius } from './job-feed-filter';
 
 // ── Types (same shape as previous mocks) ─────────────────────────────────────
 
@@ -95,18 +96,23 @@ export function useDashboardMetrics(userId: string | null) {
     const thirtyDaysAgo = new Date(now - 30 * 86_400_000).toISOString();
     const sixtyDaysAgo = new Date(now - 60 * 86_400_000).toISOString();
 
-    // Parallel: current period + previous period for change %
-    const [savesNow, savesPrev, appsNow, appsPrev] = await Promise.all([
+    // Parallel: current period + previous period for change %.
+    // Profile views read straight from profile_views (RLS: builder reads own).
+    const [savesNow, savesPrev, appsNow, appsPrev, viewsNow, viewsPrev] = await Promise.all([
       supabase.from('saved_builders').select('id', { count: 'exact', head: true }).eq('builder_id', bp.id).gte('created_at', thirtyDaysAgo),
       supabase.from('saved_builders').select('id', { count: 'exact', head: true }).eq('builder_id', bp.id).gte('created_at', sixtyDaysAgo).lt('created_at', thirtyDaysAgo),
       supabase.from('applications').select('id', { count: 'exact', head: true }).eq('builder_id', userId).gte('created_at', thirtyDaysAgo),
       supabase.from('applications').select('id', { count: 'exact', head: true }).eq('builder_id', userId).gte('created_at', sixtyDaysAgo).lt('created_at', thirtyDaysAgo),
+      supabase.from('profile_views').select('id', { count: 'exact', head: true }).eq('builder_user_id', userId).gte('created_at', thirtyDaysAgo),
+      supabase.from('profile_views').select('id', { count: 'exact', head: true }).eq('builder_user_id', userId).gte('created_at', sixtyDaysAgo).lt('created_at', thirtyDaysAgo),
     ]);
 
     const savesCount = savesNow.count ?? 0;
     const savesPrevCount = savesPrev.count ?? 0;
     const appsCount = appsNow.count ?? 0;
     const appsPrevCount = appsPrev.count ?? 0;
+    const viewsCount = viewsNow.count ?? 0;
+    const viewsPrevCount = viewsPrev.count ?? 0;
 
     function pctChange(curr: number, prev: number): number {
       if (prev === 0) return curr > 0 ? 100 : 0;
@@ -114,7 +120,7 @@ export function useDashboardMetrics(userId: string | null) {
     }
 
     setMetrics({
-      profileViews: { value: 0, change: 0, label: 'Profile Views', icon: 'eye-outline' },
+      profileViews: { value: viewsCount, change: pctChange(viewsCount, viewsPrevCount), label: 'Profile Views', icon: 'eye-outline' },
       saves: { value: savesCount, change: pctChange(savesCount, savesPrevCount), label: 'Profile Saves', icon: 'bookmark-outline' },
       applications: { value: appsCount, change: pctChange(appsCount, appsPrevCount), label: 'Applications', icon: 'mail-outline' },
     });
@@ -124,6 +130,52 @@ export function useDashboardMetrics(userId: string | null) {
   useEffect(() => { fetch(); }, [fetch]);
 
   return { metrics, loading, refresh: fetch };
+}
+
+/**
+ * "Work nearby" — count of open jobs in the builder's trade(s) within their
+ * service radius (project + home + contract work combined). Same trade +
+ * radius model as the builder-jobs feeds, surfaced as a single headline number.
+ */
+export function useWorkNearby(userId: string | null) {
+  const [count, setCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  const fetch = useCallback(async () => {
+    if (!userId) { setLoading(false); return; }
+
+    const { data: profile } = await supabase
+      .from('builder_profiles')
+      .select('latitude, longitude, radius_km, trade_category, trade_categories')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    const trades: string[] =
+      Array.isArray(profile?.trade_categories) && profile!.trade_categories.length > 0
+        ? profile!.trade_categories.filter((t: unknown): t is string => typeof t === 'string')
+        : profile?.trade_category
+          ? [profile.trade_category]
+          : [];
+
+    let query = supabase.from('jobs').select('id, suburb').eq('status', 'open');
+    if (trades.length > 0) query = query.in('trade_category', trades);
+
+    const { data } = await query;
+    const inRange = await filterJobsByBuilderRadius(
+      (data ?? []) as { id: string; suburb: string }[],
+      {
+        latitude: profile?.latitude ?? null,
+        longitude: profile?.longitude ?? null,
+        radius_km: profile?.radius_km ?? null,
+      },
+    );
+    setCount(inRange.length);
+    setLoading(false);
+  }, [userId]);
+
+  useEffect(() => { fetch(); }, [fetch]);
+
+  return { count, loading, refresh: fetch };
 }
 
 /**

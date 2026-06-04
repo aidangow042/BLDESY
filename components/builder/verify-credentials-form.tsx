@@ -2,7 +2,7 @@
  * Credential verification form — ABN + licence verification.
  * Calls the verify-credentials Supabase Edge Function.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -26,17 +26,45 @@ type Props = {
 
 const AU_STATES = ['NSW', 'QLD', 'VIC', 'SA', 'WA', 'TAS', 'NT', 'ACT'];
 
+function formatAbn(raw: string | null | undefined): string {
+  const digits = (raw ?? '').replace(/\D/g, '');
+  if (digits.length !== 11) return digits;
+  return `${digits.slice(0, 2)} ${digits.slice(2, 5)} ${digits.slice(5, 8)} ${digits.slice(8)}`;
+}
+
+function pickLicenceNumber(creds: any, trade: string): string {
+  const list = creds?.licences;
+  if (!Array.isArray(list)) return '';
+  const match = list.find((l: any) => l?.type === trade);
+  return match?.licence_number ?? '';
+}
+
 export function VerifyCredentialsForm({ tradeCategory, existingCredentials, onVerified }: Props) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const colors = Colors[isDark ? 'dark' : 'light'];
 
-  const [abn, setAbn] = useState('');
-  const [licenceNumber, setLicenceNumber] = useState('');
-  const [state, setState] = useState(existingCredentials?.state || 'NSW');
+  const [abn, setAbn] = useState(() => formatAbn(existingCredentials?.abn?.number));
+  const [licenceNumber, setLicenceNumber] = useState(() => pickLicenceNumber(existingCredentials, tradeCategory));
+  const [state, setState] = useState<string>(existingCredentials?.state || 'NSW');
   const [loading, setLoading] = useState(false);
   const [credentials, setCredentials] = useState(existingCredentials || null);
   const [resultMessage, setResultMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
+
+  // Parent loads `existingCredentials` asynchronously, so the useState
+  // initializers above often run with null. Re-sync once the real object
+  // arrives, but never clobber values the user has already typed.
+  const syncedRef = useRef<any>(existingCredentials);
+  useEffect(() => {
+    if (!existingCredentials || existingCredentials === syncedRef.current) return;
+    syncedRef.current = existingCredentials;
+    setCredentials(existingCredentials);
+    setAbn((prev) => prev || formatAbn(existingCredentials?.abn?.number));
+    setLicenceNumber((prev) => prev || pickLicenceNumber(existingCredentials, tradeCategory));
+    if (existingCredentials?.state) {
+      setState((prev) => prev || existingCredentials.state);
+    }
+  }, [existingCredentials, tradeCategory]);
 
   async function handleVerify() {
     if (!abn && !licenceNumber) {
@@ -163,6 +191,14 @@ export function VerifyCredentialsForm({ tradeCategory, existingCredentials, onVe
         placeholderTextColor={colors.textSecondary}
         autoCapitalize="characters"
       />
+      {credentials?.licences?.find((l: any) => l?.type === tradeCategory)?.verified && (
+        <View style={styles.verifiedRow}>
+          <MaterialIcons name="check-circle" size={16} color={colors.success} />
+          <Text style={[styles.verifiedText, { color: colors.success }]}>
+            {credentials.licences.find((l: any) => l?.type === tradeCategory)?.display_label ?? 'Licence verified'}
+          </Text>
+        </View>
+      )}
 
       {/* Result message */}
       {resultMessage && (

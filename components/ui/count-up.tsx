@@ -3,7 +3,7 @@
  * Mirrors web's `components/ui/count-up.tsx` (cubic ease-out 1.5s default).
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Text, type TextStyle } from 'react-native';
 import {
   cancelAnimation,
@@ -22,14 +22,30 @@ interface CountUpProps {
   style?: TextStyle | TextStyle[];
 }
 
+const defaultFormat = (n: number) => Math.round(n).toLocaleString('en-AU');
+
 export function CountUp({
   value,
   duration = 1500,
-  format = (n) => Math.round(n).toLocaleString('en-AU'),
+  format = defaultFormat,
   style,
 }: CountUpProps) {
   const progress = useSharedValue(0);
-  const [display, setDisplay] = useState(format(0));
+  const [display, setDisplay] = useState(() => format(0));
+
+  // Stash format in a ref so the JS-side updater always reads the latest one
+  // without invalidating the worklet on every render.
+  const formatRef = useRef(format);
+  useEffect(() => {
+    formatRef.current = format;
+  }, [format]);
+
+  // JS-thread callback. Reanimated worklets can't call user-supplied JS
+  // functions directly (that crashes the UI thread), so we marshal across
+  // via runOnJS and do the formatting + setState here.
+  const applyValue = useCallback((n: number) => {
+    setDisplay(formatRef.current(n));
+  }, []);
 
   useEffect(() => {
     progress.value = 0;
@@ -43,9 +59,10 @@ export function CountUp({
   useAnimatedReaction(
     () => progress.value,
     (current) => {
-      runOnJS(setDisplay)(format(current));
+      'worklet';
+      runOnJS(applyValue)(current);
     },
-    [format],
+    [applyValue],
   );
 
   return <Text style={style}>{display}</Text>;

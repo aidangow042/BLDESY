@@ -15,7 +15,7 @@ import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
 import { AppShell } from '@/components/layout';
 import { DashboardHeader } from '@/components/dashboard/dashboard-header';
-import { MetricsGrid } from '@/components/dashboard/metrics-grid';
+import { QuickStatsGrid, type QuickStat } from '@/components/dashboard/quick-stats-grid';
 import { HealthGauge } from '@/components/dashboard/health-gauge';
 import { AICoachCard } from '@/components/dashboard/ai-coach-card';
 import { ActivityFeed } from '@/components/dashboard/activity-feed';
@@ -23,7 +23,7 @@ import { ApplicationBreakdown } from '@/components/dashboard/application-breakdo
 import { NotificationsPanel } from '@/components/dashboard/notifications-panel';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import { useUnreadCount } from '@/hooks/use-unread-count';
-import { computeCoachTip } from '@/lib/dashboard-data';
+import { computeCoachTip, useDashboardMetrics, useWorkNearby } from '@/lib/dashboard-data';
 import { friendlyError } from '@/lib/error-messages';
 import { CAN_SELL_IN_APP } from '@/lib/iap-policy';
 
@@ -89,6 +89,8 @@ export default function PortalScreen() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const notificationsRef = useRef<BottomSheet>(null);
   const { count: unreadMessages } = useUnreadCount(userId);
+  const { metrics } = useDashboardMetrics(userId);
+  const { count: workNearby } = useWorkNearby(userId);
   const coachTip = useMemo(() => computeCoachTip(profile), [profile]);
 
   useFocusEffect(
@@ -314,6 +316,45 @@ export default function PortalScreen() {
     },
   ];
 
+  // Headline metrics — animated 2×2 grid over the teal header.
+  const stats: QuickStat[] = [
+    {
+      key: 'views',
+      label: 'Profile Views',
+      value: metrics.profileViews.value,
+      icon: 'eye-outline',
+      accent: '#0d9488',
+      tint: 'rgba(13,148,136,0.10)',
+      onPress: () => router.push('/builder-analytics'),
+    },
+    {
+      key: 'apps',
+      label: 'Applications',
+      value: metrics.applications.value,
+      icon: 'mail-outline',
+      accent: '#4f46e5',
+      tint: 'rgba(79,70,229,0.10)',
+      onPress: () => router.push('/builder-applications'),
+    },
+    {
+      key: 'saves',
+      label: 'Profile Saves',
+      value: metrics.saves.value,
+      icon: 'bookmark-outline',
+      accent: '#059669',
+      tint: 'rgba(5,150,105,0.10)',
+      onPress: () => router.push('/builder-analytics'),
+    },
+    {
+      key: 'nearby',
+      label: 'Work Nearby',
+      value: workNearby,
+      icon: 'location-outline',
+      accent: '#d97706',
+      tint: 'rgba(217,119,6,0.10)',
+      onPress: () => router.push({ pathname: '/builder-jobs', params: { type: 'commercial' } } as any),
+    },
+  ];
 
   return (
     <View style={[styles.safeArea, { backgroundColor: colors.canvas }]}>
@@ -344,12 +385,8 @@ export default function PortalScreen() {
           onHamburgerPress={() => setDrawerOpen(true)}
         />
 
-        {/* Key metrics hero */}
-        <MetricsGrid
-          userId={userId}
-          onViewAnalytics={() => router.push('/builder-analytics')}
-          onCardPress={() => router.push('/builder-analytics')}
-        />
+        {/* Key metrics hero — animated stats over the teal header */}
+        <QuickStatsGrid stats={stats} />
 
         {/* Application funnel — acceptance rate + status breakdown */}
         <ApplicationBreakdown userId={userId} />
@@ -390,36 +427,6 @@ export default function PortalScreen() {
 
         {/* Activity feed */}
         <ActivityFeed userId={userId} onViewAll={() => {}} />
-
-        {/* Bottom stats bar */}
-        {profile && (
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <Ionicons name="hammer-outline" size={16} color={DashboardColors.accent} />
-              <Text style={styles.statNumber}>
-                {Array.isArray(profile.projects) ? profile.projects.length : 0}
-              </Text>
-              <Text style={styles.statLabel}>Projects</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Ionicons name="camera-outline" size={16} color={DashboardColors.accent} />
-              <Text style={styles.statNumber}>
-                {(Array.isArray(profile.projects) ? profile.projects.reduce((sum: number, p: any) => sum + (Array.isArray(p?.images) ? p.images.length : 0), 0) : 0)}
-              </Text>
-              <Text style={styles.statLabel}>Photos</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Ionicons name="star-outline" size={16} color={DashboardColors.accent} />
-              <Text style={styles.statNumber}>0</Text>
-              <Text style={styles.statLabel}>Reviews</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Ionicons name="heart-outline" size={16} color={DashboardColors.accent} />
-              <Text style={styles.statNumber}>0</Text>
-              <Text style={styles.statLabel}>Saves</Text>
-            </View>
-          </View>
-        )}
 
       </ScrollView>
 
@@ -619,31 +626,4 @@ const styles = StyleSheet.create({
     color: DashboardColors.textSecondary,
   },
 
-  // Stats
-  statsRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    paddingHorizontal: Spacing.xl,
-    marginTop: Spacing.xl,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: DashboardColors.surface,
-    borderWidth: 1,
-    borderColor: DashboardColors.border,
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: '800' as const,
-    color: DashboardColors.textPrimary,
-  },
-  statLabel: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    marginTop: 2,
-    color: DashboardColors.textSecondary,
-  },
 });

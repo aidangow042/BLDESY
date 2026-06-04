@@ -33,10 +33,47 @@ import { ReportButton } from '@/components/report-button';
 import { CAN_SELL_IN_APP } from '@/lib/iap-policy';
 import { getRelativeTime, getDisplayName, getInitials, URGENCY_CONFIG } from '@/lib/trade-utils';
 import { isSubscriptionActive, useTradieSubscription } from '@/lib/subscription';
+import { WhenAndHowBlock } from '@/components/jobs/when-and-how-block';
+import { CAPABILITY_LABELS, formatPublicLiability, type CapabilityKey } from '@/lib/capabilities';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PHOTO_WIDTH = SCREEN_WIDTH - 48;
 const PHOTO_HEIGHT = 240;
+
+/**
+ * Read-only requirements card — what the enterprise needs from applicants.
+ * Plain labelled bullets (no tradie-match badges; that's a separate follow-up).
+ * Renders nothing when there are no requirements.
+ */
+function RequirementsCard({ reqs, minPL }: { reqs: Record<string, string> | null; minPL: number | null }) {
+  const entries = Object.entries(reqs ?? {});
+  const required = entries.filter(([, v]) => v === 'required').map(([k]) => CAPABILITY_LABELS[k as CapabilityKey] ?? k);
+  const preferred = entries.filter(([, v]) => v === 'preferred').map(([k]) => CAPABILITY_LABELS[k as CapabilityKey] ?? k);
+  const pl = formatPublicLiability(minPL);
+  if (required.length === 0 && preferred.length === 0 && !pl) return null;
+  return (
+    <View style={[styles.card, Shadows.sm]}>
+      <Text style={styles.sectionTitle}>Requirements</Text>
+      {required.length > 0 || pl ? (
+        <View style={{ marginTop: 8 }}>
+          <Text style={styles.detailLabel}>REQUIRED</Text>
+          {required.map((r) => (
+            <Text key={r} style={[styles.descriptionText, { marginTop: 2 }]}>• {r}</Text>
+          ))}
+          {pl ? <Text style={[styles.descriptionText, { marginTop: 2 }]}>• {pl}</Text> : null}
+        </View>
+      ) : null}
+      {preferred.length > 0 ? (
+        <View style={{ marginTop: 10 }}>
+          <Text style={styles.detailLabel}>NICE TO HAVE</Text>
+          {preferred.map((r) => (
+            <Text key={r} style={[styles.descriptionText, { marginTop: 2 }]}>• {r}</Text>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 /* ─── Types ────────────────────────────────────────────────── */
 
@@ -55,12 +92,25 @@ type Job = {
   created_at: string;
   customer_id: string;
   poster_type: string | null;
+  posting_kind: string | null;
   workers_needed: number | null;
   day_rate: string | null;
   contract_duration: string | null;
   start_date: string | null;
   site_requirements: string | null;
   photo_urls: string[] | null;
+  // "When & How" (enterprise posts)
+  employment_type: string | null;
+  end_date: string | null;
+  is_ongoing: boolean | null;
+  daily_start_time: string | null;
+  daily_finish_time: string | null;
+  work_days: string[] | null;
+  pay_type: string | null;
+  pay_rate_min: number | null;
+  pay_rate_max: number | null;
+  required_capabilities: Record<string, string> | null;
+  min_public_liability: number | null;
 };
 
 type Applicant = {
@@ -125,7 +175,7 @@ export default function JobDetailScreen() {
     setLoading(true);
 
     const [jobRes, photoRes, docRes] = await Promise.all([
-      supabase.from('jobs').select('id, title, description, trade_category, suburb, postcode, urgency, budget, status, created_at, customer_id, poster_type, workers_needed, day_rate, contract_duration, start_date, site_requirements, photo_urls').eq('id', id).single(),
+      supabase.from('jobs').select('id, title, description, trade_category, suburb, postcode, urgency, budget, status, created_at, customer_id, poster_type, posting_kind, workers_needed, day_rate, contract_duration, start_date, site_requirements, photo_urls, employment_type, end_date, is_ongoing, daily_start_time, daily_finish_time, work_days, pay_type, pay_rate_min, pay_rate_max, required_capabilities, min_public_liability').eq('id', id).single(),
       supabase.from('job_photos').select('id, file_path, is_cover').eq('job_id', id).order('is_cover', { ascending: false }),
       supabase.from('job_documents').select('id, file_path, file_name').eq('job_id', id),
     ]);
@@ -337,6 +387,11 @@ export default function JobDetailScreen() {
           <View style={[styles.headerTradePill, { backgroundColor: colors.primaryBg }]}>
             <Text style={[styles.headerTradePillText, { color: colors.primary }]}>{job.trade_category}</Text>
           </View>
+          {job.posting_kind === 'contract' ? (
+            <View style={[styles.headerTradePill, { backgroundColor: colors.primaryBg }]}>
+              <Text style={[styles.headerTradePillText, { color: colors.primary }]}>Contract</Text>
+            </View>
+          ) : null}
           <View style={[styles.headerUrgencyPill, { backgroundColor: urg.bg }]}>
             <Ionicons name={urg.icon as any} size={12} color={urg.color} />
             <Text style={[styles.headerUrgencyText, { color: urg.color }]}>{urg.label}</Text>
@@ -506,6 +561,21 @@ export default function JobDetailScreen() {
               </View>
             ) : null}
           </View>
+
+          {/* ── When & How + Requirements (enterprise posts) ─────── */}
+          <WhenAndHowBlock
+            employment_type={job.employment_type}
+            start_date={job.start_date}
+            end_date={job.end_date}
+            is_ongoing={job.is_ongoing}
+            daily_start_time={job.daily_start_time}
+            daily_finish_time={job.daily_finish_time}
+            work_days={job.work_days}
+            pay_type={job.pay_type}
+            pay_rate_min={job.pay_rate_min}
+            pay_rate_max={job.pay_rate_max}
+          />
+          <RequirementsCard reqs={job.required_capabilities} minPL={job.min_public_liability} />
 
           {/* ── 4. Plans & Documents — at the bottom ─────── */}
           {documents.length > 0 && (

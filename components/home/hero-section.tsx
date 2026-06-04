@@ -23,7 +23,6 @@ import { useRouter } from 'expo-router';
 
 import { Colors, FontFamily, Radius, Shadows, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { SearchOverlay } from '@/components/search/search-overlay';
 
 type Mode = 'homeowner' | 'tradie';
 
@@ -35,13 +34,12 @@ export function HeroSection() {
   const router = useRouter();
 
   const [mode, setMode] = useState<Mode>('homeowner');
-  const [searchOpen, setSearchOpen] = useState(false);
 
   function openSearch() {
-    // Homeowner → structured "find a tradie" search overlay (like the website).
+    // Homeowner → full-page "find a tradie" search (mirrors the website's /search).
     // Tradie → the jobs feed, which has its own search/filters.
     if (mode === 'tradie') router.push('/builder-jobs' as any);
-    else setSearchOpen(true);
+    else router.push('/search' as any);
   }
 
   const placeholder = mode === 'tradie' ? 'Search jobs by keyword…' : 'Suburb, postcode, or trade';
@@ -159,8 +157,6 @@ export function HeroSection() {
           </Pressable>
         </View>
       </View>
-
-      <SearchOverlay visible={searchOpen} onClose={() => setSearchOpen(false)} />
     </View>
   );
 }

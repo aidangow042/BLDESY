@@ -6,6 +6,7 @@
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -18,13 +19,16 @@ interface ChatHeaderProps {
 export function ChatHeader({ hasMessages, onClear }: ChatHeaderProps) {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
+  const insets = useSafeAreaInsets();
 
   return (
     <LinearGradient
       colors={[c.primary, c.primaryDark]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 0 }}
-      style={styles.bar}
+      // Clear the status bar / Dynamic Island — this header sits at the very top
+      // (the AI tab uses AppShell hideHeader, so there's no AppHeader inset).
+      style={[styles.bar, { paddingTop: insets.top + Spacing.md }]}
     >
       <View style={styles.row}>
         <View style={styles.left}>
