@@ -22,7 +22,8 @@ import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getSuburbSuggestions } from '@/lib/geo';
 import { TRADE_CATALOGUE } from '@/components/builder/trade-catalogue';
-import { hasSpecialisations, getSpecialisationsForTrade } from '@/lib/trade-specialisations';
+import { hasSpecialisations } from '@/lib/trade-specialisations';
+import { SpecialityPicker } from '@/components/trades/speciality-picker';
 
 // Urgency values match what app/results.tsx scores against.
 const URGENCY_OPTIONS = [
@@ -175,23 +176,13 @@ export default function SearchScreen() {
           {tradeSlug && hasSpecialisations(tradeSlug) ? (
             <>
               <Text style={[styles.label, { color: c.textSecondary, marginTop: Spacing.lg }]}>SPECIALITY</Text>
-              <View style={styles.chipRow}>
-                {getSpecialisationsForTrade(tradeSlug).map((sp) => {
-                  const active = specs.includes(sp.slug);
-                  return (
-                    <Pressable
-                      key={sp.slug}
-                      onPress={() => setSpecs((p) => (active ? p.filter((x) => x !== sp.slug) : [...p, sp.slug]))}
-                      style={[
-                        styles.chip,
-                        { borderColor: active ? c.primary : inputBorder, backgroundColor: active ? c.primary : 'transparent' },
-                      ]}
-                    >
-                      <Text style={[styles.chipText, { color: active ? '#fff' : c.textPrimary }]}>{sp.name}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <SpecialityPicker
+                selectedTrades={[tradeSlug]}
+                value={specs.length ? { [tradeSlug]: specs } : {}}
+                onChange={(next) => setSpecs(next[tradeSlug] ?? [])}
+                tradeName={tradeNameFor}
+                triggerLabel="Any speciality"
+              />
             </>
           ) : null}
 

@@ -46,6 +46,17 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COVER_HEIGHT = 260;
 const AVATAR_SIZE = 88;
 
+/** Lighten (amt>0) or darken (amt<0) a #RRGGBB hex by a flat RGB delta. */
+function shadeHex(hex: string, amt: number): string {
+  const m = hex.replace('#', '');
+  if (m.length < 6) return hex;
+  const ch = (i: number) => {
+    const v = parseInt(m.slice(i, i + 2), 16) + amt;
+    return Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0');
+  };
+  return `#${ch(0)}${ch(2)}${ch(4)}`;
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type BuilderProfile = {
@@ -70,6 +81,7 @@ type BuilderProfile = {
   response_time?: string | null;
   areas_serviced?: string | null;
   cover_photo_url?: string | null;
+  cover_color?: string | null;
   profile_photo_url?: string | null;
   projects?: ProjectData[] | null;
   credentials?: CredentialData[] | null;
@@ -672,7 +684,7 @@ export default function BuilderProfileScreen() {
 
     const { data, error: fetchError } = await supabase
       .from('builder_profiles')
-      .select('id, user_id, business_name, trade_category, trade_categories, suburb, postcode, bio, website, profile_photo_url, cover_photo_url, projects, specialties, specialisations, credentials, credentials_verified, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km, faqs, team_members')
+      .select('id, user_id, business_name, trade_category, trade_categories, suburb, postcode, bio, website, profile_photo_url, cover_photo_url, cover_color, projects, specialties, specialisations, credentials, credentials_verified, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km, faqs, team_members')
       .eq('id', id)
       .single();
 
@@ -886,6 +898,7 @@ export default function BuilderProfileScreen() {
   const yearsInBusiness = estYear ? new Date().getFullYear() - estYear : null;
   const totalPhotos = builderProjects.reduce((acc: number, p) => acc + p.media.length, 0);
   const coverUri = builder.cover_photo_url ?? null;
+  const coverColor = builder.cover_color ?? null;
   const avatarUri = builder.profile_photo_url ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(builder.business_name)}&background=0d9488&color=fff&size=200`;
 
   // Verification badges (only show ones that apply)
@@ -925,8 +938,50 @@ export default function BuilderProfileScreen() {
       >
         {/* ─── COVER PHOTO + HEADER ─── */}
         <View style={{ height: COVER_HEIGHT + AVATAR_SIZE / 2 }}>
-          {coverUri ? (
-            <Image source={{ uri: coverUri }} style={styles.coverImage} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} accessibilityLabel={builder.business_name + ' cover photo'} />
+          {coverColor ? (
+            <LinearGradient
+              colors={[shadeHex(coverColor, 22), coverColor, shadeHex(coverColor, -30)]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.coverImage}
+            >
+              <View style={styles.coverDotsLayer} pointerEvents="none">
+                {Array.from({ length: 4 }).map((_, row) => (
+                  <View key={row} style={styles.coverDotsRow}>
+                    {Array.from({ length: 10 }).map((_, col) => (
+                      <View key={col} style={styles.coverDot} />
+                    ))}
+                  </View>
+                ))}
+              </View>
+            </LinearGradient>
+          ) : coverUri ? (
+            <View style={styles.coverImage}>
+              {/* Blurred copy of the same photo as a colour-matched backdrop, so
+                  any aspect ratio / low-res upload looks intentional instead of
+                  being hard-cropped and zoomed to fill the strip. */}
+              <Image
+                source={{ uri: coverUri }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                blurRadius={28}
+                cachePolicy="disk"
+                accessible={false}
+              />
+              <View
+                style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15,23,42,0.40)' }]}
+                pointerEvents="none"
+              />
+              {/* The photo itself, shown in full — no zoom, no crop. */}
+              <Image
+                source={{ uri: coverUri }}
+                style={StyleSheet.absoluteFill}
+                contentFit="contain"
+                cachePolicy="disk"
+                placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                accessibilityLabel={builder.business_name + ' cover photo'}
+              />
+            </View>
           ) : (
             <LinearGradient
               colors={colorScheme === 'dark' ? ['#042f2e', '#0f3d3a', '#134E4A'] : ['#0d9488', '#0f766e', '#115e59']}
@@ -1171,12 +1226,12 @@ export default function BuilderProfileScreen() {
               </View>
             )}
 
-            {displayProjects.map((project) => {
+            {displayProjects.map((project, index) => {
               const allMedia = [
                 ...(project.media ?? []),
               ];
               return (
-              <View key={project.id} style={[styles.projectCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+              <View key={project.id ?? `project-${index}`} style={[styles.projectCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
                 {/* ── Before / After ── */}
                 {project.beforeImage && project.afterImage && (
                   <BeforeAfterCompare

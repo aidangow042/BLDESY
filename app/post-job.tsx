@@ -38,7 +38,8 @@ import { useUser } from '@/lib/auth-context';
 import { getSuburbSuggestions, getPostcodeForSuburb } from '@/lib/geo';
 import { uploadJobPhoto, uploadJobDocument } from '@/lib/storage';
 import { isSubscriptionActive, useEnterpriseSubscription } from '@/lib/subscription';
-import { getSpecialisationsForTrade, hasSpecialisations } from '@/lib/trade-specialisations';
+import { hasSpecialisations } from '@/lib/trade-specialisations';
+import { SpecialityPicker } from '@/components/trades/speciality-picker';
 import { StepWhenAndHow, INITIAL_WHEN_AND_HOW, type WhenAndHowFields } from '@/components/jobs/when-and-how-step';
 
 /* ───────────────────────── Constants ───────────────────────── */
@@ -1025,7 +1026,6 @@ export default function PostJobScreen() {
     // matches what gets persisted. "Other" → free-text, never in the catalogue,
     // so hasSpecialisations() returns false and the picker hides itself.
     const tradeSlug = (s.tradeType === 'Other' ? s.otherTrade : s.tradeType).toLowerCase();
-    const specialisations = getSpecialisationsForTrade(tradeSlug);
 
     return (
       <View style={styles.stepContent}>
@@ -1206,36 +1206,13 @@ export default function PostJobScreen() {
             <Text style={[styles.fieldHint, { color: colors.textSecondary, marginBottom: 8 }]}>
               Pick any that apply to match with the right specialists.
             </Text>
-            <View style={styles.specChipWrap}>
-              {specialisations.map((spec) => {
-                const selected = s.specialisations.includes(spec.slug);
-                return (
-                  <Pressable
-                    key={spec.slug}
-                    style={({ pressed }) => [
-                      styles.chip,
-                      styles.specChip,
-                      {
-                        backgroundColor: selected ? '#0F6E56' : '#fff',
-                        borderColor: selected ? '#0F6E56' : colors.border,
-                      },
-                      pressed && { opacity: 0.7 },
-                    ]}
-                    onPress={() => dispatch({ type: 'TOGGLE_SPEC', slug: spec.slug })}
-                  >
-                    {selected && <MaterialIcons name="check" size={14} color="#fff" />}
-                    <Text
-                      style={[
-                        styles.chipText,
-                        { color: selected ? '#fff' : colors.text },
-                      ]}
-                    >
-                      {spec.name}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            <SpecialityPicker
+              selectedTrades={[tradeSlug]}
+              value={s.specialisations.length ? { [tradeSlug]: s.specialisations } : {}}
+              onChange={(next) =>
+                dispatch({ type: 'SET', field: 'specialisations', value: next[tradeSlug] ?? [] })
+              }
+            />
           </View>
         )}
 

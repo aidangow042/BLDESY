@@ -35,7 +35,7 @@ interface TabSlot {
    "Saved" moves to the hamburger menu (web parity). */
 const SLOTS: TabSlot[] = [
   { kind: 'tab',  target: 'index',     label: 'Home',     icon: 'house' },
-  { kind: 'push', target: '/all-trades', label: 'Search', icon: 'magnifyingglass' },
+  { kind: 'push', target: '/search', label: 'Search', icon: 'magnifyingglass' },
   { kind: 'push', target: '/post-job', label: 'Post Job', icon: 'plus.circle.fill', accent: true },
   { kind: 'tab',  target: 'ai',        label: 'AI',       icon: 'sparkles' },
   { kind: 'tab',  target: 'map',       label: 'Map',      icon: 'map' },

@@ -26,6 +26,7 @@ import { ThemedText } from '@/components/themed-text';
 import { AppShell } from '@/components/layout';
 import { useToast } from '@/components/ui';
 import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
+import { CoverColorPicker } from '@/components/builder/cover-color-picker';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { geocode } from '@/lib/geo';
 import { uploadImage, uploadImages, isLocalUri } from '@/lib/storage';
@@ -39,15 +40,16 @@ import {
   tradeDisplayName,
 } from '@/components/builder/trade-catalogue';
 import {
-  getSpecialisationsForTrade,
   hasSpecialisations,
   sanitiseSpecialisations,
   type BuilderSpecialisations,
 } from '@/lib/trade-specialisations';
+import { SpecialityPicker } from '@/components/trades/speciality-picker';
 import { requiresLicence, licenceCoversTrade } from '@/lib/licence-coverage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COVER_HEIGHT = 180;
+const DEFAULT_COVER_COLOR = '#0D9B7A';
 const AVATAR_SIZE = 80;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -199,6 +201,8 @@ export default function EditProfileScreen() {
   // ─── Profile fields ──────────────────────────────────────────────────
   // Photos
   const [coverPhoto, setCoverPhoto] = useState<string | null>(null);
+  const [coverColor, setCoverColor] = useState<string | null>(null);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
 
   // Basic info
@@ -274,7 +278,7 @@ export default function EditProfileScreen() {
 
     const { data, error } = await supabase
       .from('builder_profiles')
-      .select('id, user_id, business_name, trade_category, trade_categories, suburb, postcode, bio, phone, email, website, profile_photo_url, cover_photo_url, projects, specialties, specialisations, credentials, credentials_verified, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km')
+      .select('id, user_id, business_name, trade_category, trade_categories, suburb, postcode, bio, phone, email, website, profile_photo_url, cover_photo_url, cover_color, projects, specialties, specialisations, credentials, credentials_verified, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km')
       .eq('user_id', userId)
       .maybeSingle();
 
@@ -311,6 +315,7 @@ export default function EditProfileScreen() {
       setResponseTime(data.response_time ?? 'Within 2 hours');
       setAreasServiced(data.areas_serviced ?? '');
       setCoverPhoto(data.cover_photo_url ?? null);
+      setCoverColor(data.cover_color ?? null);
       setProfilePhoto(data.profile_photo_url ?? null);
 
       // Projects, credentials, team members from jsonb
@@ -471,21 +476,6 @@ export default function EditProfileScreen() {
     }
 
     setVerifyingTrade(false);
-  }
-
-  // ─── Specialisations management (structured, per-trade) ──────────────
-
-  /** Toggle a specialisation slug for a given trade. Removes the trade key when emptied. */
-  function toggleSpecialisation(trade: string, slug: string) {
-    setSpecialisations(prev => {
-      const current = prev[trade] ?? [];
-      const has = current.includes(slug);
-      const nextSlugs = has ? current.filter(s => s !== slug) : [...current, slug];
-      const next = { ...prev };
-      if (nextSlugs.length === 0) delete next[trade];
-      else next[trade] = nextSlugs;
-      return next;
-    });
   }
 
   // ─── Projects management ─────────────────────────────────────────────
@@ -859,6 +849,7 @@ export default function EditProfileScreen() {
           response_time: responseTime.trim() || null,
           areas_serviced: areasServiced.trim() || null,
           cover_photo_url: finalCoverUrl,
+          cover_color: coverColor,
           profile_photo_url: finalProfileUrl,
           projects: finalProjects.length > 0 ? finalProjects : null,
           credentials: credentials.length > 0 ? credentials : null,
@@ -962,7 +953,7 @@ export default function EditProfileScreen() {
 
   function renderCompletenessBar() {
     const checks = [
-      { label: 'Cover photo', done: !!coverPhoto },
+      { label: 'Cover', done: !!coverPhoto || !!coverColor },
       { label: 'Profile photo', done: !!profilePhoto },
       { label: 'Bio', done: bio.trim().length > 0 },
       { label: 'Phone', done: phone.trim().length > 0 },
@@ -1219,36 +1210,80 @@ export default function EditProfileScreen() {
       <View style={styles.stepContent}>
         {renderCompletenessBar()}
 
-        {/* Cover photo */}
+        {/* Cover banner — photo or solid colour */}
         <View style={styles.photosSection}>
-          <Pressable
-            onPress={() => pickImage(setCoverPhoto)}
-            style={({ pressed }) => [pressed && { opacity: 0.8 }]}
-            accessibilityRole="button"
-            accessibilityLabel="Change cover photo"
-          >
-            {coverPhoto ? (
-              <Image source={{ uri: coverPhoto }} style={[styles.coverImage, { backgroundColor: colors.border }]} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
-            ) : (
-              <View style={[styles.coverPlaceholder, { backgroundColor: colors.surface }]}>
-                <Text style={{ fontSize: 28 }}>📷</Text>
-                <Text style={[styles.placeholderText, { color: colors.textSecondary }]}>
-                  Add cover photo
-                </Text>
-                <Text style={[styles.placeholderHint, { color: colors.icon }]}>
-                  Your best project photo — makes a great first impression
-                </Text>
+          {/* Photo / Colour mode toggle */}
+          <View style={[styles.bannerToggle, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <Pressable
+              onPress={() => setCoverColor(null)}
+              style={[styles.bannerToggleBtn, !coverColor && { backgroundColor: colors.surface, ...Shadows.sm }]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: !coverColor }}
+            >
+              <MaterialIcons name="image" size={16} color={!coverColor ? teal : colors.textSecondary} />
+              <Text style={[styles.bannerToggleText, { color: !coverColor ? teal : colors.textSecondary }]}>Photo</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => { setCoverColor(prev => prev ?? DEFAULT_COVER_COLOR); setColorPickerOpen(true); }}
+              style={[styles.bannerToggleBtn, !!coverColor && { backgroundColor: colors.surface, ...Shadows.sm }]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: !!coverColor }}
+            >
+              <MaterialIcons name="palette" size={16} color={coverColor ? teal : colors.textSecondary} />
+              <Text style={[styles.bannerToggleText, { color: coverColor ? teal : colors.textSecondary }]}>Colour</Text>
+            </Pressable>
+          </View>
+
+          {coverColor ? (
+            <Pressable
+              onPress={() => setColorPickerOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Change banner colour"
+            >
+              <View style={[styles.coverImage, styles.colorCover, { backgroundColor: coverColor }]}>
+                <View style={styles.colorEditPill}>
+                  <MaterialIcons name="palette" size={14} color="#fff" />
+                  <Text style={styles.coverEditText}>Tap to change colour</Text>
+                </View>
               </View>
-            )}
-            {coverPhoto && (
-              <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.4)']}
-                style={styles.coverGradient}
-              >
-                <Text style={styles.coverEditText}>Tap to change cover</Text>
-              </LinearGradient>
-            )}
-          </Pressable>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => pickImage(setCoverPhoto)}
+              style={({ pressed }) => [pressed && { opacity: 0.8 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Change cover photo"
+            >
+              {coverPhoto ? (
+                <Image source={{ uri: coverPhoto }} style={[styles.coverImage, { backgroundColor: colors.border }]} cachePolicy="disk" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} />
+              ) : (
+                <View style={[styles.coverPlaceholder, { backgroundColor: colors.surface }]}>
+                  <Text style={{ fontSize: 28 }}>📷</Text>
+                  <Text style={[styles.placeholderText, { color: colors.textSecondary }]}>
+                    Add cover photo
+                  </Text>
+                  <Text style={[styles.placeholderHint, { color: colors.icon }]}>
+                    Your best project photo — makes a great first impression
+                  </Text>
+                </View>
+              )}
+              {coverPhoto && (
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.4)']}
+                  style={styles.coverGradient}
+                >
+                  <Text style={styles.coverEditText}>Tap to change cover</Text>
+                </LinearGradient>
+              )}
+            </Pressable>
+          )}
+
+          <CoverColorPicker
+            visible={colorPickerOpen}
+            initialColor={coverColor}
+            onCancel={() => setColorPickerOpen(false)}
+            onDone={(hex) => { setCoverColor(hex); setColorPickerOpen(false); }}
+          />
 
           {/* Profile photo */}
           <View style={styles.avatarRow}>
@@ -1392,44 +1427,16 @@ export default function EditProfileScreen() {
                 </Text>
               );
             }
-            return tradesWithSpecs.map((trade, idx) => {
-              const options = getSpecialisationsForTrade(trade);
-              const chosen = specialisations[trade] ?? [];
-              return (
-                <View key={trade} style={idx > 0 ? { marginTop: Spacing.lg } : undefined}>
-                  <Text style={[styles.tradeGroupLabel, { color: colors.textSecondary }]}>
-                    {tradeDisplayName(trade).toUpperCase()}
-                  </Text>
-                  <View style={styles.chipWrap}>
-                    {options.map(spec => {
-                      const selected = chosen.includes(spec.slug);
-                      return (
-                        <Pressable
-                          key={spec.slug}
-                          onPress={() => toggleSpecialisation(trade, spec.slug)}
-                          style={({ pressed }) => [
-                            styles.specChip,
-                            {
-                              backgroundColor: selected ? tealBg : colors.background,
-                              borderColor: selected ? teal : colors.border,
-                            },
-                            pressed && { opacity: 0.7 },
-                          ]}
-                          accessibilityRole="button"
-                          accessibilityLabel={`${spec.name}${selected ? ', selected' : ''}`}
-                          accessibilityState={{ selected }}
-                        >
-                          {selected && <Text style={{ fontSize: 12, color: teal }}>✓</Text>}
-                          <Text style={[styles.specChipText, { color: selected ? teal : colors.text }]}>
-                            {spec.name}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              );
-            });
+            return (
+              <SpecialityPicker
+                selectedTrades={tradesWithSpecs}
+                value={specialisations}
+                onChange={setSpecialisations}
+                tradeName={tradeDisplayName}
+                triggerLabel="Choose specialties"
+                title="Choose specialties"
+              />
+            );
           })()}
         </View>
 
@@ -2524,6 +2531,40 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.9)',
     fontSize: 13,
     fontWeight: '600',
+  },
+  bannerToggle: {
+    flexDirection: 'row',
+    padding: 4,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    gap: 4,
+    marginBottom: Spacing.md,
+  },
+  bannerToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 38,
+    borderRadius: Radius.full,
+  },
+  bannerToggleText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  colorCover: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  colorEditPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: Radius.full,
   },
   placeholderText: {
     fontSize: 15,
