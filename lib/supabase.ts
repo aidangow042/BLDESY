@@ -1,5 +1,6 @@
 import 'react-native-url-polyfill/auto'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/types/database'
 import * as SecureStore from 'expo-secure-store'
 import { Platform } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -86,3 +87,13 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
   },
 })
+
+/**
+ * The SAME client instance, typed against the website's generated schema
+ * (types/database.ts, mirrored by scripts/sync-web-libs.mjs). New code — every
+ * module under lib/data/ and every rewritten screen — must use `db`, which
+ * type-checks table/view names and columns (incl. the PII-safe views
+ * public_builder_profiles / public_enterprise_profiles / public_profiles).
+ * `supabase` stays untyped only for legacy screens awaiting their rewrite.
+ */
+export const db = supabase as unknown as SupabaseClient<Database>

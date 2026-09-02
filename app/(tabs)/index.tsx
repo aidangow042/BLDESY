@@ -1,38 +1,43 @@
 /**
- * Home / landing tab. Mirrors `~/bldesy-web/app/page.tsx`:
- *   <HeroSection /> + <TrustStrip /> + <PopularTrades /> + <TradieCta />
- *
- * Each section lives in `components/home/`. This file is just the shell.
+ * Home — ~/bldesy-web/app/page.tsx, LAUNCH branch:
+ *   HeroSection → TrustStrip → ComparisonStrip → PopularTrades → PrelaunchRoles
+ *   (the founding-tradie card sits below Popular Trades in launch mode) →
+ *   TradieCta → Footer. Fires `homepage_landed` on mount (FunnelBeacon).
  */
+import { useEffect } from 'react';
+import { ScrollView, StyleSheet } from 'react-native';
 
-import { ScrollView, StyleSheet, View } from 'react-native';
-
-import { AppShell } from '@/components/layout';
 import {
+  ComparisonStrip,
   HeroSection,
   PopularTrades,
+  PrelaunchRoles,
   TradieCta,
   TrustStrip,
 } from '@/components/home';
-import { Colors, Spacing } from '@/constants/theme';
+import { AppShell, Footer } from '@/components/layout';
+import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { trackFunnelEvent } from '@/lib/data/tracking';
 
 export default function HomeScreen() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
 
+  useEffect(() => {
+    trackFunnelEvent('homepage_landed', undefined, { path: '/' });
+  }, []);
+
   return (
     <AppShell background={c.canvas}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
-        bounces
-      >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         <HeroSection />
         <TrustStrip />
+        <ComparisonStrip />
         <PopularTrades />
+        <PrelaunchRoles />
         <TradieCta />
-        <View style={{ height: Spacing['5xl'] }} />
+        <Footer />
       </ScrollView>
     </AppShell>
   );
@@ -40,6 +45,6 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   scroll: {
-    paddingBottom: Spacing['3xl'],
+    flexGrow: 1,
   },
 });

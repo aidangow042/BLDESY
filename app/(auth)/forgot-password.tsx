@@ -1,11 +1,25 @@
-import { useEffect, useState } from 'react';
+/**
+ * /forgot-password — mirrors the website's app/forgot-password/page.tsx.
+ *
+ * The reset email's link is pointed at the website's scanner-proof
+ * `/auth/confirm` interstitial (Outlook SafeLinks GETs every link; that page
+ * only spends the token on a tap), which then takes the user to web /settings
+ * to set a new password. Unlike the web page we never surface Supabase's
+ * error — the success state shows either way so the form can't be used to
+ * probe which addresses have an account.
+ */
+import { useState } from 'react';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Link } from 'expo-router';
+import { router } from 'expo-router';
 
 import { AuthCard } from '@/components/auth/auth-card';
+import { AuthFooterLink } from '@/components/auth/auth-footer-link';
+import { FormAlert } from '@/components/auth/form-alert';
 import { Button, Input } from '@/components/ui';
 import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { ROUTES, WEB_BASE } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 
 export default function ForgotPasswordScreen() {
@@ -14,134 +28,127 @@ export default function ForgotPasswordScreen() {
 
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (error) setError(null);
-  }, [email]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function handleReset() {
-    if (!email.trim()) {
-      setError('Please enter your email address.');
+  async function submit() {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setError('Please enter your email.');
       return;
     }
     setLoading(true);
     setError(null);
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim());
-    setLoading(false);
-    if (resetError) {
-      // Generic copy — avoid leaking whether the address is registered.
-      setSent(true);
-    } else {
-      setSent(true);
+    try {
+      await supabase.auth.resetPasswordForEmail(trimmed, {
+        redirectTo: `${WEB_BASE}/auth/confirm?type=recovery`,
+      });
+    } catch {
+      // Enumeration-safe: same outcome whether or not the address is registered.
     }
+    setLoading(false);
+    setSent(true);
+  }
+
+  if (sent) {
+    return (
+      <AuthCard>
+        <View style={styles.sent}>
+          <View style={[styles.sentIcon, { backgroundColor: c.successBg }]}>
+            <Ionicons name="checkmark" size={28} color={c.success} />
+          </View>
+          <Text accessibilityRole="header" style={[styles.sentTitle, { color: c.textPrimary }]}>
+            Check your email
+          </Text>
+          <Text style={[styles.sentBody, { color: c.textSecondary }]}>
+            We sent a password reset link to{' '}
+            <Text style={[styles.sentEmail, { color: c.textPrimary }]}>{email.trim()}</Text>. Check your
+            inbox and follow the link to reset your password.
+          </Text>
+          <Pressable
+            onPress={() => router.replace(ROUTES.login)}
+            hitSlop={6}
+            accessibilityRole="link"
+            style={styles.backLink}
+          >
+            <Text style={[styles.backLinkText, { color: c.primary }]}>Back to login</Text>
+          </Pressable>
+        </View>
+      </AuthCard>
+    );
   }
 
   return (
-    <AuthCard>
-      <Text style={[styles.heading, { color: c.textPrimary }]}>Reset password</Text>
+    <AuthCard title="Forgot your password?" subtitle="Enter your email and we'll send you a reset link.">
+      {error ? <FormAlert>{error}</FormAlert> : null}
 
-      {sent ? (
-        <View style={[styles.successBanner, { borderColor: c.successBorder, backgroundColor: c.successBg }]}>
-          <Text style={[styles.successText, { color: c.success }]}>
-            If an account exists for {email}, we&apos;ve sent a password reset link. Check your inbox.
-          </Text>
-        </View>
-      ) : (
-        <>
-          <Text style={[styles.body, { color: c.textSecondary }]}>
-            Enter your email and we&apos;ll send you a link to reset your password.
-          </Text>
+      <Input
+        label="Email"
+        value={email}
+        onChangeText={(v) => {
+          setEmail(v);
+          if (error) setError(null);
+        }}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="email"
+        textContentType="emailAddress"
+        keyboardType="email-address"
+        returnKeyType="send"
+        onSubmitEditing={submit}
+        placeholder="you@example.com.au"
+      />
 
-          {error ? (
-            <View style={[styles.errorBanner, { borderColor: c.error + '33', backgroundColor: c.error + '0D' }]}>
-              <Text style={[styles.errorText, { color: c.error }]}>{error}</Text>
-            </View>
-          ) : null}
+      <Button
+        variant="primary"
+        size="lg"
+        fullWidth
+        onPress={submit}
+        disabled={loading}
+        leadingIcon={loading ? <ActivityIndicator color="#ffffff" size="small" /> : null}
+      >
+        {loading ? 'Sending...' : 'Send Reset Link'}
+      </Button>
 
-          <Input
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            autoComplete="email"
-            keyboardType="email-address"
-            placeholder="you@example.com.au"
-          />
-
-          <Button
-            variant="primary"
-            size="lg"
-            fullWidth
-            onPress={handleReset}
-            disabled={loading}
-            leadingIcon={loading ? <ActivityIndicator color="#fff" size="small" /> : null}
-          >
-            {loading ? 'Sending…' : 'Send reset link'}
-          </Button>
-        </>
-      )}
-
-      <View style={styles.footerRow}>
-        <Text style={[styles.footerText, { color: c.textSecondary }]}>Remembered your password?{' '}</Text>
-        <Link href="/(auth)/login" asChild>
-          <Pressable hitSlop={6}>
-            <Text style={[styles.footerLink, { color: c.primary }]}>Log in</Text>
-          </Pressable>
-        </Link>
-      </View>
+      <AuthFooterLink prompt="Remember your password?" linkLabel="Log in" href={ROUTES.login} />
     </AuthCard>
   );
 }
 
 const styles = StyleSheet.create({
-  heading: {
-    fontSize: 22,
+  sent: {
+    alignItems: 'center',
+  },
+  sentIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
+  },
+  sentTitle: {
+    fontSize: 20,
+    lineHeight: 28,
     fontFamily: FontFamily.bodyBold,
     fontWeight: '700',
     textAlign: 'center',
+    marginBottom: Spacing.sm,
   },
-  body: {
+  sentBody: {
     fontSize: 14,
-    fontFamily: FontFamily.body,
     lineHeight: 22,
+    fontFamily: FontFamily.body,
     textAlign: 'center',
   },
-  errorBanner: {
-    borderWidth: 1,
-    borderRadius: Radius.xl,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+  sentEmail: {
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '700',
   },
-  errorText: {
-    fontSize: 14,
-    fontFamily: FontFamily.body,
+  backLink: {
+    marginTop: Spacing['2xl'],
   },
-  successBanner: {
-    borderWidth: 1,
-    borderRadius: Radius.xl,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.lg,
-  },
-  successText: {
-    fontSize: 14,
-    fontFamily: FontFamily.bodyMedium,
-    fontWeight: '500',
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  footerRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  footerText: {
-    fontSize: 14,
-    fontFamily: FontFamily.body,
-  },
-  footerLink: {
+  backLinkText: {
     fontSize: 14,
     fontFamily: FontFamily.bodySemiBold,
     fontWeight: '600',

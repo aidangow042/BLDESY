@@ -1,141 +1,77 @@
+/**
+ * /my-jobs — port of ~/bldesy-web/app/my-jobs/page.tsx: the homeowner's posted
+ * jobs (posting_kind = job, newest first) with applicants, accept / reject via
+ * the decision API (a customer accept auto-rejects the rest), Message, and the
+ * delete confirmation. Guests are sent to login.
+ */
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { Image } from 'expo-image';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useRouter, type Href } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import Animated, { FadeInUp } from 'react-native-reanimated';
 
-import { ThemedText } from '@/components/themed-text';
+import { DeleteJobModal } from '@/components/jobs/delete-job-modal';
+import { ErrorBanner } from '@/components/jobs/error-banner';
+import { MyJobCard, type ApplicantsState } from '@/components/jobs/my-job-card';
 import { AppShell } from '@/components/layout';
-import { useToast } from '@/components/ui';
-import { Colors, Spacing, Radius, Shadows, Type } from '@/constants/theme';
+import { Button, Card, Skeleton, useToast } from '@/components/ui';
+import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth-context';
-import { ReviewForm } from '@/components/reviews/review-form';
-import { getRelativeTime, URGENCY_CONFIG } from '@/lib/trade-utils';
-import { friendlyError } from '@/lib/error-messages';
+import { decideApplication, listApplicationsForJob } from '@/lib/data/applications';
+import { deleteJob, getJobsByCustomer } from '@/lib/data/jobs';
+import { conversationErrorMessage, createConversation } from '@/lib/data/messages';
+import { ROUTES } from '@/lib/routes';
+import type { Job } from '@/types';
+import type { ApplicationStatus, JobStatus } from '@/types/database';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const PHOTO_WIDTH = SCREEN_WIDTH - 68;
-const PHOTO_HEIGHT = 180;
-
-/* ─── Types ────────────────────────────────────────────────── */
-
-type Applicant = {
-  id: string;
-  builder_id: string;
-  message: string | null;
-  status: string;
-  created_at: string;
-  builder_profiles: {
-    business_name: string;
-    trade_category: string;
-    suburb: string;
-    phone: string | null;
-    profile_photo_url: string | null;
-  } | null;
-};
-
-type JobPhoto = { id: string; file_path: string; is_cover: boolean };
-
-type Job = {
-  id: string;
-  title: string;
-  trade_category: string;
-  description: string;
-  urgency: string;
-  status: string;
-  suburb: string;
-  postcode: string;
-  budget: string | null;
-  contact_phone: string | null;
-  contact_email: string | null;
-  created_at: string;
-};
-
-/* ─── Component ────────────────────────────────────────────── */
+/** Verbatim my-jobs/page.tsx copy. */
+const ACCEPT_FAILED = 'Failed to accept application. Please try again.';
+const REJECT_FAILED = 'Failed to reject application. Please try again.';
+/** Toast outcomes (app addition — the web only re-renders the pill). */
+const ACCEPTED_TOAST = 'Application accepted';
+const REJECTED_TOAST = 'Application rejected';
 
 export default function MyJobsScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const toast = useToast();
-  const { userId } = useUser();
+  const { authedUser, loading: authLoading } = useUser();
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
-  const [reviewingApp, setReviewingApp] = useState<{ jobId: string; builderId: string; builderName: string } | null>(null);
-  const [applicants, setApplicants] = useState<Applicant[]>([]);
-  const [loadingApplicants, setLoadingApplicants] = useState(false);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [jobPhotos, setJobPhotos] = useState<Record<string, JobPhoto[]>>({});
-  const [activePhotoIndices, setActivePhotoIndices] = useState<Record<string, number>>({});
+
+  // Applicants state per job
+  const [expandedJob, setExpandedJob] = useState<string | null>(null);
+  const [applicants, setApplicants] = useState<Map<string, ApplicantsState>>(new Map());
+
+  // Delete confirmation
+  const [deleteTarget, setDeleteTarget] = useState<Job | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Action loading
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [messagingId, setMessagingId] = useState<string | null>(null);
+
+  // Page-level error banner
+  const [pageError, setPageError] = useState<string | null>(null);
+
+  // Redirect if not authed
+  useEffect(() => {
+    if (!authLoading && !authedUser) router.replace(ROUTES.login as Href);
+  }, [authLoading, authedUser, router]);
+
+  const fetchJobs = useCallback(async () => {
+    if (!authedUser) return;
+    const all = await getJobsByCustomer(authedUser.id);
+    setJobs(all.filter((j) => j.posting_kind === 'job'));
+    setLoading(false);
+  }, [authedUser]);
 
   useEffect(() => {
-    if (!userId) return;
     fetchJobs();
-  }, [userId]);
-
-  async function fetchJobs() {
-    if (!userId) return;
-    setLoading(true);
-    setError(null);
-
-    const { data, error: fetchError } = await supabase
-      .from('jobs')
-      .select('id, title, trade_category, description, urgency, status, suburb, postcode, budget, contact_phone, contact_email, created_at')
-      .eq('customer_id', userId)
-      .order('created_at', { ascending: false });
-
-    if (fetchError) {
-      setError(friendlyError(fetchError));
-      setLoading(false);
-      return;
-    }
-
-    if (data) {
-      setJobs(data);
-      fetchPhotosForJobs(data.map((j) => j.id));
-    }
-    setLoading(false);
-  }
-
-  async function fetchPhotosForJobs(jobIds: string[]) {
-    if (jobIds.length === 0) return;
-    const { data } = await supabase
-      .from('job_photos')
-      .select('id, file_path, is_cover, job_id')
-      .in('job_id', jobIds)
-      .order('is_cover', { ascending: false });
-
-    if (data) {
-      const grouped: Record<string, JobPhoto[]> = {};
-      for (const photo of data) {
-        const jid = (photo as any).job_id;
-        if (!grouped[jid]) grouped[jid] = [];
-        grouped[jid].push({ id: photo.id, file_path: photo.file_path, is_cover: photo.is_cover });
-      }
-      setJobPhotos(grouped);
-    }
-  }
+  }, [fetchJobs]);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -143,793 +79,220 @@ export default function MyJobsScreen() {
     setRefreshing(false);
   }
 
-  async function fetchApplicants(jobId: string) {
-    setLoadingApplicants(true);
-
-    // Fetch applications
-    const { data: appsData, error } = await supabase
-      .from('applications')
-      .select('id, builder_id, message, status, created_at')
-      .eq('job_id', jobId)
-      .order('created_at', { ascending: true });
-
-    if (!error && appsData && appsData.length > 0) {
-      // Fetch builder profiles for all applicants
-      const builderIds = appsData.map((a: any) => a.builder_id);
-      const { data: profiles } = await supabase
-        .from('builder_profiles')
-        .select('user_id, business_name, trade_category, suburb, phone, profile_photo_url')
-        .in('user_id', builderIds);
-
-      const profileMap = new Map<string, any>();
-      for (const p of profiles ?? []) {
-        profileMap.set(p.user_id, p);
+  // Fetch applicants for a job (once)
+  const fetchApplicants = useCallback(
+    async (jobId: string) => {
+      if (applicants.get(jobId)) return; // already loaded / loading
+      setApplicants((prev) => new Map(prev).set(jobId, { apps: [], loading: true }));
+      let apps: ApplicantsState['apps'] = [];
+      try {
+        apps = await listApplicationsForJob(jobId);
+      } catch (e) {
+        console.warn('listApplicationsForJob failed', e instanceof Error ? e.message : e);
       }
+      setApplicants((prev) => new Map(prev).set(jobId, { apps, loading: false }));
+    },
+    [applicants],
+  );
 
-      setApplicants(appsData.map((a: any) => ({
-        ...a,
-        builder_profiles: profileMap.get(a.builder_id) ?? null,
-      })));
+  function toggleApplicants(jobId: string) {
+    if (expandedJob === jobId) {
+      setExpandedJob(null);
     } else {
-      setApplicants([]);
-    }
-    setLoadingApplicants(false);
-  }
-
-  function toggleExpand(jobId: string) {
-    if (expandedJobId === jobId) {
-      setExpandedJobId(null);
-      setApplicants([]);
-    } else {
-      setExpandedJobId(jobId);
+      setExpandedJob(jobId);
       fetchApplicants(jobId);
     }
   }
 
-  async function handleAccept(application: Applicant, jobId: string) {
-    Alert.alert(
-      'Accept Builder',
-      `Accept ${application.builder_profiles?.business_name ?? 'this builder'}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Accept',
-          onPress: async () => {
-            setUpdatingId(application.id);
-            await supabase
-              .from('applications')
-              .update({ status: 'accepted' })
-              .eq('id', application.id);
-            await supabase
-              .from('applications')
-              .update({ status: 'rejected' })
-              .eq('job_id', jobId)
-              .neq('id', application.id);
-            await supabase
-              .from('jobs')
-              .update({ status: 'assigned' })
-              .eq('id', jobId);
-            setUpdatingId(null);
-            fetchApplicants(jobId);
-            fetchJobs();
-          },
-        },
-      ],
-    );
+  function patchApplication(jobId: string, update: (app: ApplicantsState['apps'][number]) => ApplicantsState['apps'][number]) {
+    setApplicants((prev) => {
+      const entry = prev.get(jobId);
+      if (!entry) return prev;
+      return new Map(prev).set(jobId, { ...entry, apps: entry.apps.map(update) });
+    });
   }
 
-  async function handleReject(applicationId: string, jobId: string) {
-    setUpdatingId(applicationId);
-    await supabase
-      .from('applications')
-      .update({ status: 'rejected' })
-      .eq('id', applicationId);
-    setUpdatingId(null);
-    fetchApplicants(jobId);
-  }
-
-  function handleEdit(job: Job) {
-    router.push({
-      pathname: '/post-job',
-      params: {
-        editId: job.id,
-        editTitle: job.title,
-        editTrade: job.trade_category,
-        editUrgency: job.urgency,
-        editDescription: job.description,
-        editSuburb: job.suburb,
-        editPostcode: job.postcode,
-        editContactPhone: job.contact_phone ?? '',
-        editContactEmail: job.contact_email ?? '',
-      },
-    } as any);
-  }
-
-  function handleDelete(job: Job) {
-    Alert.alert(
-      'Delete Job',
-      `Are you sure you want to delete "${job.title}"? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase
-              .from('jobs')
-              .delete()
-              .eq('id', job.id);
-            if (error) {
-              toast.show(friendlyError(error), { variant: 'error' });
-            } else {
-              setJobs((prev) => prev.filter((j) => j.id !== job.id));
-              toast.show('Job deleted', { variant: 'success' });
-            }
-          },
-        },
-      ],
-    );
-  }
-
-  /* ─── Applicant status helpers ──────────────────────────── */
-
-  function getAppStatusStyle(status: string) {
-    switch (status) {
-      case 'accepted':
-        return { bg: '#ECFDF5', color: '#059669' };
-      case 'rejected':
-        return { bg: '#FEF2F2', color: '#DC2626' };
-      case 'pending':
-      default:
-        return { bg: '#FFFBEB', color: '#D97706' };
+  // Accept an application — server route flips the status, auto-rejects the
+  // other pending applications (customer single-hire), assigns the job, and
+  // notifies every affected tradie.
+  async function handleAccept(jobId: string, appId: string) {
+    setActionLoading(appId);
+    try {
+      const { autoRejected } = await decideApplication(appId, 'accept');
+      const rejectedIds = new Set(autoRejected ?? []);
+      const job = jobs.find((j) => j.id === jobId);
+      if (job?.poster_type !== 'enterprise') {
+        setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, status: 'in_progress' as JobStatus } : j)));
+      }
+      patchApplication(jobId, (a) =>
+        a.id === appId
+          ? { ...a, status: 'accepted' as ApplicationStatus }
+          : rejectedIds.has(a.id)
+            ? { ...a, status: 'rejected' as ApplicationStatus }
+            : a,
+      );
+      toast.show(ACCEPTED_TOAST, { variant: 'success' });
+    } catch {
+      setPageError(ACCEPT_FAILED);
+    } finally {
+      setActionLoading(null);
     }
   }
 
-  /* ─── Render job card ───────────────────────────────────── */
+  // Reject an application — server route flips the status and notifies the tradie.
+  async function handleReject(jobId: string, appId: string) {
+    setActionLoading(appId);
+    try {
+      await decideApplication(appId, 'reject');
+      patchApplication(jobId, (a) => (a.id === appId ? { ...a, status: 'rejected' as ApplicationStatus } : a));
+      toast.show(REJECTED_TOAST);
+    } catch {
+      setPageError(REJECT_FAILED);
+    } finally {
+      setActionLoading(null);
+    }
+  }
 
-  const renderJob = useCallback(
-    ({ item }: { item: Job }) => {
-      const isExpanded = expandedJobId === item.id;
-      const urg = URGENCY_CONFIG[item.urgency] ?? { label: item.urgency, icon: 'help-circle-outline' as const, color: '#64748b', bg: '#f1f5f9' };
-      const photos = jobPhotos[item.id] ?? [];
-      const activeIdx = activePhotoIndices[item.id] ?? 0;
+  async function handleMessage(builderUserId: string, appId: string) {
+    setMessagingId(appId);
+    try {
+      const conversationId = await createConversation(builderUserId);
+      router.push(ROUTES.conversation(conversationId) as Href);
+    } catch (e) {
+      toast.show(conversationErrorMessage(e), { variant: 'error' });
+    } finally {
+      setMessagingId(null);
+    }
+  }
 
-      return (
-        <View style={[styles.card, Shadows.sm]}>
-          {/* ── Photo carousel ── */}
-          {photos.length > 0 && (
-            <View style={styles.photoSection}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                snapToInterval={PHOTO_WIDTH}
-                decelerationRate="fast"
-                onMomentumScrollEnd={(e) => {
-                  const idx = Math.round(e.nativeEvent.contentOffset.x / PHOTO_WIDTH);
-                  setActivePhotoIndices((prev) => ({ ...prev, [item.id]: idx }));
-                }}
-                style={[styles.photoCarousel, { width: PHOTO_WIDTH }]}
-              >
-                {photos.map((photo) => (
-                  <Image
-                    key={photo.id}
-                    source={{ uri: photo.file_path }}
-                    style={styles.photoImage}
-                    contentFit="cover"
-                    cachePolicy="disk"
-                    placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }}
-                  />
-                ))}
-              </ScrollView>
-              {photos.length > 1 && (
-                <View style={styles.photoDots}>
-                  {photos.map((_, i) => (
-                    <View
-                      key={i}
-                      style={[styles.photoDot, { backgroundColor: i === activeIdx ? '#0F6E56' : '#CBD5E1' }]}
-                    />
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
+  // Delete a job
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteJob(deleteTarget.id);
+      setJobs((prev) => prev.filter((j) => j.id !== deleteTarget.id));
+    } catch (e) {
+      setPageError(e instanceof Error ? e.message : 'Failed to delete job. Please try again.');
+    } finally {
+      setDeleteTarget(null);
+      setDeleting(false);
+    }
+  }
 
-          {/* ── Card header — trade + urgency + time pills ── */}
-          <View style={styles.cardHeaderRow}>
-            <View style={styles.tradePill}>
-              <Text style={styles.tradePillText}>{item.trade_category}</Text>
-            </View>
-            <View style={[styles.urgencyPill, { backgroundColor: urg.bg }]}>
-              <Ionicons name={urg.icon as any} size={12} color={urg.color} />
-              <Text style={[styles.urgencyPillText, { color: urg.color }]}>{urg.label}</Text>
-            </View>
-            <Text style={styles.timeText}>{getRelativeTime(item.created_at)}</Text>
-          </View>
-
-          {/* ── Title ── */}
-          <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
-
-          {/* ── Fact chips (matching job-detail) ── */}
-          <View style={styles.factsRow}>
-            <View style={styles.factChip}>
-              <Ionicons name="location" size={14} color="#0369A1" />
-              <Text style={styles.factChipText}>{item.suburb}, {item.postcode}</Text>
-            </View>
-            {item.budget && (
-              <View style={styles.factChip}>
-                <Ionicons name="cash" size={14} color="#16A34A" />
-                <Text style={styles.factChipText}>{item.budget}</Text>
-              </View>
-            )}
-            <View style={[styles.factChip, { backgroundColor: item.status === 'open' ? '#ECFDF5' : item.status === 'assigned' ? '#FFFBEB' : '#FEF2F2' }]}>
-              <Ionicons
-                name={item.status === 'open' ? 'checkmark-circle' : item.status === 'assigned' ? 'time' : 'close-circle'}
-                size={14}
-                color={item.status === 'open' ? '#059669' : item.status === 'assigned' ? '#D97706' : '#DC2626'}
-              />
-              <Text style={[styles.factChipText, { color: item.status === 'open' ? '#059669' : item.status === 'assigned' ? '#D97706' : '#DC2626' }]}>
-                {item.status === 'open' ? 'Open' : item.status === 'assigned' ? 'Assigned' : 'Closed'}
-              </Text>
-            </View>
-          </View>
-
-          {/* ── Description ── */}
-          {item.description ? (
-            <>
-              <View style={styles.divider} />
-              <Text style={styles.descriptionText} numberOfLines={3}>{item.description}</Text>
-            </>
-          ) : null}
-
-          {/* ── Action buttons row — Edit / Delete / Applicants ── */}
-          <View style={styles.divider} />
-          <View style={styles.actionsRow}>
-            <Pressable
-              style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.6 }]}
-              onPress={() => handleEdit(item)}
-              accessibilityRole="button"
-              accessibilityLabel={`Edit ${item.title}`}
-            >
-              <MaterialIcons name="edit" size={16} color="#0F6E56" />
-              <Text style={styles.actionBtnText}>Edit</Text>
-            </Pressable>
-            <View style={styles.actionDivider} />
-            <Pressable
-              style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.6 }]}
-              onPress={() => handleDelete(item)}
-              accessibilityRole="button"
-              accessibilityLabel={`Delete ${item.title}`}
-            >
-              <MaterialIcons name="delete-outline" size={16} color="#DC2626" />
-              <Text style={[styles.actionBtnText, { color: '#DC2626' }]}>Delete</Text>
-            </Pressable>
-            <View style={styles.actionDivider} />
-            <Pressable
-              style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.6 }]}
-              onPress={() => toggleExpand(item.id)}
-              accessibilityRole="button"
-              accessibilityLabel={isExpanded ? `Hide applicants for ${item.title}` : `View applicants for ${item.title}`}
-              accessibilityState={{ expanded: isExpanded }}
-            >
-              <Ionicons name={isExpanded ? 'chevron-up' : 'people'} size={16} color="#0F6E56" />
-              <Text style={styles.actionBtnText}>{isExpanded ? 'Hide' : 'Applicants'}</Text>
-            </Pressable>
-          </View>
-
-          {/* ── Expanded applicants ── */}
-          {isExpanded && (
-            <View style={styles.applicantsSection}>
-              {loadingApplicants ? (
-                <ActivityIndicator color="#0F6E56" style={{ marginVertical: 16 }} />
-              ) : applicants.length === 0 ? (
-                <View style={styles.noApplicantsWrap}>
-                  <Ionicons name="people-outline" size={28} color="#94A3B8" />
-                  <Text style={styles.noApplicantsText}>No applications yet</Text>
-                </View>
-              ) : (
-                applicants.map((app) => {
-                  const appStyle = getAppStatusStyle(app.status);
-                  return (
-                    <View key={app.id} style={styles.applicantCard}>
-                      {/* Applicant header */}
-                      <View style={styles.applicantHeader}>
-                        {app.builder_profiles?.profile_photo_url ? (
-                          <Image
-                            source={{ uri: app.builder_profiles.profile_photo_url }}
-                            style={styles.applicantAvatar}
-                            cachePolicy="disk"
-                            placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
-                          />
-                        ) : (
-                          <View style={styles.applicantInitials}>
-                            <Text style={styles.applicantInitialsText}>
-                              {(app.builder_profiles?.business_name ?? 'U')[0].toUpperCase()}
-                            </Text>
-                          </View>
-                        )}
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.applicantName}>
-                            {app.builder_profiles?.business_name ?? 'Unknown Builder'}
-                          </Text>
-                          <Text style={styles.applicantMeta}>
-                            {app.builder_profiles?.trade_category} — {app.builder_profiles?.suburb}
-                          </Text>
-                        </View>
-                        <View style={[styles.applicantStatusBadge, { backgroundColor: appStyle.bg }]}>
-                          <Text style={[styles.applicantStatusText, { color: appStyle.color }]}>
-                            {app.status}
-                          </Text>
-                        </View>
-                      </View>
-
-                      {/* Message */}
-                      {app.message ? (
-                        <Text style={styles.applicantMessage}>"{app.message}"</Text>
-                      ) : null}
-
-                      {/* Accept / Reject */}
-                      {app.status === 'pending' && item.status === 'open' && (
-                        <View style={styles.applicantActions}>
-                          <Pressable
-                            style={({ pressed }) => [styles.acceptBtn, (updatingId === app.id || pressed) && { opacity: 0.7 }]}
-                            onPress={() => handleAccept(app, item.id)}
-                            disabled={updatingId === app.id}
-                          >
-                            <Ionicons name="checkmark" size={16} color="#fff" />
-                            <Text style={styles.acceptBtnText}>Accept</Text>
-                          </Pressable>
-                          <Pressable
-                            style={({ pressed }) => [styles.rejectBtn, (updatingId === app.id || pressed) && { opacity: 0.7 }]}
-                            onPress={() => handleReject(app.id, item.id)}
-                            disabled={updatingId === app.id}
-                          >
-                            <Ionicons name="close" size={16} color="#DC2626" />
-                            <Text style={styles.rejectBtnText}>Reject</Text>
-                          </Pressable>
-                        </View>
-                      )}
-
-                      {/* Leave Review */}
-                      {app.status === 'accepted' && (
-                        reviewingApp?.jobId === item.id && reviewingApp?.builderId === app.builder_id ? (
-                          <ReviewForm
-                            jobId={item.id}
-                            builderId={app.builder_id}
-                            builderName={app.builder_profiles?.business_name ?? 'Builder'}
-                            onSubmitted={() => setReviewingApp(null)}
-                            onCancel={() => setReviewingApp(null)}
-                          />
-                        ) : (
-                          <Pressable
-                            style={({ pressed }) => [styles.reviewBtn, pressed && { opacity: 0.7 }]}
-                            onPress={() => setReviewingApp({ jobId: item.id, builderId: app.builder_id, builderName: app.builder_profiles?.business_name ?? 'Builder' })}
-                          >
-                            <Ionicons name="star-outline" size={16} color={colors.teal} />
-                            <Text style={[styles.reviewBtnText, { color: colors.teal }]}>Leave Review</Text>
-                          </Pressable>
-                        )
-                      )}
-                    </View>
-                  );
-                })
-              )}
-            </View>
-          )}
-        </View>
-      );
-    },
-    [expandedJobId, applicants, loadingApplicants, updatingId, colors, jobPhotos, activePhotoIndices],
-  );
-
-  /* ─── Main render ───────────────────────────────────────── */
+  const showSpinner = authLoading || !authedUser;
 
   return (
-    <AppShell title="My Jobs" showBack>
-      <Animated.View entering={FadeInUp.duration(300).delay(100)} style={{ flex: 1 }}>
-      {loading ? (
-        <ActivityIndicator color="#0F6E56" style={{ marginTop: 60 }} />
-      ) : error ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="alert-circle-outline" size={48} color={colors.textSecondary} />
-          <Text style={styles.emptyTitle}>Something went wrong</Text>
-          <Text style={[styles.emptySubtitle, { textAlign: 'center' }]}>{error}</Text>
-          <Pressable
-            onPress={fetchJobs}
-            style={({ pressed }) => [
-              styles.emptyOutlineCta,
-              { borderColor: '#0d9488', backgroundColor: '#0d9488' },
-              pressed && { opacity: 0.85 },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Try again"
-          >
-            <Text style={[styles.emptyOutlineCtaText, { color: '#fff' }]}>Try Again</Text>
-          </Pressable>
-        </View>
-      ) : jobs.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <View style={styles.emptyIconCircle}>
-            <Ionicons name="clipboard-outline" size={48} color="#0d9488" />
+    <AppShell showBack>
+      <FlatList
+        data={loading || showSpinner ? [] : jobs}
+        keyExtractor={(job) => job.id}
+        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={c.primary} />}
+        ListHeaderComponent={
+          <View style={styles.headerWrap}>
+            {/* Header */}
+            <View style={styles.header}>
+              <View style={styles.titleRow}>
+                <Text accessibilityRole="header" style={[styles.h1, { color: c.textPrimary }]}>
+                  My Jobs
+                </Text>
+                {!loading && !showSpinner ? (
+                  <View style={[styles.countPill, { backgroundColor: c.primary + '1A' }]}>
+                    <Text style={[styles.countText, { color: c.primary }]}>{jobs.length}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <Button size="sm" onPress={() => router.push(ROUTES.postJob as Href)}>
+                Post a Job
+              </Button>
+            </View>
+
+            {/* Page-level error banner */}
+            {pageError ? <ErrorBanner message={pageError} onDismiss={() => setPageError(null)} /> : null}
+
+            {/* Loading skeleton */}
+            {loading || showSpinner ? (
+              <View style={{ gap: Spacing.lg }}>
+                {[1, 2, 3].map((i) => (
+                  <Card key={i} padding={Spacing['2xl']}>
+                    <Skeleton variant="text" style={{ width: '66%', height: 20, marginBottom: 12 }} />
+                    <Skeleton variant="text" style={{ width: '33%', marginBottom: 16 }} />
+                    <Skeleton variant="text" style={{ marginBottom: 8 }} />
+                    <Skeleton variant="text" style={{ width: '80%' }} />
+                  </Card>
+                ))}
+              </View>
+            ) : jobs.length === 0 ? (
+              /* Empty state */
+              <Card padding={Spacing['5xl']} style={styles.empty}>
+                <Ionicons name="clipboard-outline" size={56} color={c.textSecondary + '4D'} />
+                <Text accessibilityRole="header" style={[styles.emptyTitle, { color: c.textPrimary }]}>
+                  No jobs posted yet
+                </Text>
+                <Text style={[styles.emptyBody, { color: c.textSecondary }]}>
+                  Post a job and get quotes from local tradies.
+                </Text>
+                <Button size="lg" onPress={() => router.push(ROUTES.postJob as Href)}>
+                  Post a Job
+                </Button>
+              </Card>
+            ) : null}
           </View>
-          <Text style={styles.emptyTitle}>No jobs posted yet</Text>
-          <Text style={styles.emptySubtitle}>Post a job to find the right tradie for your project.</Text>
-          <Pressable
-            onPress={() => router.push('/post-job')}
-            style={({ pressed }) => [styles.emptyOutlineCta, pressed && { opacity: 0.7 }]}
-            accessibilityRole="button"
-            accessibilityLabel="Post a Job"
-          >
-            <Text style={styles.emptyOutlineCtaText}>Post a Job</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <FlatList
-          data={jobs}
-          keyExtractor={(item) => item.id}
-          renderItem={renderJob}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#0F6E56" />
-          }
-        />
-      )}
-      </Animated.View>
+        }
+        renderItem={({ item }) => (
+          <MyJobCard
+            job={item}
+            expanded={expandedJob === item.id}
+            applicants={applicants.get(item.id)}
+            actionLoading={actionLoading}
+            messagingId={messagingId}
+            onToggleApplicants={() => toggleApplicants(item.id)}
+            onDelete={() => setDeleteTarget(item)}
+            onAccept={(appId) => handleAccept(item.id, appId)}
+            onReject={(appId) => handleReject(item.id, appId)}
+            onMessage={(builderUserId, appId) => handleMessage(builderUserId, appId)}
+          />
+        )}
+        ItemSeparatorComponent={() => <View style={{ height: Spacing.lg }} />}
+      />
+
+      <DeleteJobModal
+        title={deleteTarget?.title ?? null}
+        deleting={deleting}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+      />
     </AppShell>
   );
 }
 
-/* ─── Styles ───────────────────────────────────────────────── */
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F2EC',
+  list: {
+    padding: Spacing.lg,
+    paddingBottom: Spacing['5xl'],
   },
-
-  /* Header — slim green bar (matching job-detail) */
+  headerWrap: { gap: Spacing['2xl'], marginBottom: Spacing.lg },
   header: {
-    backgroundColor: '#0F6E56',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 8,
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+    paddingTop: Spacing.lg,
   },
-  backBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  h1: { fontSize: 24, fontFamily: FontFamily.display },
+  countPill: {
+    minWidth: 28,
+    height: 28,
+    borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: Spacing.sm,
   },
-  headerTitle: {
-    ...Type.h2,
-    flex: 1,
-    color: '#fff',
-  },
-  headerSubRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-    paddingLeft: 42,
-  },
-  headerSubText: {
-    ...Type.caption,
-    color: 'rgba(255,255,255,0.7)',
-    fontWeight: '500',
-  },
-
-  /* List */
-  listContent: {
-    padding: 16,
-    gap: 14,
-    paddingBottom: 60,
-  },
-
-  /* Card (matching job-detail) */
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 18,
-  },
-
-  /* Photo carousel */
-  photoSection: {
-    marginBottom: 14,
-  },
-  photoCarousel: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  photoImage: {
-    width: PHOTO_WIDTH,
-    height: PHOTO_HEIGHT,
-    borderRadius: 12,
-  },
-  photoDots: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 8,
-  },
-  photoDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
-
-  /* Card header pills */
-  cardHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-    marginBottom: 10,
-  },
-  tradePill: {
-    backgroundColor: '#0F6E56',
-    borderRadius: 100,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
-  tradePillText: {
-    ...Type.label,
-    color: '#fff',
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  urgencyPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderRadius: 100,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  urgencyPillText: {
-    ...Type.label,
-    fontWeight: '600',
-  },
-  timeText: {
-    ...Type.caption,
-    color: '#94A3B8',
-    fontWeight: '500',
-  },
-
-  /* Title */
-  cardTitle: {
-    ...Type.h3,
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: 10,
-  },
-
-  /* Fact chips (matching job-detail) */
-  factsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  factChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  factChipText: {
-    ...Type.captionSemiBold,
-    color: '#334155',
-  },
-
-  /* Divider */
-  divider: {
-    height: 1,
-    backgroundColor: '#E2E8F0',
-    marginVertical: 14,
-  },
-
-  /* Description */
-  descriptionText: {
-    ...Type.body,
-    color: '#334155',
-  },
-
-  /* Action buttons row */
-  actionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 4,
-  },
-  actionBtnText: {
-    ...Type.captionSemiBold,
-    color: '#0F6E56',
-  },
-  actionDivider: {
-    width: 1,
-    height: 20,
-    backgroundColor: '#E2E8F0',
-  },
-
-  /* Applicants section */
-  applicantsSection: {
-    marginTop: 14,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    gap: 10,
-  },
-  noApplicantsWrap: {
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 12,
-  },
-  noApplicantsText: {
-    ...Type.body,
-    color: '#94A3B8',
-    fontWeight: '500',
-  },
-
-  /* Applicant card */
-  applicantCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 14,
-    gap: 10,
-  },
-  applicantHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  applicantAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
-  applicantInitials: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#0F6E56',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  applicantInitialsText: {
-    ...Type.body,
-    color: '#fff',
-    fontWeight: '700',
-  },
-  applicantName: {
-    ...Type.bodySemiBold,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  applicantMeta: {
-    ...Type.caption,
-    color: '#64748b',
-    textTransform: 'capitalize',
-    marginTop: 1,
-  },
-  applicantStatusBadge: {
-    borderRadius: 100,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
-  applicantStatusText: {
-    ...Type.label,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  applicantMessage: {
-    ...Type.caption,
-    fontStyle: 'italic',
-    color: '#334155',
-    paddingLeft: 46,
-  },
-
-  /* Accept / Reject buttons */
-  applicantActions: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingLeft: 46,
-  },
-  acceptBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: '#059669',
-  },
-  acceptBtnText: {
-    ...Type.btnSecondary,
-    color: '#fff',
-    fontWeight: '700',
-  },
-  rejectBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    height: 40,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: '#DC2626',
-    backgroundColor: '#FEF2F2',
-  },
-  rejectBtnText: {
-    ...Type.btnSecondary,
-    color: '#DC2626',
-    fontWeight: '700',
-  },
-  reviewBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: Spacing.sm,
-    marginTop: Spacing.xs,
-  },
-  reviewBtnText: {
-    ...Type.captionSemiBold,
-  },
-
-  /* Empty state */
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-    gap: 8,
-  },
-  emptyIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#f0fdfa',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  emptyTitle: {
-    ...Type.h2,
-    color: '#0f172a',
-  },
-  emptySubtitle: {
-    ...Type.body,
-    color: '#64748b',
-    textAlign: 'center',
-  },
-  emptyOutlineCta: {
-    marginTop: 16,
-    height: 48,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#0d9488',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  emptyOutlineCtaText: {
-    ...Type.btnPrimary,
-    color: '#0d9488',
-  },
+  countText: { fontSize: 14, fontFamily: FontFamily.bodyBold, fontWeight: '700' },
+  empty: { alignItems: 'center', gap: Spacing.sm },
+  emptyTitle: { fontSize: 18, fontFamily: FontFamily.bodyBold, fontWeight: '700', marginTop: Spacing.md },
+  emptyBody: { fontSize: 14, lineHeight: 20, fontFamily: FontFamily.body, textAlign: 'center', marginBottom: Spacing.lg },
 });

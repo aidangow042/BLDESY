@@ -1,432 +1,533 @@
 /**
- * HamburgerMenu — top-right anchored dropdown card. Mirrors the web's
- * mobile nav pattern (`~/bldesy-web/components/layout/header.tsx` lines
- * 451-590). Replaces the legacy left side-drawer.
+ * HamburgerMenu — the website's mobile nav drawer
+ * (`~/bldesy-web/components/layout/header.tsx`, "Mobile nav drawer", LIVE
+ * branch): a left-anchored panel 80% of the screen wide (max 384) that slides in
+ * from the left edge below the header over a black/45 scrim. Tap the scrim, press
+ * hardware back, swipe left, or navigate anywhere to close.
  *
- * Visual: rounded card anchored just below the header, top-right, with a
- * soft shadow + 1px border. Backdrop covers the rest of the screen and
- * dismisses on tap. Fades + slightly scales in.
+ * Contents, top to bottom:
+ *   identity block (signed in) · pinned Tradie Portal / Enterprise Hub CTAs
+ *   (approved roles) · Home · Search Tradies · All Trades · Post a Job · AI Assist ·
+ *   Map · For Tradies · MY STUFF (signed in) · pinned Sign Up + Login, or Log Out.
+ *
+ * Rendered inline inside the screen (not a Modal) so the header above it stays
+ * live — the ☰ swaps to ✕ in place, exactly as on the web. `topOffset` defaults
+ * to safe area + AppHeader height; legacy screens with their own header can pass
+ * their own.
  */
-
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import {
-  Image,
-  Modal,
+  BackHandler,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter, type Href } from 'expo-router';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  Easing,
   FadeIn,
   FadeOut,
-  ZoomIn,
-  ZoomOut,
+  SlideInLeft,
+  SlideOutLeft,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 import { Colors, FontFamily, Radius, Shadows, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useUser } from '@/lib/auth-context';
+import { useGlobalTabBar } from '@/hooks/use-global-tab-bar';
+import { useRoles, useUser } from '@/lib/auth-context';
+import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
+import { APP_HEADER_HEIGHT } from './app-header';
 
 interface HamburgerMenuProps {
   open: boolean;
   onClose: () => void;
+  /** Distance from the top of the screen to the drawer's top edge. Defaults to safe area + header. */
+  topOffset?: number;
 }
-
-type RoleStatus = 'none' | 'pending' | 'approved' | null;
 
 interface NavLink {
-  href: string;
   label: string;
-  emoji: string;
+  route: Href;
 }
 
-const PUBLIC_LINKS: NavLink[] = [
-  { href: '/(tabs)',       label: 'Home',          emoji: '🏠' },
-  { href: '/results',      label: 'Search Tradies', emoji: '🔍' },
-  { href: '/all-trades',   label: 'All Trades',    emoji: '🔧' },
-  { href: '/post-job',     label: 'Post a Job',    emoji: '➕' },
-  { href: '/(tabs)/ai',    label: 'AI Assist',     emoji: '✨' },
-  { href: '/(tabs)/map',   label: 'Map',           emoji: '🗺️' },
-  { href: '/for-tradies',  label: 'For Tradies',   emoji: '👷' },
-  { href: '/for-builders', label: 'For Builders',  emoji: '🏗️' },
-  { href: '/pricing',      label: 'Pricing',       emoji: '💰' },
-  { href: '/about',        label: 'About',         emoji: 'ℹ️' },
+/* LIVE-mode link sets — verbatim from the web drawer. */
+const NAV_LINKS: NavLink[] = [
+  { label: 'Home', route: ROUTES.home },
+  { label: 'Search Tradies', route: ROUTES.search },
+  { label: 'All Trades', route: ROUTES.trades },
+  { label: 'Post a Job', route: ROUTES.postJob },
+  { label: 'AI Assist', route: ROUTES.ai },
+  { label: 'Map', route: ROUTES.map },
+  { label: 'For Tradies', route: ROUTES.forTradies },
 ];
 
 const MY_STUFF_LINKS: NavLink[] = [
-  { href: '/my-jobs',  label: 'My Jobs',       emoji: '📋' },
-  { href: '/messages', label: 'Messages',      emoji: '💬' },
-  { href: '/(tabs)/saved', label: 'Saved Tradies', emoji: '🔖' },
-  { href: '/settings', label: 'Settings',      emoji: '⚙️' },
+  { label: 'Dashboard', route: ROUTES.dashboard },
+  { label: 'My Jobs', route: ROUTES.myJobs },
+  { label: 'Messages', route: ROUTES.messages },
+  { label: 'Saved Tradies', route: ROUTES.saved },
+  { label: 'Settings', route: ROUTES.settings },
 ];
 
-export function HamburgerMenu({ open, onClose }: HamburgerMenuProps) {
+const DRAWER_MAX_WIDTH = 384; // web max-w-sm
+const OPEN_MS = 200; // web .animate-drawer-in
+const CLOSE_MS = 160;
+
+export function HamburgerMenu({ open, onClose, topOffset }: HamburgerMenuProps) {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const { contentBottomInset } = useGlobalTabBar();
   const router = useRouter();
-  const { user, loading } = useUser();
+  const pathname = usePathname();
+  const { authedUser } = useUser();
+  const { builderStatus, enterpriseStatus } = useRoles();
 
-  const [builderStatus, setBuilderStatus] = useState<RoleStatus>(null);
-  const [enterpriseStatus, setEnterpriseStatus] = useState<RoleStatus>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const drawerWidth = Math.min(windowWidth * 0.8, DRAWER_MAX_WIDTH);
+  const top = topOffset ?? insets.top + APP_HEADER_HEIGHT;
 
-  /* Fetch role membership when user changes (same shape as the web header). */
+  /* Hardware back closes the drawer while it is open. */
   useEffect(() => {
-    if (!user) {
-      setBuilderStatus(null);
-      setEnterpriseStatus(null);
-      setAvatarUrl(null);
-      return;
-    }
-    let mounted = true;
-    (async () => {
-      const [{ data: profile }, { data: builder }, { data: enterprise }] = await Promise.all([
-        supabase.from('profiles').select('avatar_url').eq('id', user.id).maybeSingle(),
-        supabase.from('builder_profiles').select('approved, status').eq('user_id', user.id).maybeSingle(),
-        supabase.from('enterprise_profiles').select('status').eq('user_id', user.id).maybeSingle(),
-      ]);
-      if (!mounted) return;
-      setAvatarUrl((profile as any)?.avatar_url ?? null);
-      const b: any = builder;
-      if (!b) setBuilderStatus('none');
-      else if (b.approved === true || b.status === 'active' || b.status === 'approved') setBuilderStatus('approved');
-      else setBuilderStatus('pending');
-      const e: any = enterprise;
-      if (!e) setEnterpriseStatus('none');
-      else if (e.status === 'active' || e.status === 'approved') setEnterpriseStatus('approved');
-      else setEnterpriseStatus('pending');
-    })();
-    return () => { mounted = false; };
-  }, [user]);
+    if (!open) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [open, onClose]);
 
-  function go(href: string) {
+  /* Close on any navigation (web: effect on pathname). */
+  const lastPathname = useRef(pathname);
+  useEffect(() => {
+    if (lastPathname.current === pathname) return;
+    lastPathname.current = pathname;
+    if (open) onClose();
+  }, [pathname, open, onClose]);
+
+  /* Swipe left to close. */
+  const dragX = useSharedValue(0);
+  useEffect(() => {
+    if (open) dragX.value = 0;
+  }, [open, dragX]);
+
+  const pan = Gesture.Pan()
+    .activeOffsetX([-16, 16])
+    .failOffsetY([-12, 12])
+    .onUpdate((e) => {
+      dragX.value = Math.min(0, e.translationX);
+    })
+    .onEnd((e) => {
+      if (e.translationX < -drawerWidth * 0.3 || e.velocityX < -600) {
+        dragX.value = withTiming(-drawerWidth, { duration: 150 }, () => {
+          runOnJS(onClose)();
+        });
+      } else {
+        dragX.value = withSpring(0, { damping: 22, stiffness: 300 });
+      }
+    });
+
+  const drawerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: dragX.value }],
+  }));
+  const scrimStyle = useAnimatedStyle(() => ({
+    opacity: 1 + dragX.value / drawerWidth,
+  }));
+
+  function go(route: Href) {
     onClose();
-    // small delay to let the close animation kick off before the route push
-    requestAnimationFrame(() => router.push(href as any));
+    router.navigate(route);
   }
 
-  async function handleLogout() {
+  async function logOut() {
     onClose();
     await supabase.auth.signOut();
-    router.replace('/(tabs)' as any);
+    router.replace(ROUTES.home);
   }
 
-  const headerOffset = insets.top + 56 + 4; // safe-area + header height + 4px gap
+  // Phone-only accounts have email "" (not null) — fall through with ||, not ??.
+  const name = (authedUser?.user_metadata?.name as string | undefined) || undefined;
+  const initial = (name?.[0] ?? authedUser?.email?.[0] ?? 'U').toUpperCase();
 
   return (
-    <Modal
-      visible={open}
-      transparent
-      animationType="none"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      {/* Backdrop */}
-      <Animated.View
-        entering={FadeIn.duration(160)}
-        exiting={FadeOut.duration(140)}
-        style={styles.backdrop}
-      >
-        <Pressable
-          accessibilityLabel="Close menu"
-          onPress={onClose}
-          style={StyleSheet.absoluteFill}
-        />
-      </Animated.View>
+    <View style={[styles.layer, { top }]} pointerEvents="box-none">
+      {open ? (
+        <>
+          {/* Scrim — tap to close */}
+          <Animated.View
+            entering={FadeIn.duration(OPEN_MS)}
+            exiting={FadeOut.duration(CLOSE_MS)}
+            style={[StyleSheet.absoluteFill, styles.scrim, scrimStyle]}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close menu"
+              onPress={onClose}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
 
-      {/* Anchored card */}
-      <Animated.View
-        entering={ZoomIn.duration(180)}
-        exiting={ZoomOut.duration(140)}
-        style={[
-          styles.card,
-          Shadows['2xl'],
-          {
-            top: headerOffset,
-            right: Spacing.sm,
-            backgroundColor: c.surface,
-            borderColor: c.border,
-            maxHeight: 600,
-          },
-        ]}
-      >
-        <ScrollView contentContainerStyle={{ paddingVertical: 4 }} bounces={false}>
-          {/* Auth header */}
-          {loading ? null : !user ? (
-            <View style={[styles.section, { borderColor: c.border }]}>
-              <Text style={[styles.muted, { color: c.textSecondary }]}>Not signed in</Text>
-              <View style={styles.authRow}>
-                <Pressable
-                  onPress={() => go('/(auth)/login')}
-                  accessibilityRole="link"
-                  accessibilityLabel="Log in"
-                  style={[styles.outlineBtn, { borderColor: c.border }]}
-                >
-                  <Text style={[styles.outlineBtnText, { color: c.textPrimary }]}>Login</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => go('/(auth)/signup')}
-                  accessibilityRole="link"
-                  accessibilityLabel="Sign up for a new account"
-                  style={[styles.fillBtn, { backgroundColor: c.primary }]}
-                >
-                  <Text style={styles.fillBtnText}>Sign Up</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : (
-            <View style={[styles.section, { borderColor: c.border, flexDirection: 'row', alignItems: 'center', gap: Spacing.md }]}>
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-              ) : (
-                <View style={[styles.avatar, { backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' }]}>
-                  <Text style={styles.avatarFallback}>
-                    {(user.user_metadata?.name?.[0] ?? user.email?.[0] ?? 'U').toUpperCase()}
-                  </Text>
+          {/* Drawer panel */}
+          <GestureDetector gesture={pan}>
+            <Animated.View
+              entering={SlideInLeft.duration(OPEN_MS).easing(Easing.out(Easing.cubic))}
+              exiting={SlideOutLeft.duration(CLOSE_MS)}
+              accessibilityViewIsModal
+              accessibilityLabel="Menu"
+              style={[
+                styles.drawer,
+                Shadows['2xl'],
+                { width: drawerWidth, backgroundColor: c.surface },
+                drawerStyle,
+              ]}
+            >
+              <ScrollView style={styles.scroll} bounces={false} showsVerticalScrollIndicator={false}>
+                {/* Identity block — signed in */}
+                {authedUser ? (
+                  <View style={[styles.identity, { borderBottomColor: c.border }]}>
+                    <View style={[styles.avatar, { backgroundColor: c.primary }]}>
+                      <Text style={styles.avatarInitial}>{initial}</Text>
+                    </View>
+                    <View style={styles.identityText}>
+                      <Text numberOfLines={1} style={[styles.name, { color: c.textPrimary }]}>
+                        {name ?? 'User'}
+                      </Text>
+                      <Text numberOfLines={1} style={[styles.email, { color: c.textSecondary }]}>
+                        {authedUser.email}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
+
+                {/* Tradie Portal — pinned at the top for approved builders */}
+                {builderStatus === 'approved' ? (
+                  <View style={[styles.pinnedWrap, { borderBottomColor: c.border }]}>
+                    <PinnedCta
+                      label="Tradie Portal"
+                      icon={<MaterialIcons name="handyman" size={20} color="#ffffff" />}
+                      color={c.primary}
+                      pressedColor={c.primaryDark}
+                      onPress={() => go(ROUTES.portal)}
+                    />
+                  </View>
+                ) : null}
+
+                {/* Enterprise Hub — pinned at the top for approved enterprises */}
+                {enterpriseStatus === 'approved' ? (
+                  <View style={[styles.pinnedWrap, { borderBottomColor: c.border }]}>
+                    <PinnedCta
+                      label="Enterprise Hub"
+                      icon={<Ionicons name="business-outline" size={20} color="#ffffff" />}
+                      color={c.indigo}
+                      pressedColor={c.indigoDark}
+                      onPress={() => go(ROUTES.enterprise)}
+                    />
+                  </View>
+                ) : null}
+
+                {/* Nav links — the live product set */}
+                <View style={styles.navGroup} accessibilityLabel="Menu links">
+                  {NAV_LINKS.map((link) => (
+                    <DrawerLink key={link.label} label={link.label} onPress={() => go(link.route)} />
+                  ))}
                 </View>
-              )}
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.name, { color: c.textPrimary }]} numberOfLines={1}>
-                  {user.user_metadata?.name ?? 'User'}
-                </Text>
-                <Text style={[styles.email, { color: c.textSecondary }]} numberOfLines={1}>
-                  {user.email}
-                </Text>
-              </View>
-            </View>
-          )}
 
-          {/* Builder Portal pin */}
-          {builderStatus === 'approved' ? (
-            <View style={[styles.section, { borderColor: c.border }]}>
-              <Pressable
-                onPress={() => go('/(tabs)/portal')}
-                accessibilityRole="link"
-                accessibilityLabel="Open Builder Portal"
-                style={[styles.pinnedCta, { backgroundColor: c.primary }]}
-              >
-                <Text style={styles.pinnedCtaText}>Builder Portal</Text>
-                <Text style={styles.pinnedCtaChevron}>›</Text>
-              </Pressable>
-            </View>
-          ) : null}
+                {/* Signed-in links */}
+                {authedUser ? (
+                  <View style={[styles.myStuff, { borderTopColor: c.border }]}>
+                    <Text style={[styles.myStuffLabel, { color: c.textSecondary }]}>My stuff</Text>
+                    {MY_STUFF_LINKS.map((link) => (
+                      <DrawerLink
+                        key={link.label}
+                        label={link.label}
+                        compact
+                        onPress={() => go(link.route)}
+                      />
+                    ))}
+                  </View>
+                ) : null}
+              </ScrollView>
 
-          {/* Enterprise Hub pin */}
-          {enterpriseStatus === 'approved' ? (
-            <View style={[styles.section, { borderColor: c.border }]}>
-              <Pressable
-                onPress={() => go('/enterprise-dashboard')}
-                accessibilityRole="link"
-                accessibilityLabel="Open Enterprise Hub"
-                style={[styles.pinnedCta, { backgroundColor: c.indigo }]}
-              >
-                <Text style={styles.pinnedCtaText}>Enterprise Hub</Text>
-                <Text style={styles.pinnedCtaChevron}>›</Text>
-              </Pressable>
-            </View>
-          ) : null}
-
-          {/* Main nav */}
-          <View style={{ paddingVertical: 4 }}>
-            {PUBLIC_LINKS.map((link) => (
-              <Pressable
-                key={link.href + link.label}
-                onPress={() => go(link.href)}
-                accessibilityRole="link"
-                accessibilityLabel={link.label}
-                style={({ pressed }) => [
-                  styles.navItem,
-                  pressed && { backgroundColor: c.primaryBg },
+              {/* Pinned action block — the single CTA hierarchy for the menu */}
+              <View
+                style={[
+                  styles.pinnedBottom,
+                  {
+                    borderTopColor: c.border,
+                    backgroundColor: c.surface,
+                    paddingBottom: Spacing.lg + contentBottomInset,
+                  },
                 ]}
               >
-                <Text style={styles.navEmoji}>{link.emoji}</Text>
-                <Text style={[styles.navLabel, { color: c.textPrimary }]}>{link.label}</Text>
-              </Pressable>
-            ))}
-          </View>
+                {!authedUser ? (
+                  <>
+                    <Pressable
+                      accessibilityRole="link"
+                      onPress={() => go(ROUTES.signup)}
+                      style={({ pressed }) => [
+                        styles.blockBtn,
+                        { backgroundColor: pressed ? c.ctaDark : c.cta },
+                      ]}
+                    >
+                      <Text style={styles.blockBtnFillText}>Sign Up</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="link"
+                      onPress={() => go(ROUTES.login)}
+                      style={({ pressed }) => [
+                        styles.blockBtn,
+                        styles.blockBtnOutline,
+                        { borderColor: pressed ? c.primary : c.border },
+                      ]}
+                    >
+                      {({ pressed }) => (
+                        <Text
+                          style={[
+                            styles.blockBtnOutlineText,
+                            { color: pressed ? c.primary : c.textPrimary },
+                          ]}
+                        >
+                          Login
+                        </Text>
+                      )}
+                    </Pressable>
+                  </>
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Log out"
+                    onPress={logOut}
+                    style={({ pressed }) => [
+                      styles.logOutBtn,
+                      { borderColor: c.error + '4D' },
+                      pressed && { backgroundColor: c.error + '0D' },
+                    ]}
+                  >
+                    <Text style={[styles.logOutText, { color: c.error }]}>Log Out</Text>
+                  </Pressable>
+                )}
+              </View>
+            </Animated.View>
+          </GestureDetector>
+        </>
+      ) : null}
+    </View>
+  );
+}
 
-          {/* My stuff group */}
-          {user ? (
-            <View style={[styles.group, { borderColor: c.border }]}>
-              <Text style={[styles.groupLabel, { color: c.textSecondary }]}>My stuff</Text>
-              {MY_STUFF_LINKS.map((link) => (
-                <Pressable
-                  key={link.href + link.label}
-                  onPress={() => go(link.href)}
-                  accessibilityRole="link"
-                  accessibilityLabel={link.label}
-                  style={({ pressed }) => [
-                    styles.navItem,
-                    pressed && { backgroundColor: c.primaryBg },
-                  ]}
-                >
-                  <Text style={styles.navEmoji}>{link.emoji}</Text>
-                  <Text style={[styles.navLabel, { color: c.textPrimary }]}>{link.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
+/* ── Pieces ───────────────────────────────────────────────────────── */
 
-          {/* Guest CTA */}
-          {!user ? (
-            <View style={[styles.section, { borderColor: c.border }]}>
-              <Pressable
-                onPress={() => go('/welcome?prefill=builder')}
-                accessibilityRole="link"
-                accessibilityLabel="Join as a tradie"
-                style={[styles.outlineBtn, { borderColor: c.primary, alignSelf: 'stretch' }]}
-              >
-                <Text style={[styles.outlineBtnText, { color: c.primary }]}>Join as a Tradie</Text>
-              </Pressable>
-            </View>
-          ) : null}
+function DrawerLink({
+  label,
+  onPress,
+  compact = false,
+}: {
+  label: string;
+  onPress: () => void;
+  compact?: boolean;
+}) {
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
+  return (
+    <Pressable
+      accessibilityRole="link"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.link,
+        compact && styles.linkCompact,
+        pressed && { backgroundColor: c.primaryBg },
+      ]}
+    >
+      {({ pressed }) => (
+        <Text style={[styles.linkText, { color: pressed ? c.primary : c.textPrimary }]}>{label}</Text>
+      )}
+    </Pressable>
+  );
+}
 
-          {/* Logout */}
-          {user ? (
-            <View style={[styles.section, { borderColor: c.border }]}>
-              <Pressable
-                onPress={handleLogout}
-                accessibilityRole="button"
-                accessibilityLabel="Log out"
-                accessibilityHint="Signs you out of BLDESY"
-                style={[styles.outlineBtn, { borderColor: c.error + '4D', alignSelf: 'stretch' }]}
-              >
-                <Text style={[styles.outlineBtnText, { color: c.error }]}>Log Out</Text>
-              </Pressable>
-            </View>
-          ) : null}
-        </ScrollView>
-      </Animated.View>
-    </Modal>
+function PinnedCta({
+  label,
+  icon,
+  color,
+  pressedColor,
+  onPress,
+}: {
+  label: string;
+  icon: ReactNode;
+  color: string;
+  pressedColor: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="link"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.pinnedCta,
+        Shadows.sm,
+        { backgroundColor: pressed ? pressedColor : color },
+        pressed && { transform: [{ scale: 0.98 }] },
+      ]}
+    >
+      {icon}
+      <Text style={styles.pinnedCtaText}>{label}</Text>
+      <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.8)" />
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.0)', // invisible — captures taps only
-  },
-  card: {
+  layer: {
     position: 'absolute',
-    width: 288,
-    maxWidth: '95%',
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    overflow: 'hidden',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
-  section: {
+  scrim: {
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  drawer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+  },
+  scroll: {
+    flex: 1,
+  },
+  identity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  muted: {
-    fontSize: 13,
-    fontFamily: FontFamily.bodyMedium,
-    fontWeight: '500',
-    marginBottom: Spacing.sm,
-  },
-  authRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  outlineBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  outlineBtnText: {
-    fontSize: 13,
-    fontFamily: FontFamily.bodySemiBold,
-    fontWeight: '600',
-  },
-  fillBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: Radius.lg,
-    alignItems: 'center',
-  },
-  fillBtnText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontFamily: FontFamily.bodyBold,
-    fontWeight: '700',
   },
   avatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  avatarFallback: {
+  avatarInitial: {
     color: '#ffffff',
     fontFamily: FontFamily.bodyBold,
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 12,
+  },
+  identityText: {
+    flex: 1,
+    minWidth: 0,
   },
   name: {
-    fontSize: 14,
     fontFamily: FontFamily.bodySemiBold,
     fontWeight: '600',
+    fontSize: 14,
   },
   email: {
+    fontFamily: FontFamily.body,
     fontSize: 11,
     marginTop: 1,
-    fontFamily: FontFamily.body,
+  },
+  pinnedWrap: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   pinnedCta: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 12,
-    borderRadius: Radius.lg,
     gap: Spacing.md,
+    borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
   pinnedCtaText: {
     flex: 1,
     color: '#ffffff',
-    fontSize: 14,
     fontFamily: FontFamily.bodyBold,
     fontWeight: '700',
-  },
-  pinnedCtaChevron: {
-    color: '#ffffff',
-    fontSize: 20,
-    opacity: 0.85,
-    lineHeight: 20,
-  },
-  group: {
-    paddingVertical: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  groupLabel: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 4,
-    fontSize: 10,
-    fontFamily: FontFamily.bodyBold,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.7,
-  },
-  navItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 10,
-    gap: Spacing.md,
-  },
-  navEmoji: {
     fontSize: 14,
   },
-  navLabel: {
-    fontSize: 14,
+  navGroup: {
+    paddingVertical: Spacing.md,
+  },
+  link: {
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: 14, // web py-3.5
+  },
+  linkCompact: {
+    paddingVertical: Spacing.md, // web py-3
+  },
+  linkText: {
     fontFamily: FontFamily.bodyMedium,
     fontWeight: '500',
+    fontSize: 16,
+  },
+  myStuff: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingVertical: Spacing.sm,
+  },
+  myStuffLabel: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.xs,
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '700',
+    fontSize: 10,
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+  },
+  pinnedBottom: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  blockBtn: {
+    borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  blockBtnFillText: {
+    color: '#ffffff',
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  blockBtnOutline: {
+    borderWidth: 1,
+  },
+  blockBtnOutlineText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  logOutBtn: {
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  logOutText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontWeight: '600',
+    fontSize: 14,
   },
 });

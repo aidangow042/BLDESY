@@ -1,38 +1,58 @@
-import { useCallback, useState } from 'react';
-import {
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+/**
+ * /settings — port of ~/bldesy-web/app/settings/page.tsx, the canonical
+ * multi-role settings page: Account (email + password), Notifications
+ * (wired to /api/notifications/preferences), Appearance, Builder Subscription
+ * (tradies), Company Settings (enterprise), Blocked users (Terms §6.8),
+ * Delete Account, and the footer's Help & Legal links.
+ *
+ * The legacy app-only rows (Download my data, Language, Privacy settings →
+ * legal, Roles) are gone — the web has none.
+ */
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRouter, type Href } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import * as WebBrowser from 'expo-web-browser';
 
+import { EmailLink } from '@/components/customer-dashboard/email-link';
+import {
+  NOTIFICATION_TOGGLES,
+  THEME_OPTIONS,
+  deleteAccountCopy,
+  hasPasswordIdentity,
+  themeLabel,
+  togglePatch,
+  toggleValue,
+  type SettingsToggleKey,
+  type ThemePreference,
+} from '@/components/customer-dashboard/settings-model';
+import { SettingsPasswordForm } from '@/components/customer-dashboard/settings-password';
+import { SettingsToggleRow } from '@/components/customer-dashboard/settings-toggle-row';
+import {
+  applyThemePreference,
+  loadThemePreference,
+  saveThemePreference,
+} from '@/components/customer-dashboard/theme-preference';
+import { DeleteAccountModal } from '@/components/delete-account-modal';
+import { FieldLabel } from '@/components/jobs/field-label';
 import { AppShell } from '@/components/layout';
-import { Button, Card, Input, useToast } from '@/components/ui';
+import { BlockedUsersList } from '@/components/messages/blocked-users-list';
+import { Button, Card, Skeleton, useToast } from '@/components/ui';
 import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { supabase } from '@/lib/supabase';
 import { useRoles, useUser } from '@/lib/auth-context';
-import { DeleteAccountModal } from '@/components/delete-account-modal';
+import {
+  getNotificationPreferences,
+  updateNotificationPreferences,
+  type NotificationPreferences,
+} from '@/lib/data/notifications';
+import { ROUTES, WEB_PAGES } from '@/lib/routes';
+import { supabase } from '@/lib/supabase';
 
-type SectionRow = {
-  key: string;
-  label: string;
-  subtitle?: string;
-  icon: React.ComponentProps<typeof MaterialIcons>['name'];
-  onPress?: () => void;
-  rightElement?: React.ReactNode;
-  destructive?: boolean;
-};
-
-type SectionConfig = {
-  title: string;
-  rows: SectionRow[];
+const THEME_ICONS: Record<ThemePreference, 'sunny-outline' | 'moon-outline' | 'phone-portrait-outline'> = {
+  light: 'sunny-outline',
+  dark: 'moon-outline',
+  system: 'phone-portrait-outline',
 };
 
 export default function SettingsScreen() {
@@ -40,442 +60,318 @@ export default function SettingsScreen() {
   const c = Colors[scheme];
   const router = useRouter();
   const toast = useToast();
-  const { userId, user: authUser } = useUser();
-  const { isBuilder, isEnterprise } = useRoles();
+  const { authedUser: user, loading } = useUser();
+  const roles = useRoles();
 
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [fullName, setFullName] = useState<string | null>(null);
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [smsNotifications, setSmsNotifications] = useState(false);
+  // Notification toggles — real preferences, not localStorage.
+  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+  // Appearance
+  const [theme, setTheme] = useState<ThemePreference>('system');
+  // Delete account
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!userId) return;
-      (async () => {
-        setUserEmail(authUser?.email ?? null);
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('name')
-          .eq('id', userId)
-          .single();
-        setFullName(profile?.name ?? null);
-      })();
-    }, [userId, authUser]),
-  );
+  useEffect(() => {
+    loadThemePreference().then(setTheme);
+  }, []);
 
-  const [emailModalVisible, setEmailModalVisible] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
-  const [emailSaving, setEmailSaving] = useState(false);
-  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const loadPrefs = useCallback(async () => {
+    if (!user) return;
+    try {
+      setPrefs(await getNotificationPreferences());
+    } catch (e) {
+      console.warn('notification preferences failed', e instanceof Error ? e.message : e);
+    }
+  }, [user]);
 
-  function openChangeEmail() {
-    setNewEmail(userEmail ?? '');
-    setEmailModalVisible(true);
-  }
+  useEffect(() => {
+    loadPrefs();
+  }, [loadPrefs]);
 
-  async function submitEmailChange() {
-    if (!newEmail?.trim()) return;
-    setEmailSaving(true);
-    const { error } = await supabase.auth.updateUser({ email: newEmail.trim() });
-    setEmailSaving(false);
-    setEmailModalVisible(false);
-    if (error) {
-      toast.show("Couldn't update email", { variant: 'error' });
-    } else {
-      toast.show('Confirmation link sent to your new email', { variant: 'success' });
+  async function handleToggle(toggleKey: SettingsToggleKey, value: boolean) {
+    if (!prefs) return;
+    const toggle = NOTIFICATION_TOGGLES.find((t) => t.key === toggleKey);
+    if (!toggle) return;
+    const patch = togglePatch(toggle, value);
+    const previous = prefs;
+    setPrefs({ ...prefs, ...patch });
+    try {
+      await updateNotificationPreferences(patch);
+    } catch (e) {
+      setPrefs(previous);
+      toast.show(e instanceof Error ? e.message : 'Something went wrong. Please try again.', { variant: 'error' });
     }
   }
 
-  function handleChangePassword() {
-    Alert.alert(
-      'Reset password',
-      "We'll send a password reset link to your email.",
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Send link',
-          onPress: async () => {
-            if (!userEmail) return;
-            const { error } = await supabase.auth.resetPasswordForEmail(userEmail);
-            if (error) toast.show("Couldn't send reset link", { variant: 'error' });
-            else toast.show('Check your inbox for the reset link', { variant: 'success' });
-          },
-        },
-      ],
-    );
+  async function handleTheme(option: ThemePreference) {
+    setTheme(option);
+    applyThemePreference(option);
+    await saveThemePreference(option);
   }
 
   async function handleAccountDeleted() {
-    setDeleteModalVisible(false);
+    setShowDeleteModal(false);
     await supabase.auth.signOut();
-    router.replace('/');
+    router.replace(ROUTES.home as Href);
   }
 
-  const sections: SectionConfig[] = [
-    {
-      title: 'Account',
-      rows: [
-        {
-          key: 'profile',
-          label: fullName || 'My Profile',
-          subtitle: 'Name, phone, and avatar',
-          icon: 'person-outline',
-          onPress: () => router.push('/edit-profile' as any),
-        },
-        {
-          key: 'email',
-          label: 'Email address',
-          subtitle: userEmail ?? 'Not signed in',
-          icon: 'email',
-          onPress: openChangeEmail,
-        },
-        {
-          key: 'password',
-          label: 'Change password',
-          subtitle: 'Reset via email link',
-          icon: 'lock-outline',
-          onPress: handleChangePassword,
-        },
-      ],
-    },
-    {
-      title: 'Roles',
-      rows: [
-        isBuilder
-          ? {
-              key: 'role-builder',
-              label: 'Tradie profile',
-              subtitle: 'Edit your tradie profile and credentials',
-              icon: 'construction' as const,
-              onPress: () => router.push('/builder-edit-profile' as any),
-            }
-          : {
-              key: 'role-builder-add',
-              label: 'Become a tradie',
-              subtitle: 'List yourself in search and apply to jobs',
-              icon: 'construction' as const,
-              onPress: () => router.push('/builder-signup' as any),
-            },
-        isEnterprise
-          ? {
-              key: 'role-enterprise',
-              label: 'Company profile',
-              subtitle: 'Manage your company and job posts',
-              icon: 'business' as const,
-              onPress: () => router.push('/enterprise-edit-profile' as any),
-            }
-          : {
-              key: 'role-enterprise-add',
-              label: 'List your company',
-              subtitle: 'Post jobs and hire verified tradies',
-              icon: 'business' as const,
-              onPress: () => router.push('/enterprise-signup' as any),
-            },
-        {
-          key: 'role-billing',
-          label: 'Billing & subscription',
-          subtitle: 'Plan, payment method, invoices',
-          icon: 'credit-card' as const,
-          onPress: () => router.push('/billing' as any),
-        },
-      ],
-    },
-    {
-      title: 'Notifications',
-      rows: [
-        {
-          key: 'push',
-          label: 'Push notifications',
-          subtitle: 'Job updates and messages',
-          icon: 'notifications-none',
-          rightElement: (
-            <Switch
-              value={pushNotifications}
-              onValueChange={setPushNotifications}
-              trackColor={{ false: c.border, true: c.primary + '66' }}
-              thumbColor={pushNotifications ? c.primary : c.textSecondary}
-            />
-          ),
-        },
-        {
-          key: 'emailNotif',
-          label: 'Email notifications',
-          subtitle: 'Weekly digest and alerts',
-          icon: 'mark-email-unread',
-          rightElement: (
-            <Switch
-              value={emailNotifications}
-              onValueChange={setEmailNotifications}
-              trackColor={{ false: c.border, true: c.primary + '66' }}
-              thumbColor={emailNotifications ? c.primary : c.textSecondary}
-            />
-          ),
-        },
-        {
-          key: 'sms',
-          label: 'SMS notifications',
-          subtitle: 'Urgent job alerts only',
-          icon: 'sms',
-          rightElement: (
-            <Switch
-              value={smsNotifications}
-              onValueChange={setSmsNotifications}
-              trackColor={{ false: c.border, true: c.primary + '66' }}
-              thumbColor={smsNotifications ? c.primary : c.textSecondary}
-            />
-          ),
-        },
-      ],
-    },
-    {
-      title: 'Preferences',
-      rows: [
-        {
-          key: 'language',
-          label: 'Language',
-          subtitle: 'English (AU)',
-          icon: 'language',
-          onPress: () => toast.show('English (AU) is the only supported language for now', { duration: 4000 }),
-        },
-        {
-          key: 'appearance',
-          label: 'Appearance',
-          subtitle: scheme === 'dark' ? 'Dark mode (system)' : 'Light mode (system)',
-          icon: scheme === 'dark' ? 'dark-mode' : 'light-mode',
-          onPress: () => toast.show('BLDESY follows your device appearance setting', { duration: 4000 }),
-        },
-      ],
-    },
-    {
-      title: 'Privacy & data',
-      rows: [
-        {
-          key: 'privacy',
-          label: 'Privacy settings',
-          subtitle: 'Profile visibility and data sharing',
-          icon: 'shield',
-          onPress: () => router.push('/legal' as any),
-        },
-        {
-          key: 'download',
-          label: 'Download my data',
-          subtitle: 'Request a copy of your data',
-          icon: 'download',
-          onPress: () => toast.show("Export requested — we'll email you within 48 hours", { variant: 'success', duration: 4000 }),
-        },
-        {
-          key: 'delete',
-          label: 'Delete account',
-          subtitle: 'Permanently remove all data',
-          icon: 'delete-outline',
-          onPress: () => setDeleteModalVisible(true),
-          destructive: true,
-        },
-      ],
-    },
-  ];
+  if (loading) {
+    return (
+      <AppShell showBack>
+        <View style={styles.scroll}>
+          <Skeleton variant="text" style={{ width: 160, height: 32, borderRadius: 8 }} />
+          <Skeleton variant="card" />
+          <Skeleton variant="card" />
+        </View>
+      </AppShell>
+    );
+  }
+
+  if (!user) {
+    return (
+      <AppShell showBack>
+        <View style={styles.scroll}>
+          <Card padding={Spacing['4xl']} style={styles.center}>
+            <Ionicons name="lock-closed-outline" size={40} color={c.textSecondary} />
+            <Text accessibilityRole="header" style={[styles.h1, { color: c.textPrimary, textAlign: 'center' }]}>
+              Sign in required
+            </Text>
+            <Text style={[styles.body, { color: c.textSecondary, textAlign: 'center' }]}>
+              You need to be signed in to access your settings.
+            </Text>
+            <Button onPress={() => router.push(ROUTES.login as Href)}>Sign In</Button>
+          </Card>
+        </View>
+      </AppShell>
+    );
+  }
+
+  const rolesReady = !roles.loading;
 
   return (
-    <AppShell title="Settings" showBack>
+    <AppShell showBack>
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        {sections.map((section) => (
-          <View key={section.title} style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: c.textSecondary }]}>
-              {section.title}
-            </Text>
-            <Card style={styles.card}>
-              {section.rows.map((row, index) => (
+        <Text accessibilityRole="header" style={[styles.h1, { color: c.textPrimary }]}>
+          Settings
+        </Text>
+
+        {/* Account */}
+        <Section title="Account">
+          <View style={{ gap: Spacing.lg }}>
+            <View>
+              <FieldLabel muted>Email address</FieldLabel>
+              {user.email ? (
+                <View style={[styles.readOnly, { backgroundColor: c.canvas, borderColor: c.border }]}>
+                  <Text style={[styles.readOnlyText, { color: c.textSecondary }]}>{user.email}</Text>
+                </View>
+              ) : (
+                <View style={{ gap: Spacing.sm }}>
+                  <Text style={[styles.body, { color: c.textSecondary }]}>
+                    No email on your login yet — verify one to get receipts and log in with it. We&apos;ll email
+                    you a code to confirm it&apos;s yours.
+                  </Text>
+                  <EmailLink />
+                </View>
+              )}
+            </View>
+            {hasPasswordIdentity(user) ? <SettingsPasswordForm /> : null}
+          </View>
+        </Section>
+
+        {/* Notifications */}
+        <Section title="Notifications" description="Choose which email notifications you'd like to receive.">
+          <View style={{ gap: Spacing.lg }}>
+            {NOTIFICATION_TOGGLES.map((toggle) => (
+              <SettingsToggleRow
+                key={toggle.key}
+                label={toggle.label}
+                description={toggle.description}
+                checked={prefs ? toggleValue(prefs, toggle) : true}
+                disabled={!prefs}
+                onChange={(value) => handleToggle(toggle.key, value)}
+              />
+            ))}
+          </View>
+        </Section>
+
+        {/* Appearance */}
+        <Section title="Appearance" description="Choose how BLDESY! looks for you.">
+          <View style={{ gap: Spacing.md }}>
+            {THEME_OPTIONS.map((option) => {
+              const selected = theme === option;
+              return (
                 <Pressable
-                  key={row.key}
-                  onPress={row.onPress}
-                  disabled={!row.onPress}
-                  accessibilityRole="button"
-                  accessibilityLabel={row.label}
-                  style={({ pressed }) => [
-                    styles.row,
-                    index > 0 && { borderTopColor: c.borderLight, borderTopWidth: StyleSheet.hairlineWidth },
-                    pressed && row.onPress && { backgroundColor: c.canvas },
+                  key={option}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selected }}
+                  onPress={() => handleTheme(option)}
+                  style={[
+                    styles.themeOption,
+                    {
+                      borderColor: selected ? c.primary : c.border,
+                      backgroundColor: selected ? c.primary + '0D' : c.surface,
+                    },
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.iconWrap,
-                      {
-                        backgroundColor: row.destructive ? c.errorBg : c.primaryBg,
-                      },
-                    ]}
-                  >
-                    <MaterialIcons
-                      name={row.icon}
-                      size={18}
-                      color={row.destructive ? c.error : c.primary}
-                    />
-                  </View>
-                  <View style={styles.rowText}>
-                    <Text
-                      style={[
-                        styles.rowLabel,
-                        { color: row.destructive ? c.error : c.textPrimary },
-                      ]}
-                    >
-                      {row.label}
-                    </Text>
-                    {row.subtitle ? (
-                      <Text style={[styles.rowSubtitle, { color: c.textSecondary }]} numberOfLines={1}>
-                        {row.subtitle}
-                      </Text>
-                    ) : null}
-                  </View>
-                  {row.rightElement ??
-                    (row.onPress ? (
-                      <MaterialIcons name="chevron-right" size={18} color={c.textSecondary} />
-                    ) : null)}
+                  <Ionicons name={THEME_ICONS[option]} size={20} color={selected ? c.primary : c.textSecondary} />
+                  <Text style={[styles.themeLabel, { color: c.textPrimary }]}>{themeLabel(option)}</Text>
+                  {selected ? (
+                    <Ionicons name="checkmark" size={20} color={c.primary} style={{ marginLeft: 'auto' }} />
+                  ) : null}
                 </Pressable>
-              ))}
-            </Card>
+              );
+            })}
           </View>
-        ))}
+        </Section>
 
+        {/* Builder subscription management — shown when user has a builder profile. */}
+        {roles.isTradie ? (
+          <Section
+            title="Builder Subscription"
+            description="Pause or cancel your BLDESY! tradie subscription. Your profile stays visible until the end of your billing period."
+          >
+            <View style={{ gap: Spacing.md }}>
+              <Button variant="danger" fullWidth onPress={() => router.push(ROUTES.portalBilling as Href)}>
+                Cancel Subscription
+              </Button>
+              <Text style={[styles.footnote, { color: c.textSecondary }]}>
+                For availability, visibility, and profile content, head to{' '}
+                <Text
+                  accessibilityRole="link"
+                  onPress={() => router.push(ROUTES.portalSettings as Href)}
+                  style={[styles.footnoteLink, { color: c.primary }]}
+                >
+                  Builder Hub settings
+                </Text>
+                .
+              </Text>
+            </View>
+          </Section>
+        ) : null}
+
+        {/* Enterprise company quick-link — shown when user has an enterprise profile. */}
+        {roles.isEnterprise ? (
+          <Section
+            title="Company Settings"
+            description="Update your company details, contact info, and billing preferences in the Enterprise Hub."
+          >
+            <View style={{ gap: Spacing.md }}>
+              <IndigoOutlineButton label="Edit Company Info" onPress={() => router.push('/enterprise/settings' as Href)} />
+              <IndigoOutlineButton label="Billing & Plans" onPress={() => router.push('/enterprise/billing' as Href)} />
+            </View>
+          </Section>
+        ) : null}
+
+        {/* Blocked users — Terms §6.8: "manage your block list in the app under Settings > Blocked users". */}
+        <Section title="Blocked users" description="Manage who you've blocked">
+          <BlockedUsersList />
+        </Section>
+
+        {/* Delete Account — always available, regardless of role. */}
+        {rolesReady ? (
+          <Section title="Delete Account" description={deleteAccountCopy(roles.isTradie, roles.isEnterprise)}>
+            <Button variant="danger" onPress={() => setShowDeleteModal(true)}>
+              Delete my account
+            </Button>
+          </Section>
+        ) : null}
+
+        {/* Help & Legal — the site footer's links. */}
         <View style={styles.footer}>
-          <Text style={[styles.footerText, { color: c.textSecondary }]}>BLDESY! v1.0.0</Text>
-          <Text style={[styles.footerText, { color: c.textSecondary }]}>Made with ❤️ in Australia</Text>
+          <FooterLink label="Help & Support" onPress={() => router.push(ROUTES.help as Href)} />
+          <FooterLink label="Terms" onPress={() => WebBrowser.openBrowserAsync(WEB_PAGES.terms).catch(() => {})} />
+          <FooterLink label="Privacy" onPress={() => WebBrowser.openBrowserAsync(WEB_PAGES.privacy).catch(() => {})} />
+          <FooterLink label="Cookies" onPress={() => WebBrowser.openBrowserAsync(WEB_PAGES.cookies).catch(() => {})} />
+          <Text style={[styles.copyright, { color: c.textSecondary }]}>© 2026 BLDESY! All rights reserved.</Text>
         </View>
       </ScrollView>
 
       <DeleteAccountModal
-        visible={deleteModalVisible}
-        onClose={() => setDeleteModalVisible(false)}
+        visible={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
         onDeleted={handleAccountDeleted}
       />
-
-      {/* Change-email modal — Toast-style would lose the input, so keep a sheet here. */}
-      <Modal
-        visible={emailModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setEmailModalVisible(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setEmailModalVisible(false)}>
-          <Pressable
-            style={[styles.modalCard, { backgroundColor: c.surface, borderColor: c.border }]}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <Text style={[styles.modalTitle, { color: c.textPrimary }]}>Change email</Text>
-            <Text style={[styles.modalSubtitle, { color: c.textSecondary }]}>
-              Enter your new email address. We&apos;ll send a confirmation link.
-            </Text>
-            <Input
-              value={newEmail}
-              onChangeText={setNewEmail}
-              placeholder="Email address"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoFocus
-            />
-            <View style={styles.modalActions}>
-              <Button variant="ghost" onPress={() => setEmailModalVisible(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary" onPress={submitEmailChange} disabled={emailSaving}>
-                {emailSaving ? 'Saving…' : 'Update'}
-              </Button>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </AppShell>
+  );
+}
+
+/* ── Building blocks ─────────────────────────────────────────────────── */
+
+function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
+  return (
+    <Card padding={Spacing['2xl']}>
+      <Text accessibilityRole="header" style={[styles.h2, { color: c.textPrimary }]}>
+        {title}
+      </Text>
+      {description ? <Text style={[styles.sectionBody, { color: c.textSecondary }]}>{description}</Text> : null}
+      <View style={{ marginTop: Spacing.lg }}>{children}</View>
+    </Card>
+  );
+}
+
+function IndigoOutlineButton({ label, onPress }: { label: string; onPress: () => void }) {
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
+  return (
+    <Pressable
+      accessibilityRole="link"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.indigoBtn,
+        { borderColor: c.indigo + '4D', backgroundColor: pressed ? c.indigo + '0D' : 'transparent' },
+      ]}
+    >
+      <Text style={[styles.indigoBtnText, { color: c.indigo }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function FooterLink({ label, onPress }: { label: string; onPress: () => void }) {
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
+  return (
+    <Pressable accessibilityRole="link" onPress={onPress} hitSlop={6} style={styles.footerLink}>
+      <Text style={[styles.footerLinkText, { color: c.textSecondary }]}>{label}</Text>
+      <Ionicons name="chevron-forward" size={14} color={c.textSecondary} />
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   scroll: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
+    padding: Spacing.lg,
+    paddingTop: Spacing['2xl'],
     paddingBottom: Spacing['5xl'],
     gap: Spacing['2xl'],
   },
-  section: {
-    gap: Spacing.sm,
-  },
-  sectionTitle: {
-    fontSize: 11,
-    fontFamily: FontFamily.bodyBold,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    paddingHorizontal: Spacing.sm,
-  },
-  card: {
-    overflow: 'hidden',
-  },
-  row: {
+  center: { alignItems: 'center', gap: Spacing.md },
+  h1: { fontSize: 30, fontFamily: FontFamily.bodyBold, fontWeight: '700' },
+  h2: { fontSize: 18, fontFamily: FontFamily.bodySemiBold, fontWeight: '600' },
+  body: { fontSize: 14, lineHeight: 20, fontFamily: FontFamily.body },
+  sectionBody: { fontSize: 14, lineHeight: 20, fontFamily: FontFamily.body, marginTop: 4 },
+  readOnly: { borderWidth: 1, borderRadius: Radius.lg, paddingHorizontal: Spacing.lg, paddingVertical: 10 },
+  readOnlyText: { fontSize: 14, fontFamily: FontFamily.body },
+  themeOption: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
+    borderWidth: 2,
+    borderRadius: Radius.lg,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingVertical: 12,
   },
-  iconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rowText: {
-    flex: 1,
-    gap: 1,
-  },
-  rowLabel: {
-    fontSize: 14,
-    fontFamily: FontFamily.bodySemiBold,
-    fontWeight: '600',
-  },
-  rowSubtitle: {
-    fontSize: 12,
-    fontFamily: FontFamily.body,
-  },
-  footer: {
-    alignItems: 'center',
-    gap: 2,
-    paddingTop: Spacing.xl,
-  },
-  footerText: {
-    fontSize: 11,
-    fontFamily: FontFamily.body,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.lg,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 400,
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    padding: Spacing['2xl'],
-    gap: Spacing.lg,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontFamily: FontFamily.bodyBold,
-    fontWeight: '700',
-  },
-  modalSubtitle: {
-    fontSize: 13,
-    fontFamily: FontFamily.body,
-    lineHeight: 20,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: Spacing.sm,
-  },
+  themeLabel: { fontSize: 14, fontFamily: FontFamily.bodyMedium, fontWeight: '500' },
+  footnote: { fontSize: 12, lineHeight: 18, fontFamily: FontFamily.body },
+  footnoteLink: { fontFamily: FontFamily.bodySemiBold, fontWeight: '600' },
+  indigoBtn: { borderWidth: 2, borderRadius: Radius.lg, paddingVertical: 12, alignItems: 'center' },
+  indigoBtnText: { fontSize: 14, fontFamily: FontFamily.bodySemiBold, fontWeight: '600' },
+  footer: { gap: 2, paddingTop: Spacing.sm },
+  footerLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
+  footerLinkText: { fontSize: 14, fontFamily: FontFamily.bodyMedium, fontWeight: '500' },
+  copyright: { fontSize: 11, fontFamily: FontFamily.body, marginTop: Spacing.lg },
 });

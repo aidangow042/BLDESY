@@ -1,150 +1,141 @@
 /**
- * PopularTrades — 8-card grid linking to /trades/{slug}. Mirrors
- * `~/bldesy-web/components/home/popular-trades.tsx`. Tints come from theme's
- * trade-category tokens via `tradeColors()`.
+ * PopularTrades — ~/bldesy-web/components/home/popular-trades.tsx, THE FRONT
+ * DOOR: the six trades BLDESY launches with (lib/web/launch-trades.ts) as
+ * gradient tiles, then the "seventh door" band for an unstocked job — captured
+ * instead of bounced. Copy verbatim; the CTA label is the launch-mode
+ * "Find a tradie".
  */
-
+import type { ComponentProps } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { Colors, FontFamily, Radius, Spacing, tradeColors } from '@/constants/theme';
+import { FeatureShaderCards } from '@/components/home/feature-shader-cards';
+import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { ROUTES } from '@/lib/routes';
+import { launchTrades, type LaunchTradeSlug } from '@/lib/web/launch-trades';
+import { COVERAGE } from '@/lib/web/service-areas';
+import { pluralSlugFor } from '@/lib/web/trades';
 
-interface TradeItem {
-  slug: string;
-  title: string;
-  description: string;
-  glyph: string;
-}
+type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
-const TRADES: TradeItem[] = [
-  { slug: 'builder',     title: 'Builder',     description: 'New homes, renovations & extensions', glyph: '🏗️' },
-  { slug: 'electrician', title: 'Electrician', description: 'Wiring, lighting & power',            glyph: '⚡' },
-  { slug: 'plumber',     title: 'Plumber',     description: 'Pipes, taps & hot water',             glyph: '🚿' },
-  { slug: 'carpenter',   title: 'Carpenter',   description: 'Decks, pergolas & joinery',           glyph: '🪚' },
-  { slug: 'painter',     title: 'Painter',     description: 'Interior & exterior painting',        glyph: '🎨' },
-  { slug: 'landscaper',  title: 'Landscaper',  description: 'Gardens, turf & outdoor spaces',      glyph: '🌿' },
-  { slug: 'roofer',      title: 'Roofer',      description: 'Roof repairs & re-roofing',           glyph: '🏠' },
-  { slug: 'tiler',       title: 'Tiler',       description: 'Bathroom, kitchen & floor tiling',    glyph: '🔲' },
-];
+/** The web's inline SVGs, as the closest Ionicons glyphs. */
+const TRADE_ICONS: Record<LaunchTradeSlug, IoniconName> = {
+  plumber: 'water-outline',
+  electrician: 'flash-outline',
+  handyman: 'construct-outline',
+  carpenter: 'hammer-outline',
+  painter: 'color-palette-outline',
+  plasterer: 'layers-outline',
+};
+
+/** Blurbs name the JOBS people actually search for, not the trade's own jargon. */
+const TILE_BLURB: Record<LaunchTradeSlug, string> = {
+  plumber: 'Leaks, hot water & blocked drains',
+  electrician: 'Power, lights & switchboards',
+  handyman: 'Odd jobs & small repairs',
+  carpenter: 'Decks, doors & custom joinery',
+  painter: 'Interiors, exteriors & repaints',
+  plasterer: 'Patching, cornices & rendering',
+};
 
 export function PopularTrades() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const router = useRouter();
 
+  const tiles = launchTrades().map((trade) => {
+    const slug = trade.slug as LaunchTradeSlug;
+    return {
+      title: trade.name,
+      description: TILE_BLURB[slug],
+      icon: TRADE_ICONS[slug],
+      onPress: () => router.push(ROUTES.tradeLanding(pluralSlugFor(trade)) as Href),
+    };
+  });
+
   return (
-    <View style={styles.wrap}>
-      <Text style={[styles.heading, { color: c.textPrimary }]}>Popular Trades</Text>
-      <Text style={[styles.subheading, { color: c.textSecondary }]}>
-        Find verified tradies across Australia&apos;s most in-demand trade categories.
-      </Text>
+    <>
+      <FeatureShaderCards
+        features={tiles}
+        heading="The six trades we're launching with"
+        subheading={`Inner Sydney first — ${COVERAGE.line}. Every tradie checked five ways before they can take your job.`}
+        ctaLabel="Find a tradie"
+      />
 
-      <View style={styles.grid}>
-        {TRADES.map((trade) => {
-          const tone = tradeColors(trade.slug, scheme);
-          return (
-            <Pressable
-              key={trade.slug}
-              onPress={() => router.push(`/results?trade=${trade.slug}` as any)}
-              style={({ pressed }) => [
-                styles.card,
-                {
-                  backgroundColor: c.surface,
-                  borderColor: c.border,
-                },
-                pressed && { transform: [{ scale: 0.98 }] },
-              ]}
-            >
-              <View
-                style={[
-                  styles.iconWrap,
-                  { backgroundColor: tone.tint },
-                ]}
-              >
-                <Text style={styles.iconGlyph}>{trade.glyph}</Text>
-              </View>
-              <Text style={[styles.cardTitle, { color: c.textPrimary }]}>{trade.title}</Text>
-              <Text style={[styles.cardDesc, { color: c.textSecondary }]} numberOfLines={2}>
-                {trade.description}
-              </Text>
+      {/* The seventh door — a full-width band, deliberately NOT a seventh tile. */}
+      <View style={styles.bandWrap}>
+        <View style={[styles.band, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <Text style={[styles.bandTitle, { color: c.textPrimary }]}>Need something else?</Text>
+          <Text style={[styles.bandCopy, { color: c.textSecondary }]}>
+            Tiler, cleaner, landscaper, air con, roofer — 50+ trades are on the list, and which ones we verify next is
+            decided by what people ask for. Tell us the trade and your suburb.
+          </Text>
+          <View style={styles.bandLinks}>
+            <Pressable accessibilityRole="link" onPress={() => router.push(ROUTES.waitlist as Href)} hitSlop={6} style={styles.linkRow}>
+              <Text style={[styles.primaryLink, { color: c.primary }]}>Tell us what you need</Text>
+              <Ionicons name="arrow-forward" size={16} color={c.primary} />
             </Pressable>
-          );
-        })}
+            <Pressable accessibilityRole="link" onPress={() => router.push(ROUTES.trades as Href)} hitSlop={6}>
+              <Text style={[styles.secondaryLink, { color: c.textSecondary }]}>See all 50+ trades</Text>
+            </Pressable>
+          </View>
+        </View>
       </View>
-
-      <Pressable
-        onPress={() => router.push('/all-trades' as any)}
-        style={styles.seeAll}
-        hitSlop={4}
-      >
-        <Text style={[styles.seeAllText, { color: c.primary }]}>See all 50+ trades →</Text>
-      </Pressable>
-    </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
+  bandWrap: {
+    marginTop: -Spacing['4xl'],
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing['2xl'],
-    gap: Spacing.lg,
+    paddingBottom: Spacing['3xl'],
   },
-  heading: {
-    fontFamily: FontFamily.bodyBold,
-    fontWeight: '700',
-    fontSize: 22,
+  band: {
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    padding: Spacing.xl,
+    alignItems: 'center',
+  },
+  bandTitle: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontWeight: '600',
+    fontSize: 16,
+    lineHeight: 24,
     textAlign: 'center',
   },
-  subheading: {
+  bandCopy: {
+    marginTop: 6,
     fontFamily: FontFamily.body,
     fontSize: 14,
     lineHeight: 22,
     textAlign: 'center',
-    paddingHorizontal: Spacing.lg,
+    maxWidth: 512,
   },
-  grid: {
+  bandLinks: {
+    marginTop: Spacing.lg,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.md,
-    marginTop: Spacing.sm,
-  },
-  card: {
-    flexBasis: '47%',
-    flexGrow: 1,
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    padding: Spacing.lg,
-    gap: 6,
-  },
-  iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    columnGap: Spacing['2xl'],
+    rowGap: Spacing.sm,
   },
-  iconGlyph: {
-    fontSize: 18,
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  cardTitle: {
-    fontFamily: FontFamily.bodyBold,
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  cardDesc: {
-    fontFamily: FontFamily.body,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  seeAll: {
-    alignSelf: 'center',
-    paddingVertical: Spacing.sm,
-  },
-  seeAllText: {
+  primaryLink: {
     fontFamily: FontFamily.bodySemiBold,
     fontWeight: '600',
-    fontSize: 13,
+    fontSize: 14,
+  },
+  secondaryLink: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontWeight: '600',
+    fontSize: 14,
   },
 });

@@ -1,104 +1,107 @@
+/**
+ * The composer — port of ~/bldesy-web/components/messages/message-input.tsx.
+ * Mirrors the DB CHECK constraint (messages_body_length, 2000 chars) so long
+ * pastes are truncated client-side; the remaining-characters counter appears
+ * at 200 left, like the website.
+ */
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Platform,
-  Pressable,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+
+import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { MESSAGE_MAX_LENGTH } from '@/lib/data/messages';
 
-type Props = {
-  onSend: (text: string) => Promise<void>;
+interface MessageInputProps {
+  onSend: (body: string) => void;
   disabled?: boolean;
-};
+  /** Safe-area / tab-bar padding under the bar. */
+  bottomInset?: number;
+}
 
-export function MessageInput({ onSend, disabled }: Props) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const colors = Colors[isDark ? 'dark' : 'light'];
-
+export function MessageInput({ onSend, disabled, bottomInset = 0 }: MessageInputProps) {
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
   const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
 
-  const canSend = text.trim().length > 0 && !sending && !disabled;
-
-  async function handleSend() {
-    if (!canSend) return;
-    const msg = text.trim();
+  function handleSend() {
+    const trimmed = text.trim();
+    if (!trimmed || disabled) return;
+    onSend(trimmed);
     setText('');
-    setSending(true);
-    try {
-      await onSend(msg);
-    } finally {
-      setSending(false);
-    }
   }
 
+  const remaining = MESSAGE_MAX_LENGTH - text.length;
+  const showCounter = remaining <= 200;
+  const canSend = text.trim().length > 0 && !disabled;
+
   return (
-    <View style={[styles.container, { borderTopColor: colors.border, backgroundColor: isDark ? colors.surface : '#ffffff' }]}>
-      <TextInput
-        style={[
-          styles.input,
-          {
-            backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
-            color: colors.text,
-          },
-        ]}
-        value={text}
-        onChangeText={setText}
-        placeholder="Type a message..."
-        placeholderTextColor={colors.textSecondary}
-        multiline
-        maxLength={2000}
-        editable={!disabled}
-        returnKeyType="send"
-        blurOnSubmit={false}
-        onSubmitEditing={Platform.OS === 'web' ? handleSend : undefined}
-      />
+    <View
+      style={[
+        styles.bar,
+        { borderTopColor: c.border, backgroundColor: c.surface, paddingBottom: Spacing.md + bottomInset },
+      ]}
+    >
+      <View style={styles.inputWrap}>
+        <TextInput
+          value={text}
+          onChangeText={(v) => setText(v.slice(0, MESSAGE_MAX_LENGTH))}
+          placeholder="Type a message..."
+          placeholderTextColor={c.textSecondary + '80'}
+          multiline
+          maxLength={MESSAGE_MAX_LENGTH}
+          editable={!disabled}
+          style={[
+            styles.input,
+            { backgroundColor: c.canvas, borderColor: c.border, color: c.textPrimary, opacity: disabled ? 0.5 : 1 },
+          ]}
+          accessibilityLabel="Type a message"
+        />
+        {showCounter ? (
+          <Text
+            style={[styles.counter, { color: remaining < 0 ? c.error : c.textSecondary }]}
+            accessibilityLiveRegion="polite"
+          >
+            {remaining}
+          </Text>
+        ) : null}
+      </View>
       <Pressable
-        style={[styles.sendBtn, { backgroundColor: canSend ? colors.teal : colors.border }]}
         onPress={handleSend}
         disabled={!canSend}
         accessibilityRole="button"
         accessibilityLabel="Send message"
+        accessibilityState={{ disabled: !canSend }}
+        style={[styles.sendBtn, { backgroundColor: c.primary, opacity: canSend ? 1 : 0.4 }]}
       >
-        {sending ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <MaterialIcons name="send" size={20} color={canSend ? '#fff' : colors.textSecondary} />
-        )}
+        <MaterialIcons name="send" size={20} color="#fff" />
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  bar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderTopWidth: 1,
     gap: Spacing.sm,
+    borderTopWidth: 1,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
   },
+  inputWrap: { flex: 1, position: 'relative' },
   input: {
-    flex: 1,
-    minHeight: 40,
+    minHeight: 44,
     maxHeight: 120,
+    borderWidth: 1,
     borderRadius: Radius.xl,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    paddingTop: 11,
+    paddingBottom: 11,
     fontSize: 15,
+    lineHeight: 20,
+    fontFamily: FontFamily.body,
   },
-  sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  counter: { position: 'absolute', bottom: 4, right: 12, fontSize: 10, fontFamily: FontFamily.body },
+  sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
 });

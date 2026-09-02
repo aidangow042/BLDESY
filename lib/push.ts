@@ -10,7 +10,10 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
+import { useEffect, useRef } from 'react';
+import { router, type Href } from 'expo-router';
 import { api, ApiError } from './api';
+import { webRouteToAppHref } from './data/push-routes';
 
 const PUSH_TOKEN_KEY = 'bldesy_push_token';
 const PUSH_USER_KEY = 'bldesy_push_user';
@@ -30,12 +33,28 @@ interface RegisterResult {
   token?: string;
 }
 
-export async function registerForPushNotifications(userId: string): Promise<RegisterResult> {
+/**
+ * Register the device for push.
+ *
+ * `prompt` controls whether we may show the iOS permission dialog:
+ *   - false (default): SILENT. Used on app launch / sign-in — we only refresh
+ *     the token if permission was already granted, and never prompt. Apple +
+ *     our own guidelines require permission requests at point of use, not on
+ *     launch.
+ *   - true: explicit user opt-in (e.g. the Settings "Push notifications"
+ *     toggle) — shows the system permission dialog if not yet decided.
+ */
+export async function registerForPushNotifications(
+  userId: string,
+  opts: { prompt?: boolean } = {},
+): Promise<RegisterResult> {
   if (!Device.isDevice) return { status: 'unsupported' };
 
   const { status: existing } = await Notifications.getPermissionsAsync();
   let permission = existing;
   if (permission !== 'granted') {
+    // Don't prompt on launch — only when the user explicitly opts in.
+    if (!opts.prompt) return { status: 'denied' };
     const { status } = await Notifications.requestPermissionsAsync();
     permission = status;
   }
@@ -82,4 +101,31 @@ export async function registerForPushNotifications(userId: string): Promise<Regi
 export async function clearPushRegistration() {
   await SecureStore.deleteItemAsync(PUSH_TOKEN_KEY);
   await SecureStore.deleteItemAsync(PUSH_USER_KEY);
+}
+
+/**
+ * Route a notification tap. The website's dispatcher puts a WEB path in
+ * `data.route` (e.g. /portal/billing, /messages?c=…, /jobs/{id}); app routes
+ * mirror those paths, and webRouteToAppHref() allowlists + maps them.
+ * Mount once, inside the navigation providers (root layout).
+ */
+export function useNotificationTapRouting() {
+  const handled = useRef<string | null>(null);
+
+  useEffect(() => {
+    function open(response: Notifications.NotificationResponse | null) {
+      if (!response) return;
+      const id = response.notification.request.identifier;
+      if (handled.current === id) return;
+      handled.current = id;
+      const data = response.notification.request.content.data as { route?: unknown } | undefined;
+      const route = typeof data?.route === 'string' ? data.route : undefined;
+      router.push(webRouteToAppHref(route) as Href);
+    }
+
+    // Cold start from a tap: the response that launched the app.
+    Notifications.getLastNotificationResponseAsync().then(open).catch(() => {});
+    const sub = Notifications.addNotificationResponseReceivedListener(open);
+    return () => sub.remove();
+  }, []);
 }

@@ -1,8 +1,8 @@
 /**
  * Toast + ToastProvider — non-blocking transient notifications. Replaces
- * `Alert.alert(...)` calls used today for success/error feedback. Web has no
- * direct equivalent (it uses inline form errors + redirects), so this is
- * pragmatic-RN.
+ * `Alert.alert(...)` calls used today for success/error feedback. The web uses
+ * sonner with `position="top-center"`, so toasts stack top-centre here too,
+ * 16px below the safe area.
  *
  * Usage:
  *   const toast = useToast();
@@ -20,11 +20,7 @@ import {
   useState,
 } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  FadeInDown,
-  FadeOutDown,
-  Layout,
-} from 'react-native-reanimated';
+import Animated, { FadeInUp, FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors, FontFamily, Radius, Shadows, Spacing } from '@/constants/theme';
@@ -96,7 +92,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         pointerEvents="box-none"
         style={[
           styles.stack,
-          { bottom: insets.bottom + 80 }, // above bottom tab bar
+          { top: insets.top + Spacing.lg }, // top-centre, clear of the status bar
         ]}
       >
         {items.map((t) => {
@@ -104,9 +100,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           return (
             <Animated.View
               key={t.id}
-              entering={FadeInDown.duration(200)}
-              exiting={FadeOutDown.duration(160)}
-              layout={Layout.duration(180)}
+              entering={FadeInUp.duration(200)}
+              exiting={FadeOutUp.duration(160)}
+              layout={LinearTransition.duration(180)}
               accessibilityRole="alert"
               accessibilityLiveRegion="polite"
               style={[styles.toast, Shadows.lg, { backgroundColor: bg }]}
@@ -127,6 +123,7 @@ const styles = StyleSheet.create({
     right: Spacing.lg,
     gap: Spacing.sm,
     alignItems: 'center',
+    zIndex: 100,
   },
   toast: {
     minWidth: 200,
