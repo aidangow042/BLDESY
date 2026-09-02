@@ -99,7 +99,13 @@
       ],
       "@react-native-community/datetimepicker",
       "expo-video",
-      "@stripe/stripe-react-native",
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.bldesy.app",
+          "enableGooglePay": false
+        }
+      ],
       "expo-font",
       "expo-web-browser"
     ],
