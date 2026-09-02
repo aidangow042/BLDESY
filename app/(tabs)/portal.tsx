@@ -119,7 +119,7 @@ export default function PortalScreen() {
       setStatus('none');
     } else if (data.approved) {
       setStatus('approved');
-      setProfile(data);
+      setProfile(data as unknown as ProfileData);
     } else {
       setStatus('pending');
     }

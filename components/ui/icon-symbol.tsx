@@ -29,7 +29,7 @@ const MAPPING = {
   'magnifyingglass': 'search',
   'plus.circle.fill': 'add-circle',
   'building.2': 'business',
-} as IconMapping;
+} as unknown as IconMapping;
 
 /**
  * An icon component that uses native SF Symbols on iOS, and Material Icons on Android and web.

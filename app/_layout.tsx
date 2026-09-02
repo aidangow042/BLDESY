@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { useFonts, RussoOne_400Regular } from '@expo-google-fonts/russo-one';
 import {
   Geist_400Regular,
@@ -23,6 +24,10 @@ import { registerForPushNotifications, clearPushRegistration } from '@/lib/push'
 import type { Session } from '@supabase/supabase-js';
 
 const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
+
+// Hold the native splash until fonts + the initial session are known, so the
+// first frame never flashes unstyled text or the wrong auth state.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -103,8 +108,13 @@ export default function RootLayout() {
     // Guests are allowed to browse — no forced redirect to login
   }, [session, segments]);
 
-  // Fix #3: Don't render anything while session is loading (prevents auth flash)
-  if (session === undefined) {
+  const ready = fontsLoaded && session !== undefined;
+  useEffect(() => {
+    if (ready) SplashScreen.hideAsync().catch(() => {});
+  }, [ready]);
+
+  // Don't render anything until fonts + session are known (prevents auth/font flash)
+  if (!ready) {
     return null;
   }
 

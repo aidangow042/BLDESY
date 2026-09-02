@@ -181,7 +181,7 @@ export default function JobDetailScreen() {
     ]);
 
     if (jobRes.data) {
-      setJob(jobRes.data);
+      setJob(jobRes.data as Job);
       const { data: prof } = await supabase
         .from('profiles')
         .select('name, avatar_url')
@@ -369,8 +369,8 @@ export default function JobDetailScreen() {
   /* ─── Derived values ─────────────────────────────────────── */
 
   const urg = URGENCY_CONFIG[job.urgency] ?? { label: job.urgency, icon: 'help-circle-outline' as const, color: '#64748b', bg: '#f1f5f9' };
-  const displayName = getDisplayName(customer?.name);
-  const initials = getInitials(customer?.name);
+  const displayName = getDisplayName(customer?.name ?? null);
+  const initials = getInitials(customer?.name ?? null);
   // Contact info is server-gated via get_job_contact() RPC — only returned for job owner or accepted applicant
   const hasContact = contactInfo?.contact_phone || contactInfo?.contact_email;
 

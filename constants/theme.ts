@@ -34,6 +34,8 @@ const lightTokens = {
   primaryDark: '#0A8268',
   primaryLight: '#ccfbf1',
   primaryBg: '#e6f7f2',
+  cta: '#F59E0B',        // --color-cta (amber conversion accent — homeowner actions only)
+  ctaDark: '#D97706',    // --color-cta-dark
 
   /* Canvas + surface */
   canvas: '#FFF8F0',
@@ -95,6 +97,8 @@ const darkTokens = {
   primaryDark: '#14b8a6',
   primaryLight: '#042f2e',
   primaryBg: '#0f2a2a',
+  cta: '#F59E0B',        // not overridden in dark on the web either
+  ctaDark: '#D97706',
 
   canvas: '#0f172a',
   surface: '#1e293b',

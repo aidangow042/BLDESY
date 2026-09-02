@@ -278,7 +278,7 @@ export default function EditProfileScreen() {
 
     const { data, error } = await supabase
       .from('builder_profiles')
-      .select('id, user_id, business_name, trade_category, trade_categories, suburb, postcode, bio, phone, email, website, profile_photo_url, cover_photo_url, cover_color, projects, specialties, specialisations, credentials, credentials_verified, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km')
+      .select('id, user_id, business_name, trade_category, trade_categories, suburb, postcode, bio, phone, email, website, profile_photo_url, cover_photo_url, cover_color, projects, specialties, specialisations, credentials, credentials_verified, availability, availability_note, response_time, urgency_capacity, abn, license_key, latitude, longitude, radius_km, established_year, team_size, areas_serviced, team_members, faqs')
       .eq('user_id', userId)
       .maybeSingle();
 

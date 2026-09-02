@@ -147,7 +147,7 @@ function useAnalyticsData(period: Period) {
     try {
       const vQ = supabase.from('job_views').select('job_id, created_at').in('job_id', jobIds);
       if (cutoff) vQ.gte('created_at', cutoff);
-      viewsPromise = vQ;
+      viewsPromise = Promise.resolve(vQ);
     } catch { /* table may not exist */ }
 
     const [appsRes, viewsRes] = await Promise.all([appsQ, viewsPromise]);
