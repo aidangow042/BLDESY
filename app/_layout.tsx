@@ -29,12 +29,15 @@ import {
 } from '@/lib/auth-context';
 import { registerForPushNotifications, clearPushRegistration, useNotificationTapRouting } from '@/lib/push';
 import { useReferralCapture } from '@/lib/auth/referral-code';
+import { applyStoredThemePreference } from '@/components/customer-dashboard/theme-preference';
 
 const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
 
 // Hold the native splash until fonts + the initial session are known, so the
 // first frame never flashes unstyled text or the wrong auth state.
 SplashScreen.preventAutoHideAsync().catch(() => {});
+// Settings → Appearance (Light / Dark / System) persists in AsyncStorage; re-apply at launch.
+applyStoredThemePreference().catch(() => {});
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -131,7 +134,6 @@ export default function RootLayout() {
                 >
                   <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
                   <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
-                  <Stack.Screen name="builder-profile" options={{ fullScreenGestureEnabled: false }} />
                 </Stack>
                 <OfflineBanner />
                 <StatusBar style="auto" translucent />

@@ -4,9 +4,8 @@
  * delete, meta row (location · budget · posted), description preview, the
  * "View Applicants" toggle and the expandable applicants section.
  */
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { ActivityIndicator } from 'react-native';
 
 import { Badge, Card } from '@/components/ui';
 import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
