@@ -132,9 +132,6 @@ export default function RootLayout() {
                   <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
                   <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
                   <Stack.Screen name="builder-profile" options={{ fullScreenGestureEnabled: false }} />
-                  <Stack.Screen name="builder-edit-profile" options={{ fullScreenGestureEnabled: false }} />
-                  <Stack.Screen name="enterprise-edit-profile" options={{ fullScreenGestureEnabled: false }} />
-                  <Stack.Screen name="enterprise-dashboard" options={{ gestureEnabled: false }} />
                 </Stack>
                 <OfflineBanner />
                 <StatusBar style="auto" translucent />

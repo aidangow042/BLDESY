@@ -31,7 +31,7 @@ import {
   getSpecialisationsForTrade,
   hasSpecialisations,
   type BuilderSpecialisations,
-} from '@/lib/trade-specialisations';
+} from '@/lib/web/trade-specialisations';
 
 interface SpecialityPickerProps {
   /** Trades whose sub-trades should be offered. Usually one. */
