@@ -10,7 +10,10 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
+import { useEffect, useRef } from 'react';
+import { router, type Href } from 'expo-router';
 import { api, ApiError } from './api';
+import { webRouteToAppHref } from './data/push-routes';
 
 const PUSH_TOKEN_KEY = 'bldesy_push_token';
 const PUSH_USER_KEY = 'bldesy_push_user';
@@ -98,4 +101,31 @@ export async function registerForPushNotifications(
 export async function clearPushRegistration() {
   await SecureStore.deleteItemAsync(PUSH_TOKEN_KEY);
   await SecureStore.deleteItemAsync(PUSH_USER_KEY);
+}
+
+/**
+ * Route a notification tap. The website's dispatcher puts a WEB path in
+ * `data.route` (e.g. /portal/billing, /messages?c=…, /jobs/{id}); app routes
+ * mirror those paths, and webRouteToAppHref() allowlists + maps them.
+ * Mount once, inside the navigation providers (root layout).
+ */
+export function useNotificationTapRouting() {
+  const handled = useRef<string | null>(null);
+
+  useEffect(() => {
+    function open(response: Notifications.NotificationResponse | null) {
+      if (!response) return;
+      const id = response.notification.request.identifier;
+      if (handled.current === id) return;
+      handled.current = id;
+      const data = response.notification.request.content.data as { route?: unknown } | undefined;
+      const route = typeof data?.route === 'string' ? data.route : undefined;
+      router.push(webRouteToAppHref(route) as Href);
+    }
+
+    // Cold start from a tap: the response that launched the app.
+    Notifications.getLastNotificationResponseAsync().then(open).catch(() => {});
+    const sub = Notifications.addNotificationResponseReceivedListener(open);
+    return () => sub.remove();
+  }, []);
 }

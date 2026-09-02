@@ -27,7 +27,7 @@ import {
   useRoles,
   useUser,
 } from '@/lib/auth-context';
-import { registerForPushNotifications, clearPushRegistration } from '@/lib/push';
+import { registerForPushNotifications, clearPushRegistration, useNotificationTapRouting } from '@/lib/push';
 import { useReferralCapture } from '@/lib/auth/referral-code';
 
 const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
@@ -53,6 +53,8 @@ function PostAuthEffects() {
 
   // bldesy://join?ref=… / https://www.bldesy.com.au/join?ref=… launch URLs → 30-day pending referral code.
   useReferralCapture();
+  // Notification taps deep-link to the mirrored web route (data.route).
+  useNotificationTapRouting();
 
   // Push registration follows the signed-in user; sign-out clears the cached token.
   useEffect(() => {
