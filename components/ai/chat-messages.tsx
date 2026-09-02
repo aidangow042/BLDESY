@@ -17,7 +17,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
+import { ROUTES } from '@/lib/routes';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ReportModal } from '@/components/report-modal';
@@ -201,7 +202,7 @@ export function ChatMessages({
               {msg.builders.map((b) => (
                 <Pressable
                   key={b.id}
-                  onPress={() => router.push(`/builder-profile?id=${b.id}` as any)}
+                  onPress={() => router.push(ROUTES.builderProfile(b.id) as Href)}
                   style={({ pressed }) => [
                     styles.builderCard,
                     { backgroundColor: c.surface, borderColor: c.border },
@@ -236,11 +237,12 @@ export function ChatMessages({
               {msg.searchParams ? (
                 <Pressable
                   onPress={() => {
-                    const sp = new URLSearchParams();
+                    // Same params the website's /search results state reads (show=results&trade&location&urgency).
+                    const sp = new URLSearchParams({ show: 'results' });
                     if (msg.searchParams?.trade_category) sp.set('trade', msg.searchParams.trade_category);
                     if (msg.searchParams?.suburb) sp.set('location', msg.searchParams.suburb);
                     if (msg.searchParams?.urgency) sp.set('urgency', msg.searchParams.urgency);
-                    router.push(`/results?${sp.toString()}` as any);
+                    router.push(`${ROUTES.search}?${sp.toString()}` as Href);
                   }}
                   style={[styles.viewAllPill, { backgroundColor: c.primaryBg }]}
                 >

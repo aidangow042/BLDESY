@@ -7,12 +7,14 @@
 import { isLaunchTrade } from '@/lib/web/launch-trades';
 import type { SuburbEntry } from '@/lib/web/suburbs';
 import {
+  TRADE_CATEGORIES,
   getAllTrades,
   getTradeByPluralSlug,
   getTradeBySlug,
   pluralNameFor,
   pluralSlugFor,
   type Trade,
+  type TradeCategory,
 } from '@/lib/web/trades';
 import { FIVE_CHECKS_LIST } from '@/lib/web/verification-copy';
 
@@ -97,4 +99,17 @@ export function verifiedHeading(trade: Trade, count: number | null): { title: st
     title: `Verified ${people} on BLDESY`,
     meta: count ? `— ${count} listed` : null,
   };
+}
+
+/**
+ * components/trades/trade-filter.tsx (web): case-insensitive substring match on
+ * the trade name; categories left with no matches drop out; blank = everything.
+ */
+export function filterTradeCategories(query: string): TradeCategory[] {
+  const normalised = query.toLowerCase().trim();
+  if (!normalised) return TRADE_CATEGORIES;
+  return TRADE_CATEGORIES.map((cat) => ({
+    ...cat,
+    trades: cat.trades.filter((t) => t.name.toLowerCase().includes(normalised)),
+  })).filter((cat) => cat.trades.length > 0);
 }

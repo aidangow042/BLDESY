@@ -1,18 +1,16 @@
 /**
- * TrustStrip — short social-proof row between hero and trades grid.
- * Mirrors `~/bldesy-web/components/home/trust-strip.tsx`.
+ * TrustStrip — ~/bldesy-web/components/home/trust-strip.tsx (the launch-mode
+ * strip under the hero). Homeowner-value messaging — deliberately NOT
+ * verification (the hero pills already cover Licensed · Insured · ID checked),
+ * so the two rows don't repeat.
  */
-
 import { StyleSheet, Text, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Colors, FontFamily, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-const ITEMS = [
-  'Free for homeowners',
-  '50+ verified trades',
-  'ABN-checked tradies',
-];
+const ITEMS = ['Free to search', 'No lead fees', 'Flat-fee tradies'];
 
 export function TrustStrip() {
   const scheme = useColorScheme() ?? 'light';
@@ -20,19 +18,15 @@ export function TrustStrip() {
 
   return (
     <View
-      style={[
-        styles.wrap,
-        { backgroundColor: c.surface, borderTopColor: c.border, borderBottomColor: c.border },
-      ]}
+      accessibilityLabel="Why use BLDESY"
+      style={[styles.wrap, { backgroundColor: c.surface, borderTopColor: c.border, borderBottomColor: c.border }]}
     >
-      <View style={styles.row}>
-        {ITEMS.map((label) => (
-          <View key={label} style={styles.item}>
-            <Text style={[styles.check, { color: c.primary }]}>✓</Text>
-            <Text style={[styles.label, { color: c.textPrimary }]}>{label}</Text>
-          </View>
-        ))}
-      </View>
+      {ITEMS.map((label) => (
+        <View key={label} style={styles.item}>
+          <Ionicons name="checkmark" size={16} color={c.primary} />
+          <Text style={[styles.label, { color: c.textPrimary }]}>{label}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -43,21 +37,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingVertical: Spacing.lg,
     paddingHorizontal: Spacing.lg,
-  },
-  row: {
-    flexDirection: 'column',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: Spacing.md,
   },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-  },
-  check: {
-    fontFamily: FontFamily.bodyBold,
-    fontSize: 14,
-    fontWeight: '800',
   },
   label: {
     fontFamily: FontFamily.bodyMedium,

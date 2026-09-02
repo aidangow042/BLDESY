@@ -1,22 +1,16 @@
 /**
- * TradieCta — dark-gradient call-to-action section for tradies, sitting at
- * the bottom of the homepage. Mirrors `~/bldesy-web/components/home/tradie-cta.tsx`.
+ * TradieCta — ~/bldesy-web/components/home/tradie-cta.tsx: the dark-gradient
+ * banner at the bottom of the homepage. The comparison cards that used to sit
+ * under it now live in ComparisonStrip. Tradie CTA = primary green (never cta
+ * amber), rounded-full like the web.
  */
-
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter, type Href } from 'expo-router';
 
-import { Button } from '@/components/ui';
-import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
+import { Colors, FontFamily, Radius, Shadows, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-
-const COMPARISONS = [
-  { vs: 'Hipages',       point: 'No per-lead fees. Flat subscription — keep more of what you earn.' },
-  { vs: 'Airtasker',     point: 'Purpose-built for licensed trades, not odd jobs and errands.' },
-  { vs: 'Google Search', point: 'Verified profiles, real reviews, and AI-powered matching.' },
-  { vs: 'Word of Mouth', point: 'Search by trade, location & urgency. See credentials before you call.' },
-];
+import { ROUTES } from '@/lib/routes';
 
 export function TradieCta() {
   const scheme = useColorScheme() ?? 'light';
@@ -24,33 +18,25 @@ export function TradieCta() {
   const router = useRouter();
 
   return (
-    <LinearGradient
-      colors={['#0a0a1a', '#0f1a1a', '#0a2018']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.section}
-    >
-      <View style={styles.pitch}>
-        <Text style={styles.heading}>Are you a tradie?</Text>
-        <Text style={styles.subhead}>
-          No commission. No bidding wars. Just customers who need you.
+    <LinearGradient colors={['#0a0a1a', '#0f1a1a', '#0a2018']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.section}>
+      <View style={styles.centre}>
+        <Text accessibilityRole="header" style={styles.heading}>
+          Are you a tradie?
         </Text>
-        <Button
-          variant="primary"
-          size="lg"
-          onPress={() => router.push('/builder-signup' as any)}
+        <Text style={styles.sub}>Stop bidding for jobs. Start getting chosen.</Text>
+        <Pressable
+          accessibilityRole="link"
+          onPress={() => router.push(ROUTES.forTradies as Href)}
+          style={({ pressed }) => [styles.btn, Shadows.lg, pressed && { transform: [{ scale: 0.98 }] }]}
         >
-          Join BLDESY!
-        </Button>
-      </View>
-
-      <View style={styles.grid}>
-        {COMPARISONS.map((item) => (
-          <View key={item.vs} style={styles.card}>
-            <Text style={styles.vsBadge}>vs {item.vs}</Text>
-            <Text style={styles.cardText}>{item.point}</Text>
-          </View>
-        ))}
+          <LinearGradient
+            colors={[c.primary, c.primaryDark]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <Text style={styles.btnText}>Join BLDESY!</Text>
+        </Pressable>
       </View>
     </LinearGradient>
   );
@@ -58,57 +44,42 @@ export function TradieCta() {
 
 const styles = StyleSheet.create({
   section: {
-    paddingVertical: Spacing['5xl'],
+    paddingVertical: Spacing['6xl'],
     paddingHorizontal: Spacing.lg,
-    gap: Spacing['3xl'],
   },
-  pitch: {
+  centre: {
     alignItems: 'center',
-    gap: Spacing.md,
   },
   heading: {
     fontFamily: FontFamily.bodyBold,
     fontWeight: '700',
-    fontSize: 28,
+    fontSize: 30,
+    lineHeight: 36,
     color: '#ffffff',
     textAlign: 'center',
+    marginBottom: Spacing.md,
   },
-  subhead: {
+  sub: {
     fontFamily: FontFamily.body,
-    fontSize: 15,
-    lineHeight: 22,
-    color: 'rgba(255,255,255,0.55)',
+    fontSize: 16,
+    lineHeight: 24,
+    color: 'rgba(255,255,255,0.5)',
     textAlign: 'center',
-    maxWidth: 320,
+    maxWidth: 512,
+    marginBottom: Spacing['3xl'],
   },
-  grid: {
-    gap: Spacing.md,
+  btn: {
+    height: 48,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing['2xl'],
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
-  card: {
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    padding: Spacing.lg,
-    gap: Spacing.md,
-  },
-  vsBadge: {
+  btnText: {
     fontFamily: FontFamily.bodyBold,
     fontWeight: '700',
-    fontSize: 10,
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    color: 'rgba(255,255,255,0.45)',
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: Radius.full,
-  },
-  cardText: {
-    fontFamily: FontFamily.body,
-    fontSize: 13,
-    lineHeight: 20,
-    color: 'rgba(255,255,255,0.75)',
+    fontSize: 14,
+    color: '#ffffff',
   },
 });

@@ -12,17 +12,8 @@ import { Card, Input } from '@/components/ui';
 import { Colors, FontFamily, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ROUTES } from '@/lib/routes';
-import { TRADE_CATEGORIES, pluralSlugFor, type TradeCategory } from '@/lib/web/trades';
-
-/** Pure filter rule: case-insensitive substring on the trade name; empty categories drop out. */
-export function filterTradeCategories(query: string): TradeCategory[] {
-  const normalised = query.toLowerCase().trim();
-  if (!normalised) return TRADE_CATEGORIES;
-  return TRADE_CATEGORIES.map((cat) => ({
-    ...cat,
-    trades: cat.trades.filter((t) => t.name.toLowerCase().includes(normalised)),
-  })).filter((cat) => cat.trades.length > 0);
-}
+import { filterTradeCategories } from '@/components/trades/trade-copy';
+import { pluralSlugFor } from '@/lib/web/trades';
 
 export function TradeFilter() {
   const scheme = useColorScheme() ?? 'light';

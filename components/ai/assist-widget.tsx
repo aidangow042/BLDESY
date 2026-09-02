@@ -74,7 +74,7 @@ export function AiAssistWidget({ hidden = false }: AiAssistWidgetProps) {
   const onAiPage = segments.includes('ai');
   const onMapPage = segments.includes('map');
   const onProfilePage =
-    pathname.startsWith('/builder-profile') ||
+    pathname.startsWith('/builder/') ||
     pathname.startsWith('/builder/') ||
     pathname.startsWith('/company/');
 
