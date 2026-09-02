@@ -1,10 +1,10 @@
 /**
  * AuthCard — shared layout for /login, /signup, /forgot-password. Mirrors the
- * web's auth card (`~/bldesy-web/app/login/page.tsx`):
- *   • Outer canvas background, centred
- *   • Card with rounded-2xl border + soft shadow
- *   • Top stripe: teal gradient with white Russo One BLDESY! wordmark
- *   • Body: padded form area provided by the screen
+ * website's auth card (`~/bldesy-web/app/login/page.tsx`):
+ *   • Canvas background, card centred, `max-w-[450px]`
+ *   • Teal gradient header (`from-primary to-primary-dark`, px-6 py-6) with the
+ *     white Russo One `BLDESY!` wordmark (`font-display text-3xl tracking-tight`)
+ *   • White card body below (px-6 py-8) holding the h1, optional lead and form
  */
 
 import { useEffect } from 'react';
@@ -13,7 +13,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   View,
@@ -34,11 +33,15 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 interface AuthCardProps {
   /** Body of the card (form fields, primary button, links). */
   children: React.ReactNode;
-  /** Show a back-chevron in the top-left of the gradient stripe. */
+  /** The page h1 (web: `text-2xl font-bold text-center`). */
+  title?: string;
+  /** Lead paragraph under the h1 (web: `text-sm text-text-secondary text-center`). */
+  subtitle?: string;
+  /** Show a back-chevron in the top-left of the gradient header. */
   showBack?: boolean;
 }
 
-export function AuthCard({ children, showBack = true }: AuthCardProps) {
+export function AuthCard({ children, title, subtitle, showBack = true }: AuthCardProps) {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const insets = useSafeAreaInsets();
@@ -62,28 +65,25 @@ export function AuthCard({ children, showBack = true }: AuthCardProps) {
       style={[styles.root, { backgroundColor: c.canvas }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <StatusBar barStyle="light-content" />
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing['3xl'] }]}
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing['3xl'] },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <Animated.View
-          style={[
-            animStyle,
-            styles.card,
-            Shadows.md,
-            { backgroundColor: c.surface, borderColor: c.border },
-          ]}
+          style={[animStyle, styles.card, Shadows.md, { backgroundColor: c.surface, borderColor: c.border }]}
         >
-          {/* Gradient stripe with wordmark */}
+          {/* Teal gradient header with the wordmark */}
           <LinearGradient
-            colors={[c.primary, c.primaryDark]}
+            colors={[c.gradientHeaderFrom, c.gradientHeaderTo]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={styles.stripe}
+            style={styles.header}
           >
-            {showBack ? (
+            {showBack && router.canGoBack() ? (
               <Pressable
                 onPress={() => router.back()}
                 hitSlop={10}
@@ -94,11 +94,25 @@ export function AuthCard({ children, showBack = true }: AuthCardProps) {
                 <Text style={styles.backChevron}>‹</Text>
               </Pressable>
             ) : null}
-            <Text style={styles.wordmark}>BLDESY!</Text>
+            <Text style={styles.wordmark} accessibilityRole="header">
+              BLDESY!
+            </Text>
           </LinearGradient>
 
-          {/* Body */}
-          <View style={styles.body}>{children}</View>
+          {/* White card body */}
+          <View style={styles.body}>
+            {title ? (
+              <View style={styles.heading}>
+                <Text accessibilityRole="header" style={[styles.title, { color: c.textPrimary }]}>
+                  {title}
+                </Text>
+                {subtitle ? (
+                  <Text style={[styles.subtitle, { color: c.textSecondary }]}>{subtitle}</Text>
+                ) : null}
+              </View>
+            ) : null}
+            {children}
+          </View>
         </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -118,20 +132,20 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 450,
     alignSelf: 'center',
-    borderRadius: Radius.xl,
+    borderRadius: Radius['2xl'],
     borderWidth: 1,
     overflow: 'hidden',
   },
-  stripe: {
+  header: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing['2xl'],
+    paddingVertical: Spacing['2xl'],
   },
   backBtn: {
     position: 'absolute',
     left: Spacing.md,
-    top: Spacing.sm,
+    top: Spacing.lg,
     height: 36,
     width: 36,
     borderRadius: 18,
@@ -145,13 +159,31 @@ const styles = StyleSheet.create({
   },
   wordmark: {
     fontFamily: FontFamily.display,
-    fontSize: 28,
-    letterSpacing: -0.5,
+    fontSize: 30,
+    lineHeight: 36,
+    letterSpacing: -0.75,
     color: '#ffffff',
   },
   body: {
     paddingHorizontal: Spacing['2xl'],
     paddingVertical: Spacing['3xl'],
     gap: Spacing.lg,
+  },
+  heading: {
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  title: {
+    fontSize: 24,
+    lineHeight: 32,
+    fontFamily: FontFamily.bodyBold,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: FontFamily.body,
+    textAlign: 'center',
   },
 });
