@@ -6,10 +6,11 @@ Everything that can be done in code for the Apple review checklist (items 1–9,
 
 ## 0. Deploy / backend dependencies (do first)
 These make the in-app features actually work:
-- [ ] Deploy `~/bldesy-web` to production (hosts `/api/report`, `/admin/reports`, account-deletion email, the `/auth/app-bridge` signup hand-off).
-- [ ] Apply migration `~/bldesy-web/supabase/migrations/20260603_ugc_moderation.sql` to the Supabase project.
-- [ ] Set `ADMIN_EMAIL` in the web (Vercel) env (falls back to hello@bldesy.com.au).
-- [ ] Confirm Supabase **Site URL / redirect URLs** and that auth emails are confirmed-deliverable.
+- [ ] Merge + deploy `bldesy-web` PR #27 (the app's API contract: Bearer-capable messaging/preferences/decision routes, `POST /api/jobs`, `/api/me/capabilities`, `/api/me/referrals`, `/api/auth/post-signup`, `DELETE /api/me/application`, app-bridge allowlist).
+- [ ] Vercel → bldesy-web → `MOBILE_APP_SECRET` = the value of `EXPO_PUBLIC_MOBILE_APP_SECRET` in this repo's `.env` / EAS env (lets the website skip Turnstile for app requests). Redeploy after changing it.
+- [ ] Supabase → Authentication → URL Configuration → Redirect URLs: add `bldesy://auth/callback` (Google sign-in return).
+- [ ] EAS env var `EXPO_PUBLIC_MOBILE_APP_SECRET` exists for production/preview/development (`eas env:list`).
+- [ ] Confirm Supabase **Site URL / redirect URLs** and that auth emails/SMS are confirmed-deliverable.
 
 ## 1. Apple Developer Program (item 13)
 - [ ] Enrol in the Apple Developer Program ($99/yr) — individual or company.
