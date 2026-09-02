@@ -227,3 +227,20 @@ export function useUnreadCount(options: { pollMs?: number } = {}): {
 
   return { count: userId ? count : 0, refresh: fetchCount };
 }
+
+/** Result of POST /api/billing/void-contact (website lib/billing/contacts.ts). */
+export interface VoidContactResult {
+  ok: true;
+  voided: number;
+  reverted: boolean;
+  count: number;
+}
+
+/**
+ * Junk-flag a homeowner conversation so it stops counting as a qualified
+ * contact (website ConversationView ⋯ menu → POST /api/billing/void-contact).
+ * Only within the 7-day void window; 409 = already voided, 422 = window expired.
+ */
+export async function flagConversationJunk(conversationId: string, reason = 'junk'): Promise<VoidContactResult> {
+  return api.post<VoidContactResult>('/api/billing/void-contact', { conversationId, reason });
+}

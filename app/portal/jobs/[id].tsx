@@ -30,7 +30,7 @@ import { UrgencyPill } from '@/components/jobs/urgency-pill';
 import { WhenAndHowBlock } from '@/components/jobs/when-and-how-block';
 import { SendMessageButton } from '@/components/messages/send-message-button';
 import { ReportButton } from '@/components/report-button';
-import { PortalPage } from '@/components/tradie/portal-page';
+import { PortalPage } from '@/components/portal/portal-page';
 import { Skeleton, useToast } from '@/components/ui';
 import { Colors, FontFamily, Radius, Shadows, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';

@@ -19,7 +19,7 @@ import { LocationStep } from '@/components/edit-profile/location-step';
 import { ProjectsStep } from '@/components/edit-profile/projects-step';
 import { TeamFaqsStep } from '@/components/edit-profile/team-faqs-step';
 import type { StepProps } from '@/components/edit-profile/types';
-import { PortalPage } from '@/components/tradie/portal-page';
+import { PortalPage } from '@/components/portal/portal-page';
 import { useToast } from '@/components/ui';
 import { Colors, FontFamily, Radius, Shadows, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';

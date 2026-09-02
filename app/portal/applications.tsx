@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApplicationStatusBadge } from '@/components/jobs/application-status-badge';
 import { FeedSkeleton } from '@/components/jobs/feed-primitives';
 import { UrgencyPill } from '@/components/jobs/urgency-pill';
-import { PortalPage } from '@/components/tradie/portal-page';
+import { PortalPage } from '@/components/portal/portal-page';
 import { useToast } from '@/components/ui';
 import { Colors, FontFamily, Radius, Shadows, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';

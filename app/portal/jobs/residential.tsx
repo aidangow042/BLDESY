@@ -15,7 +15,7 @@ import { ApplyModal } from '@/components/jobs/apply-modal';
 import { FeedEmpty, FeedSkeleton, UrgencyFilterRow } from '@/components/jobs/feed-primitives';
 import { HideJobModal } from '@/components/jobs/hide-job-modal';
 import { TradieJobCard } from '@/components/jobs/tradie-job-card';
-import { PortalPage } from '@/components/tradie/portal-page';
+import { PortalPage } from '@/components/portal/portal-page';
 import { useToast } from '@/components/ui';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';

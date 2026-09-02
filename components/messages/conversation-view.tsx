@@ -27,11 +27,10 @@ import { ReportModal } from '@/components/report-modal';
 import { useToast } from '@/components/ui';
 import { Colors, FontFamily, Radius, Shadows, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { api, ApiError } from '@/lib/api';
+import { ApiError } from '@/lib/api';
 import { useUser } from '@/lib/auth-context';
 import { blockUser, getBlockedIds, unblockUser } from '@/lib/blocking';
-import {
-  getThread,
+import { flagConversationJunk, getThread,
   MESSAGES_PAGE_SIZE,
   sendMessage,
   sendMessageErrorMessage,
@@ -262,7 +261,7 @@ export function ConversationView({
     setFlagJunkBusy(true);
     setMenuOpen(false);
     try {
-      await api.post('/api/billing/void-contact', { conversationId, reason: 'junk' });
+      await flagConversationJunk(conversationId);
       toast.show("Enquiry flagged as junk — it won't count toward your free enquiries.", { variant: 'success' });
     } catch (e) {
       toast.show(

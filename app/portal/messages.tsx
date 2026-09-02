@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Inbox } from '@/components/messages/inbox';
 import { PORTAL_HEADER_HEIGHT } from '@/components/portal/portal-header';
-import { PortalPage } from '@/components/tradie/portal-page';
+import { PortalPage } from '@/components/portal/portal-page';
 import { zoneIsLive } from '@/lib/launch-flags';
 
 export default function PortalMessagesScreen() {
