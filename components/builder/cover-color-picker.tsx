@@ -79,6 +79,26 @@ function hexToHsl(hex: string): { h: number; s: number; l: number } {
   return { h, s, l };
 }
 
+// Lighten/darken a #RRGGBB hex by `amt` per channel — mirrors the website's
+// profile-header shadeHex so the edit-profile preview matches the live banner.
+export function shadeHex(hex: string, amt: number): string {
+  const m = hex.replace('#', '');
+  if (m.length < 6) return hex;
+  const ch = (i: number) => {
+    const v = parseInt(m.slice(i, i + 2), 16) + amt;
+    return Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0');
+  };
+  return `#${ch(0)}${ch(2)}${ch(4)}`;
+}
+
+/**
+ * The public banner's 135° gradient stops (web `bannerGradient(hex)`:
+ * `linear-gradient(135deg, +22 0%, hex 50%, -30 100%)`) for an expo LinearGradient.
+ */
+export function bannerGradientColors(hex: string): [string, string, string] {
+  return [shadeHex(hex, 22), hex, shadeHex(hex, -30)];
+}
+
 /** A draggable spectrum bar (hue or shade). `pos` is 0–1 along the bar. */
 function SpectrumBar({
   gradient,

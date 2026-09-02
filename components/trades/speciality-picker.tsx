@@ -45,6 +45,8 @@ interface SpecialityPickerProps {
   triggerLabel?: string;
   /** Heading inside the sheet. */
   title?: string;
+  /** Fired when the sheet closes (Done, ✕ or backdrop) — the web SpecialityModal's `onDone`. */
+  onDone?: () => void;
 }
 
 export function SpecialityPicker({
@@ -54,11 +56,17 @@ export function SpecialityPicker({
   tradeName,
   triggerLabel = 'Add specialities',
   title = 'Choose specialities',
+  onDone,
 }: SpecialityPickerProps) {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
+
+  function close() {
+    setOpen(false);
+    onDone?.();
+  }
 
   const eligible = useMemo(
     () => selectedTrades.filter(hasSpecialisations),
@@ -107,10 +115,10 @@ export function SpecialityPicker({
         transparent
         animationType="fade"
         statusBarTranslucent
-        onRequestClose={() => setOpen(false)}
+        onRequestClose={close}
       >
         <View style={styles.modalRoot}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} />
+          <Pressable style={StyleSheet.absoluteFill} onPress={close} />
           <View
             style={[
               styles.sheet,
@@ -121,7 +129,7 @@ export function SpecialityPicker({
 
             <View style={styles.sheetHeader}>
               <Text style={[styles.sheetTitle, { color: c.textPrimary }]}>{title}</Text>
-              <Pressable onPress={() => setOpen(false)} hitSlop={10} accessibilityLabel="Close">
+              <Pressable onPress={close} hitSlop={10} accessibilityLabel="Close">
                 <MaterialIcons name="close" size={22} color={c.textSecondary} />
               </Pressable>
             </View>
@@ -174,7 +182,7 @@ export function SpecialityPicker({
             </ScrollView>
 
             <Pressable
-              onPress={() => setOpen(false)}
+              onPress={close}
               style={[styles.doneBtn, { backgroundColor: c.primary }]}
               accessibilityRole="button"
             >

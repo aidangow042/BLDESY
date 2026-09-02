@@ -10,3 +10,10 @@ export { FadeIn } from './fade-in';
 export { Input, type InputProps } from './input';
 export { Skeleton, type SkeletonVariant } from './skeleton';
 export { ToastProvider, useToast, type ToastOptions, type ToastVariant } from './toast';
+export { ToggleSwitch, type ToggleAccent, type ToggleSize, type ToggleSwitchProps } from './toggle-switch';
+export {
+  SegmentedControl,
+  type SegmentedAccent,
+  type SegmentedControlProps,
+  type SegmentedOption,
+} from './segmented-control';

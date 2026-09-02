@@ -135,11 +135,6 @@ export default function TabLayout() {
       <TopTabs.Screen name="index" options={{ title: 'Home' }} />
       <TopTabs.Screen name="ai" options={{ title: 'AI Assist' }} />
       <TopTabs.Screen name="map" options={{ title: 'Map', swipeEnabled: false }} />
-      {/* Saved lives in the drawer / account menu — keep the screen registered so
-          deep links to /saved still work, but hidden from the bar. */}
-      <TopTabs.Screen name="saved" options={{ swipeEnabled: false }} />
-      {/* Portal is role-gated and renders its own shell — the bar hides itself there. */}
-      <TopTabs.Screen name="portal" options={{ swipeEnabled: false }} />
     </TopTabs>
   );
 }

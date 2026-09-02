@@ -11,7 +11,8 @@ import {
 
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { api, ApiError } from '@/lib/api';
+import { ApiError } from '@/lib/api';
+import { AccountDeletionUnsupportedError, deleteAccount } from '@/lib/data/settings';
 
 interface Props {
   visible: boolean;
@@ -50,11 +51,15 @@ export function DeleteAccountModal({ visible, onClose, onDeleted }: Props) {
     setError(null);
 
     try {
-      await api.post('/api/auth/delete-account', { password });
+      // Re-verifies the password server-side and signs the local session out on success.
+      await deleteAccount(password);
       reset();
       onDeleted();
     } catch (e) {
-      if (e instanceof ApiError) {
+      if (e instanceof AccountDeletionUnsupportedError) {
+        // 422 — phone-only / Google accounts: the website's support-path copy.
+        setError(e.message);
+      } else if (e instanceof ApiError) {
         if (e.status === 401) setError('Password is incorrect.');
         else if (e.status === 429) setError('Too many attempts. Wait a minute and try again.');
         else setError(e.message || 'Could not delete your account. Try again.');

@@ -1,103 +1,114 @@
-import { Platform, StyleSheet, Text, View } from 'react-native';
+/**
+ * One chat bubble — port of ~/bldesy-web/components/messages/message-bubble.tsx.
+ * Sender = primary, receiver = surface + border, failed = error tint with the
+ * website's "Failed to send" label.
+ */
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { Colors, Radius, Spacing } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
-type Props = {
+import { Colors, FontFamily, Radius, Shadows, Spacing } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { MESSAGE_SEND_FAILED_LABEL } from '@/lib/data/messages';
+
+interface MessageBubbleProps {
   body: string;
-  isMine: boolean;
+  isSender: boolean;
   timestamp: string;
   attachmentUrl?: string | null;
   attachmentType?: string | null;
-  /** If true, this message immediately follows another from the same sender */
-  isGrouped?: boolean;
-};
-
-function formatTime(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
 }
 
-export function MessageBubble({ body, isMine, timestamp, attachmentUrl, attachmentType, isGrouped }: Props) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const colors = Colors[isDark ? 'dark' : 'light'];
+export function formatMessageTime(dateStr: string): string {
+  try {
+    return new Date(dateStr).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
 
-  const isImage = attachmentType?.startsWith('image');
+export function MessageBubble({ body, isSender, timestamp, attachmentUrl, attachmentType }: MessageBubbleProps) {
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
+  const isFailed = attachmentType === 'failed';
 
-  // Indigo for sent, light slate for received (matching website spec)
-  const sentBg = '#4f46e5';
-  const receivedBg = isDark ? colors.surface : '#f1f5f9';
-  const receivedBorder = isDark ? colors.border : '#e2e8f0';
+  const bubbleStyle = isFailed
+    ? { backgroundColor: c.error + '1A', borderColor: c.error + '33', borderWidth: 1 }
+    : isSender
+      ? { backgroundColor: c.primary }
+      : { backgroundColor: c.surface, borderColor: c.border, borderWidth: 1 };
+  const textColor = isSender && !isFailed ? '#fff' : c.textPrimary;
 
   return (
-    <View style={[styles.row, isMine ? styles.rowRight : styles.rowLeft, isGrouped && { marginTop: 2 }]}>
+    <View style={[styles.row, isSender ? styles.rowEnd : styles.rowStart]}>
       <View
         style={[
           styles.bubble,
-          isMine
-            ? { backgroundColor: sentBg, borderBottomRightRadius: 6 }
-            : { backgroundColor: receivedBg, borderBottomLeftRadius: 6, borderWidth: isDark ? 0 : 1, borderColor: receivedBorder },
-          ...Platform.select({
-            ios: isMine ? [] : [{ shadowColor: '#0f172a', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3 }],
-            default: [],
-          }) as any[],
+          Shadows.sm,
+          bubbleStyle,
+          isSender ? styles.bubbleSender : styles.bubbleReceiver,
         ]}
       >
-        {isImage && attachmentUrl && (
-          <Image source={{ uri: attachmentUrl }} style={styles.attachmentImage} contentFit="cover" cachePolicy="disk" placeholder={{ blurhash: 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH' }} />
-        )}
-        <Text style={[styles.body, { color: isMine ? '#ffffff' : colors.text }]}>
-          {body}
-        </Text>
+        {attachmentUrl && attachmentType === 'image' ? (
+          <Image
+            source={{ uri: attachmentUrl }}
+            accessibilityLabel="Attachment"
+            contentFit="cover"
+            cachePolicy="disk"
+            style={styles.attachmentImage}
+          />
+        ) : null}
+        {attachmentUrl && attachmentType === 'document' ? (
+          <Pressable
+            onPress={() => Linking.openURL(attachmentUrl)}
+            accessibilityRole="link"
+            style={[
+              styles.docLink,
+              { backgroundColor: isSender ? 'rgba(255,255,255,0.1)' : c.canvas },
+            ]}
+          >
+            <MaterialIcons name="description" size={16} color={isSender ? 'rgba(255,255,255,0.9)' : c.primary} />
+            <Text style={[styles.docText, { color: isSender ? 'rgba(255,255,255,0.9)' : c.primary }]}>
+              View document
+            </Text>
+          </Pressable>
+        ) : null}
+        <Text style={[styles.body, { color: textColor }]}>{body}</Text>
+        <View style={[styles.metaRow, isSender && styles.metaRowEnd]}>
+          <Text style={[styles.time, { color: isSender && !isFailed ? 'rgba(255,255,255,0.5)' : c.textSecondary }]}>
+            {formatMessageTime(timestamp)}
+          </Text>
+          {isFailed ? (
+            <Text style={[styles.failed, { color: c.error }]}>{MESSAGE_SEND_FAILED_LABEL}</Text>
+          ) : isSender ? (
+            <MaterialIcons name="check" size={14} color="rgba(255,255,255,0.4)" />
+          ) : null}
+        </View>
       </View>
-      {/* Timestamp outside bubble for cleaner look */}
-      {!isGrouped && (
-        <Text style={[styles.time, isMine ? styles.timeRight : styles.timeLeft, { color: colors.textSecondary }]}>
-          {formatTime(timestamp)}
-        </Text>
-      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
-    marginBottom: 3,
-    paddingHorizontal: Spacing.lg,
+  row: { flexDirection: 'row', paddingHorizontal: Spacing.lg, marginVertical: 4 },
+  rowEnd: { justifyContent: 'flex-end' },
+  rowStart: { justifyContent: 'flex-start' },
+  bubble: { maxWidth: '78%', paddingHorizontal: Spacing.lg, paddingVertical: 10, borderRadius: Radius.xl },
+  bubbleSender: { borderBottomRightRadius: Radius.sm },
+  bubbleReceiver: { borderBottomLeftRadius: Radius.sm },
+  attachmentImage: { width: 220, height: 160, borderRadius: Radius.lg, marginBottom: Spacing.sm },
+  docLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderRadius: Radius.lg,
+    padding: 10,
+    marginBottom: Spacing.sm,
   },
-  rowRight: {
-    alignItems: 'flex-end',
-  },
-  rowLeft: {
-    alignItems: 'flex-start',
-  },
-  bubble: {
-    maxWidth: '75%',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  body: {
-    fontSize: 15,
-    lineHeight: 21,
-  },
-  time: {
-    fontSize: 10,
-    fontWeight: '500',
-    marginTop: 3,
-    marginBottom: 4,
-  },
-  timeRight: {
-    marginRight: 4,
-  },
-  timeLeft: {
-    marginLeft: 4,
-  },
-  attachmentImage: {
-    width: 200,
-    height: 150,
-    borderRadius: Radius.md,
-    marginBottom: Spacing.xs,
-  },
+  docText: { fontSize: 12, fontFamily: FontFamily.bodyMedium, fontWeight: '500' },
+  body: { fontSize: 15, lineHeight: 22, fontFamily: FontFamily.body },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  metaRowEnd: { justifyContent: 'flex-end' },
+  time: { fontSize: 11, fontFamily: FontFamily.body },
+  failed: { fontSize: 11, fontFamily: FontFamily.bodyMedium, fontWeight: '500' },
 });

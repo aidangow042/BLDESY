@@ -1,11 +1,13 @@
 /**
- * Read-only "When and how" panel — shown on the job-detail screen when an
- * enterprise has set employment terms. Renders nothing for legacy/empty posts.
- * RN port of ~/bldesy-web/components/jobs/when-and-how-block.tsx (teal).
+ * Read-only "When and how" panel shown on the Project Job detail page when
+ * the enterprise has filled in employment terms. Renders nothing if no terms
+ * were set (e.g. legacy posts).
+ * Port of ~/bldesy-web/components/jobs/when-and-how-block.tsx (indigo).
+ * Props keep the jobs-row column names so a `Job` can be spread straight in.
  */
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
+import { Colors, FontFamily, Radius, Shadows, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
   EMPLOYMENT_TYPE_LABELS,
@@ -14,7 +16,7 @@ import {
   type EmploymentType,
   type PayType,
   type WorkDay,
-} from '@/lib/capabilities';
+} from '@/lib/web/capabilities';
 
 export type WhenAndHowData = {
   employment_type: string | null;
@@ -47,23 +49,25 @@ export function WhenAndHowBlock(props: WhenAndHowData) {
 
   if (!hasAny) return null;
 
+  const employmentLabel = props.employment_type
+    ? EMPLOYMENT_TYPE_LABELS[props.employment_type as EmploymentType] ?? props.employment_type
+    : null;
+
   return (
-    <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }]}>
+    <View style={[styles.card, Shadows.sm, { backgroundColor: c.surface, borderColor: c.border }]}>
       <Text style={[styles.cardTitle, { color: c.textPrimary }]}>WHEN AND HOW</Text>
 
       <View style={styles.grid}>
-        {props.employment_type ? (
-          <Field label="Employment" c={c}>
-            <View style={[styles.pill, { backgroundColor: c.tealBg }]}>
-              <Text style={[styles.pillText, { color: c.primary }]}>
-                {EMPLOYMENT_TYPE_LABELS[props.employment_type as EmploymentType] ?? props.employment_type}
-              </Text>
+        {employmentLabel ? (
+          <Field label="Employment" color={c.textSecondary}>
+            <View style={[styles.pill, { backgroundColor: c.indigo + '1A' }]}>
+              <Text style={[styles.pillText, { color: c.indigo }]}>{employmentLabel}</Text>
             </View>
           </Field>
         ) : null}
 
         {props.start_date || props.end_date || props.is_ongoing ? (
-          <Field label="Dates" c={c}>
+          <Field label="Dates" color={c.textSecondary}>
             <Text style={[styles.value, { color: c.textPrimary }]}>
               {formatDateRange(props.start_date, props.end_date, !!props.is_ongoing)}
             </Text>
@@ -71,7 +75,7 @@ export function WhenAndHowBlock(props: WhenAndHowData) {
         ) : null}
 
         {props.daily_start_time || props.daily_finish_time ? (
-          <Field label="Daily hours" c={c}>
+          <Field label="Daily hours" color={c.textSecondary}>
             <Text style={[styles.value, { color: c.textPrimary }]}>
               {formatTimeRange(props.daily_start_time, props.daily_finish_time)}
             </Text>
@@ -79,7 +83,7 @@ export function WhenAndHowBlock(props: WhenAndHowData) {
         ) : null}
 
         {props.pay_type || props.pay_rate_min != null || props.pay_rate_max != null ? (
-          <Field label="Pay" c={c}>
+          <Field label="Pay" color={c.textSecondary}>
             <Text style={[styles.value, { color: c.textPrimary }]}>
               {formatPay(props.pay_type as PayType | null, props.pay_rate_min, props.pay_rate_max)}
             </Text>
@@ -87,7 +91,7 @@ export function WhenAndHowBlock(props: WhenAndHowData) {
         ) : null}
 
         {props.work_days && props.work_days.length > 0 ? (
-          <Field label="Work days" c={c}>
+          <Field label="Work days" color={c.textSecondary}>
             <View style={styles.dayRow}>
               {WORK_DAYS.map((d) => {
                 const active = props.work_days!.includes(d);
@@ -96,13 +100,16 @@ export function WhenAndHowBlock(props: WhenAndHowData) {
                     key={d}
                     style={[
                       styles.dayChip,
-                      active
-                        ? { backgroundColor: c.primary }
-                        : { backgroundColor: c.canvas },
+                      { backgroundColor: active ? c.indigo : c.canvas },
                     ]}
                   >
-                    <Text style={[styles.dayChipText, { color: active ? '#fff' : c.textSecondary }]}>
-                      {WORK_DAY_LABELS[d as WorkDay].short}
+                    <Text
+                      style={[
+                        styles.dayChipText,
+                        { color: active ? '#fff' : c.textSecondary + '80' },
+                      ]}
+                    >
+                      {WORK_DAY_LABELS[d as WorkDay].short.toUpperCase()}
                     </Text>
                   </View>
                 );
@@ -115,18 +122,19 @@ export function WhenAndHowBlock(props: WhenAndHowData) {
   );
 }
 
-function Field({ label, children, c }: { label: string; children: React.ReactNode; c: any }) {
+function Field({ label, children, color }: { label: string; children: React.ReactNode; color: string }) {
   return (
     <View style={styles.field}>
-      <Text style={[styles.fieldLabel, { color: c.textSecondary }]}>{label.toUpperCase()}</Text>
+      <Text style={[styles.fieldLabel, { color }]}>{label.toUpperCase()}</Text>
       {children}
     </View>
   );
 }
 
-/* ── Shared formatters (also used by the editor's value triggers) ────────── */
+/* ── Shared formatters (also used by the enterprise editor's value triggers) ── */
 
 export function formatDateNice(value: string): string {
+  // Accepts 'YYYY-MM-DD' or ISO timestamps.
   try {
     return new Date(value).toLocaleDateString('en-AU', {
       day: 'numeric',
@@ -151,6 +159,7 @@ export function formatDateRange(
 }
 
 export function formatTimeNice(value: string): string {
+  // Accept 'HH:MM' or 'HH:MM:SS'. Render as 12-hour with AM/PM.
   const match = /^(\d{1,2}):(\d{2})/.exec(value);
   if (!match) return value;
   const hour24 = parseInt(match[1], 10);
@@ -199,26 +208,22 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: Radius.xl,
     borderWidth: 1,
-    padding: Spacing.lg,
+    padding: Spacing['2xl'],
   },
   cardTitle: {
     fontFamily: FontFamily.bodyBold,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
-    letterSpacing: 0.6,
-    marginBottom: Spacing.md,
+    letterSpacing: 1,
+    marginBottom: Spacing.lg,
   },
-  grid: {
-    gap: Spacing.md,
-  },
-  field: {
-    gap: 4,
-  },
+  grid: { gap: Spacing.lg },
+  field: { gap: 4 },
   fieldLabel: {
     fontFamily: FontFamily.bodyBold,
     fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 0.6,
+    letterSpacing: 1,
   },
   value: {
     fontFamily: FontFamily.bodyMedium,
@@ -228,7 +233,7 @@ const styles = StyleSheet.create({
   pill: {
     alignSelf: 'flex-start',
     paddingHorizontal: 10,
-    paddingVertical: 3,
+    paddingVertical: 2,
     borderRadius: Radius.full,
   },
   pillText: {
@@ -236,11 +241,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  dayRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
+  dayRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   dayChip: {
     minWidth: 40,
     height: 28,

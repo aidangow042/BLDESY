@@ -133,7 +133,7 @@ export function VerifyCredentialsForm({ tradeCategory, existingCredentials, onVe
       {/* Existing badges */}
       {credentials && (
         <View style={styles.badgesWrap}>
-          <CredentialBadges credentials={credentials} variant="list" />
+          <CredentialBadges credentialsVerified={credentials} variant="list" />
         </View>
       )}
 

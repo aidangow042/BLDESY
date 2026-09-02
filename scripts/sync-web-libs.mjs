@@ -69,6 +69,7 @@ const LIB_MANIFEST = [
   'slug.ts',
   'profile-url.ts',
   'hooks/use-resend-cooldown.ts',
+  'format.ts',
 ];
 
 /** types/<file> in the web repo → types/<file> in the app (same path). */

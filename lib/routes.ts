@@ -12,26 +12,55 @@ export const ROUTES = {
   search: '/search',
   ai: '/(tabs)/ai',
   map: '/(tabs)/map',
-  trades: '/all-trades', // → '/trades' (Phase 3)
+  trades: '/trades',
   postJob: '/post-job',
   myJobs: '/my-jobs',
-  jobs: '/builder-jobs', // → '/jobs' (Phase 5)
-  saved: '/(tabs)/saved', // → '/saved' (Phase 5)
+  jobs: '/jobs',
+  job: (jobId: string) => `/jobs/${jobId}`,
+  saved: '/saved',
   messages: '/messages',
   settings: '/settings',
   welcome: '/welcome',
   login: '/(auth)/login',
   signup: '/(auth)/signup',
   forgotPassword: '/(auth)/forgot-password',
-  dashboard: '/(tabs)', // → '/dashboard/profile' (Phase 5)
-  portal: '/(tabs)/portal', // → '/portal' (Phase 6)
-  portalPending: '/(tabs)/portal', // legacy portal screen renders its own pending state → '/portal/pending' (Phase 6)
-  enterprise: '/enterprise-dashboard', // → '/enterprise' (Phase 7)
-  enterprisePending: '/pending-approval', // → '/enterprise/pending' (Phase 7)
+  dashboard: '/dashboard/profile',
+  dashboardJobs: '/dashboard/jobs',
+  dashboardSaved: '/dashboard/saved',
+  dashboardMessages: '/dashboard/messages',
+  portal: '/portal',
+  portalPending: '/portal/pending',
+  portalEditProfile: '/portal/edit-profile',
+  /** Edit-profile wizard deep link — the website's `/portal/edit-profile?step=N` (completeness + status-card checklists). */
+  portalEditProfileStep: (step: number) => `/portal/edit-profile?step=${step}`,
+  portalAvailability: '/portal/availability',
+  portalProfileVisibility: '/portal/profile-visibility',
+  portalAnalytics: '/portal/analytics',
+  portalRefer: '/portal/refer',
+  portalBilling: '/portal/billing',
+  portalBillingUpgrade: '/portal/billing/upgrade',
+  portalSettings: '/portal/settings',
+  portalJobsResidential: '/portal/jobs/residential',
+  portalJobsCommercial: '/portal/jobs/commercial',
+  portalJobsContracts: '/portal/jobs/contracts',
+  portalJob: (jobId: string) => `/portal/jobs/${jobId}`,
+  portalApplications: '/portal/applications',
+  portalMessages: '/portal/messages',
+  enterprise: '/enterprise',
+  enterprisePending: '/enterprise/pending',
+  enterpriseJobs: '/enterprise/jobs',
+  enterpriseJob: (jobId: string) => `/enterprise/jobs/${jobId}`,
   forTradies: '/for-tradies',
+  forHomeowners: '/for-homeowners',
+  pricing: '/pricing',
+  waitlist: '/waitlist',
   help: '/help',
   about: '/about',
-  builderProfile: (userId: string) => `/builder-profile?id=${userId}`, // → `/builder/${userId}` (Phase 3)
+  builderProfile: (userId: string) => `/builder/${userId}`,
+  /** Trade landing (`/trades/plumbers`) — accepts the singular or plural slug. */
+  tradeLanding: (slug: string) => `/trades/${slug}`,
+  /** Trade × suburb landing (`/trades/plumbers/newtown`). */
+  tradeSuburb: (slug: string, suburb: string) => `/trades/${slug}/${suburb}`,
   companyProfile: (id: string) => `/company/${id}`,
   conversation: (conversationId: string) => `/messages?c=${conversationId}`,
 } as const;
