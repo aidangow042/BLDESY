@@ -1,14 +1,26 @@
-import React, { useState, useCallback } from 'react';
-import { View, Pressable, StyleSheet, Text } from 'react-native';
-import { withLayoutContext, useRouter } from 'expo-router';
-import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
-import type { MaterialTopTabBarProps } from '@react-navigation/material-top-tabs';
+/**
+ * Bottom tab bar — the website's mobile bar
+ * (`~/bldesy-web/components/layout/header.tsx`, "Mobile bottom tab bar", LIVE
+ * branch): Home · Search · Post Job (accent) · AI · Map. h-16 + safe area on
+ * `surface/95` with a hairline top border, 10px semibold labels, the accent slot's
+ * icon larger and always primary. Search and Post Job are pushes (CLAUDE.md §5).
+ * Hidden on portal / enterprise / dashboard routes — those shells render their own.
+ */
+import { useCallback, useState, type ComponentProps } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRouter, withLayoutContext, type Href } from 'expo-router';
+import {
+  createMaterialTopTabNavigator,
+  type MaterialTopTabBarProps,
+} from '@react-navigation/material-top-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, FontFamily, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { TAB_BAR_HEIGHT, useHideGlobalTabBar } from '@/hooks/use-global-tab-bar';
+import { ROUTES } from '@/lib/routes';
 
 const { Navigator } = createMaterialTopTabNavigator();
 const TopTabs = withLayoutContext(Navigator);
@@ -18,64 +30,49 @@ const TopTabs = withLayoutContext(Navigator);
    snappy while leaving swipes smooth. */
 let disableAnimation: (() => void) | null = null;
 
-type SlotKind = 'tab' | 'push';
+type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
-interface TabSlot {
-  kind: SlotKind;
-  /** Route name (for `tab`) or path to push (for `push`). */
-  target: string;
-  label: string;
-  icon: string; // IconSymbol name
-  /** Larger, primary-coloured icon (used for the Post Job accent slot). */
-  accent?: boolean;
-}
+type TabSlot =
+  | { kind: 'tab'; target: string; label: string; icon: IoniconName; accent?: boolean }
+  | { kind: 'push'; target: Href; label: string; icon: IoniconName; accent?: boolean };
 
-/* 5 slots — matches the website's mobile bottom bar:
-   Home / Search / Post Job (accent) / AI / Map
-   "Saved" moves to the hamburger menu (web parity). */
+/* 5 slots — the website's mobile bottom bar. Web icons are heroicons outline;
+   Ionicons outline is the closest native set. */
 const SLOTS: TabSlot[] = [
-  { kind: 'tab',  target: 'index',     label: 'Home',     icon: 'house' },
-  { kind: 'push', target: '/search', label: 'Search', icon: 'magnifyingglass' },
-  { kind: 'push', target: '/post-job', label: 'Post Job', icon: 'plus.circle.fill', accent: true },
-  { kind: 'tab',  target: 'ai',        label: 'AI',       icon: 'sparkles' },
-  { kind: 'tab',  target: 'map',       label: 'Map',      icon: 'map' },
+  { kind: 'tab', target: 'index', label: 'Home', icon: 'home-outline' },
+  { kind: 'push', target: ROUTES.search, label: 'Search', icon: 'search-outline' },
+  { kind: 'push', target: ROUTES.postJob, label: 'Post Job', icon: 'add-circle-outline', accent: true },
+  { kind: 'tab', target: 'ai', label: 'AI', icon: 'sparkles-outline' },
+  { kind: 'tab', target: 'map', label: 'Map', icon: 'map-outline' },
 ];
 
 function BottomTabBar({ state, navigation }: MaterialTopTabBarProps) {
-  const colorScheme = useColorScheme();
-  const theme = colorScheme === 'dark' ? 'dark' : 'light';
-  const colors = Colors[theme];
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const hidden = useHideGlobalTabBar();
 
-  // Builder portal keeps its dark-themed dashboard chrome until Phase 5
-  // restyles it; render its own tab bar.
-  const currentRoute = state.routes[state.index];
-  // Portal used to render its own dark-teal tab bar with a single icon — the
-  // web doesn't do this, and the portal is now styled to match the rest of
-  // the app, so we fall through to the standard tab bar everywhere.
-  void currentRoute;
+  if (hidden) return null;
+
+  const currentName = state.routes[state.index]?.name;
 
   return (
     <View
+      accessibilityRole="tablist"
       style={[
         styles.tabBar,
         {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
+          backgroundColor: c.surface + 'F2', // web bg-surface/95
+          borderTopColor: c.border,
+          height: TAB_BAR_HEIGHT + insets.bottom,
           paddingBottom: insets.bottom,
-          height: 64 + insets.bottom,
         },
       ]}
     >
       {SLOTS.map((slot) => {
-        const isActive =
-          slot.kind === 'tab' && state.routes[state.index]?.name === slot.target;
-        const tint = slot.accent
-          ? colors.primary
-          : isActive
-            ? colors.primary
-            : colors.textSecondary;
+        const isActive = slot.kind === 'tab' && currentName === slot.target;
+        const tint = slot.accent || isActive ? c.primary : c.textSecondary;
 
         function handlePress() {
           if (process.env.EXPO_OS === 'ios') {
@@ -94,7 +91,7 @@ function BottomTabBar({ state, navigation }: MaterialTopTabBarProps) {
               navigation.navigate(slot.target);
             }
           } else {
-            router.push(slot.target as any);
+            router.push(slot.target);
           }
         }
 
@@ -107,15 +104,8 @@ function BottomTabBar({ state, navigation }: MaterialTopTabBarProps) {
             accessibilityState={{ selected: isActive }}
             accessibilityLabel={`${slot.label} tab`}
           >
-            <IconSymbol size={slot.accent ? 30 : 24} name={slot.icon as any} color={tint} />
-            <Text
-              style={[
-                styles.tabLabel,
-                { color: tint, fontWeight: isActive || slot.accent ? '700' : '600' },
-              ]}
-            >
-              {slot.label}
-            </Text>
+            <Ionicons name={slot.icon} size={slot.accent ? 28 : 24} color={tint} />
+            <Text style={[styles.tabLabel, { color: tint }]}>{slot.label}</Text>
           </Pressable>
         );
       })}
@@ -145,10 +135,10 @@ export default function TabLayout() {
       <TopTabs.Screen name="index" options={{ title: 'Home' }} />
       <TopTabs.Screen name="ai" options={{ title: 'AI Assist' }} />
       <TopTabs.Screen name="map" options={{ title: 'Map', swipeEnabled: false }} />
-      {/* Saved moved to hamburger menu — keep the screen registered so deep
-          links to /saved still work, but hidden from the bar. */}
+      {/* Saved lives in the drawer / account menu — keep the screen registered so
+          deep links to /saved still work, but hidden from the bar. */}
       <TopTabs.Screen name="saved" options={{ swipeEnabled: false }} />
-      {/* Portal is role-gated. Hidden from default rendering. */}
+      {/* Portal is role-gated and renders its own shell — the bar hides itself there. */}
       <TopTabs.Screen name="portal" options={{ swipeEnabled: false }} />
     </TopTabs>
   );
@@ -157,24 +147,22 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
     borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
+    gap: Spacing.xs, // web gap-1
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
   },
   tabLabel: {
     fontSize: 10,
-    fontFamily: FontFamily.bodyBold,
-  },
-  portalTabIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    fontFamily: FontFamily.bodySemiBold,
+    fontWeight: '600',
   },
 });

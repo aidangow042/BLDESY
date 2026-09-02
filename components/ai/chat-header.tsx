@@ -1,12 +1,15 @@
 /**
- * ChatHeader — top bar inside the AI tab. Mirrors web `components/ai/chat-header.tsx`:
- * gradient primary → primary-dark, sparkle icon on left, "New chat" button on right
- * when there are messages.
+ * ChatHeader — gradient bar above the AI thread. Mirrors web
+ * `components/ai/chat-header.tsx`: primary → primary-dark gradient, sparkle tile,
+ * "AI Assist / Powered by Claude", `New chat` when there are messages.
+ *
+ * `variant="page"` sits under the global AppHeader on the /ai tab (the web keeps
+ * the site header above it too). `variant="panel"` adds the expand-to-/ai and
+ * close controls for the floating AI Assist card.
  */
-
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -14,46 +17,87 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 interface ChatHeaderProps {
   hasMessages: boolean;
   onClear: () => void;
+  variant?: 'page' | 'panel';
+  onExpand?: () => void;
+  onClose?: () => void;
 }
 
-export function ChatHeader({ hasMessages, onClear }: ChatHeaderProps) {
+export function ChatHeader({
+  hasMessages,
+  onClear,
+  variant = 'page',
+  onExpand,
+  onClose,
+}: ChatHeaderProps) {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
-  const insets = useSafeAreaInsets();
+  const isPanel = variant === 'panel';
 
   return (
     <LinearGradient
       colors={[c.primary, c.primaryDark]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 0 }}
-      // Clear the status bar / Dynamic Island — this header sits at the very top
-      // (the AI tab uses AppShell hideHeader, so there's no AppHeader inset).
-      style={[styles.bar, { paddingTop: insets.top + Spacing.md }]}
+      style={styles.bar}
     >
       <View style={styles.row}>
         <View style={styles.left}>
           <View style={styles.iconWrap}>
-            <Text style={styles.sparkle}>✦</Text>
+            <Ionicons name="sparkles" size={18} color="#ffffff" />
           </View>
           <View>
-            <Text style={styles.title}>AI Assist</Text>
+            <Text accessibilityRole="header" style={styles.title}>
+              AI Assist
+            </Text>
             <Text style={styles.subtitle}>Powered by Claude</Text>
           </View>
         </View>
-        {hasMessages ? (
-          <Pressable
-            onPress={onClear}
-            style={({ pressed }) => [
-              styles.clearBtn,
-              pressed && { backgroundColor: 'rgba(255,255,255,0.25)' },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Start a new chat"
-            hitSlop={4}
-          >
-            <Text style={styles.clearBtnText}>New chat</Text>
-          </Pressable>
-        ) : null}
+
+        <View style={styles.actions}>
+          {hasMessages ? (
+            <Pressable
+              onPress={onClear}
+              style={({ pressed }) => [
+                styles.clearBtn,
+                pressed && { backgroundColor: 'rgba(255,255,255,0.2)' },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Start a new chat"
+              hitSlop={4}
+            >
+              <Text style={styles.clearBtnText}>New chat</Text>
+            </Pressable>
+          ) : null}
+
+          {isPanel ? (
+            <>
+              <Pressable
+                onPress={onExpand}
+                accessibilityRole="button"
+                accessibilityLabel="Open full page"
+                hitSlop={4}
+                style={({ pressed }) => [
+                  styles.iconBtn,
+                  pressed && { backgroundColor: 'rgba(255,255,255,0.2)' },
+                ]}
+              >
+                <Ionicons name="expand-outline" size={16} color="#ffffff" />
+              </Pressable>
+              <Pressable
+                onPress={onClose}
+                accessibilityRole="button"
+                accessibilityLabel="Close AI Assist"
+                hitSlop={4}
+                style={({ pressed }) => [
+                  styles.iconBtn,
+                  pressed && { backgroundColor: 'rgba(255,255,255,0.2)' },
+                ]}
+              >
+                <Ionicons name="close" size={18} color="#ffffff" />
+              </Pressable>
+            </>
+          ) : null}
+        </View>
       </View>
     </LinearGradient>
   );
@@ -77,26 +121,28 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 32,
     height: 32,
-    borderRadius: 10,
+    borderRadius: Radius.lg,
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sparkle: {
-    fontSize: 16,
-    color: '#ffffff',
-  },
   title: {
     fontFamily: FontFamily.bodyBold,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     color: '#ffffff',
-    lineHeight: 16,
+    lineHeight: 18,
   },
   subtitle: {
+    fontFamily: FontFamily.body,
     fontSize: 10,
-    color: 'rgba(255,255,255,0.55)',
-    lineHeight: 12,
+    color: 'rgba(255,255,255,0.5)',
+    lineHeight: 13,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   clearBtn: {
     borderRadius: Radius.full,
@@ -111,5 +157,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 11,
     color: '#ffffff',
+  },
+  iconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: Radius.full,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
