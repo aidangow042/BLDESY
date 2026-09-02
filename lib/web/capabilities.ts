@@ -232,3 +232,110 @@ export function isCapabilityVerified(
   if (key === "first_aid") return caps.first_aid_verified === true;
   return false;
 }
+
+// ---------------------------------------------------------------------------
+// Tradie-writable input — edit-profile form (saveCapabilities action) and
+// PUT /api/me/capabilities share this shape and parser.
+// ---------------------------------------------------------------------------
+
+/**
+ * Capability values writable by the tradie. Verification fields are stripped
+ * server-side by the protect trigger — listing them here would be a no-op.
+ */
+export interface CapabilitiesInput {
+  ppe: boolean;
+  own_tools: boolean;
+  own_vehicle: boolean;
+  tools_of_trade_insurance: boolean;
+  white_card: boolean;
+  /**
+   * Plaintext White Card number (8 digits) — encrypted server-side before
+   * storage. `null` clears the stored number; omit the key to leave whatever
+   * is stored unchanged.
+   */
+  white_card_number?: string | null;
+  first_aid: boolean;
+  working_at_heights: boolean;
+  confined_spaces: boolean;
+  traffic_control: boolean;
+  forklift_licence: boolean;
+  ewp_licence: boolean;
+  asbestos_awareness: boolean;
+  own_abn: boolean;
+  gst_registered: boolean;
+  public_liability_amount: number | null;
+  personal_accident_insurance: boolean;
+  notes: string | null;
+}
+
+/** The only public-liability bands a tradie may declare (null = none). */
+export function isAllowedPublicLiability(value: unknown): value is number | null {
+  return PUBLIC_LIABILITY_OPTIONS.some((o) => o.value === value);
+}
+
+export const CAPABILITY_NOTES_MAX_LENGTH = 2000;
+
+export type ParseCapabilitiesInputResult =
+  | { ok: true; input: CapabilitiesInput }
+  | { ok: false; error: string };
+
+/**
+ * Validate an untrusted JSON body into CapabilitiesInput — the shape the
+ * edit-profile form has always sent saveCapabilities. Every capability
+ * boolean is required; `public_liability_amount` must be present (null or
+ * one of the bands); `notes` is trimmed with blank → null (max 2000 chars);
+ * `white_card_number` is optional and, when present, a string or null.
+ */
+export function parseCapabilitiesInput(body: unknown): ParseCapabilitiesInputResult {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { ok: false, error: "Input must be an object." };
+  }
+  const b = body as Record<string, unknown>;
+
+  const flags = {} as Record<CapabilityKey, boolean>;
+  for (const key of ALL_CAPABILITY_KEYS) {
+    const value = b[key];
+    if (typeof value !== "boolean") {
+      return { ok: false, error: `${key} must be true or false.` };
+    }
+    flags[key] = value;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(b, "public_liability_amount")) {
+    return {
+      ok: false,
+      error: "public_liability_amount is required (use null for none).",
+    };
+  }
+  const liability = b.public_liability_amount;
+  if (!isAllowedPublicLiability(liability)) {
+    return { ok: false, error: "Invalid public liability amount." };
+  }
+
+  let notes: string | null = null;
+  if (b.notes !== undefined && b.notes !== null) {
+    if (typeof b.notes !== "string") {
+      return { ok: false, error: "notes must be a string or null." };
+    }
+    const trimmed = b.notes.trim();
+    if (trimmed.length > CAPABILITY_NOTES_MAX_LENGTH) {
+      return {
+        ok: false,
+        error: `Notes must be ${CAPABILITY_NOTES_MAX_LENGTH} characters or fewer.`,
+      };
+    }
+    notes = trimmed || null;
+  }
+
+  const input: CapabilitiesInput = { ...flags, public_liability_amount: liability, notes };
+
+  if (Object.prototype.hasOwnProperty.call(b, "white_card_number")) {
+    const number = b.white_card_number;
+    if (number !== null && typeof number !== "string") {
+      return { ok: false, error: "white_card_number must be a string or null." };
+    }
+    input.white_card_number = number;
+  }
+
+  return { ok: true, input };
+}
