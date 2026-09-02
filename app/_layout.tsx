@@ -109,7 +109,6 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StripeProvider
         publishableKey={STRIPE_PUBLISHABLE_KEY}
-        merchantIdentifier="merchant.com.bldesy.app"
         urlScheme="bldesy"
       >
         <AuthProvider>
